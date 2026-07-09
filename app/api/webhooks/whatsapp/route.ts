@@ -1,0 +1,134 @@
+import { NextResponse, type NextRequest } from "next/server";
+import { verifyWebhookSignature } from "@/lib/whatsapp/verify-signature";
+import { createServiceClient } from "@/lib/supabase/service";
+import type { WhatsAppWebhookPayload } from "@/lib/whatsapp/types";
+
+// Needs the Node.js runtime (not Edge) for node:crypto in verify-signature.ts.
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
+/**
+ * Meta's one-time verification handshake. When you register this URL
+ * as the webhook in your Meta App's WhatsApp settings, Meta calls this
+ * with hub.mode=subscribe and a hub.challenge value — echoing the
+ * challenge back (as plain text, verbatim) is what confirms the
+ * endpoint to Meta. hub.verify_token must match what you typed into
+ * the Meta dashboard, which must match WHATSAPP_WEBHOOK_VERIFY_TOKEN
+ * here — this is a value *you* choose, not something Meta issues.
+ */
+export async function GET(request: NextRequest) {
+  const params = request.nextUrl.searchParams;
+  const mode = params.get("hub.mode");
+  const token = params.get("hub.verify_token");
+  const challenge = params.get("hub.challenge");
+
+  const expectedToken = process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN;
+
+  if (mode === "subscribe" && token && expectedToken && token === expectedToken) {
+    return new NextResponse(challenge, { status: 200 });
+  }
+
+  return new NextResponse("Verification failed", { status: 403 });
+}
+
+/**
+ * Incoming message events. Always verify the signature before parsing
+ * — this endpoint has no other auth, it's a public URL by necessity.
+ * Uses the service-role client because there's no logged-in user here;
+ * Meta is calling us server-to-server.
+ */
+export async function POST(request: NextRequest) {
+  const rawBody = await request.text();
+  const signature = request.headers.get("x-hub-signature-256");
+  const appSecret = process.env.WHATSAPP_APP_SECRET;
+
+  if (!appSecret || !verifyWebhookSignature(rawBody, signature, appSecret)) {
+    return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
+  }
+
+  let payload: WhatsAppWebhookPayload;
+  try {
+    payload = JSON.parse(rawBody);
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+  }
+
+  // Always ack 200 after this point — Meta retries aggressively (and
+  // can disable the subscription) on non-200s or timeouts. Processing
+  // errors are logged, not surfaced as HTTP failures, so one malformed
+  // event can't block delivery of everything after it.
+  try {
+    await processWebhookPayload(payload);
+  } catch (err) {
+    console.error("[whatsapp webhook] processing error:", err);
+  }
+
+  return NextResponse.json({ received: true }, { status: 200 });
+}
+
+async function processWebhookPayload(payload: WhatsAppWebhookPayload) {
+  if (payload.object !== "whatsapp_business_account") return;
+
+  const supabase = createServiceClient();
+
+  for (const entry of payload.entry ?? []) {
+    for (const change of entry.changes ?? []) {
+      if (change.field !== "messages") continue;
+
+      const { metadata, contacts, messages } = change.value;
+      if (!messages?.length) continue; // e.g. status updates (delivered/read) — not handled yet
+
+      const { data: connection } = await supabase
+        .from("whatsapp_connections")
+        .select("business_id")
+        .eq("phone_number_id", metadata.phone_number_id)
+        .maybeSingle();
+
+      if (!connection) {
+        console.warn(`[whatsapp webhook] no business found for phone_number_id ${metadata.phone_number_id}`);
+        continue;
+      }
+
+      for (const message of messages) {
+        const customerName = contacts?.find((c) => c.wa_id === message.from)?.profile.name ?? null;
+        const body = message.type === "text" ? message.text?.body ?? "" : `[${message.type} message]`;
+        const receivedAt = new Date(Number(message.timestamp) * 1000).toISOString();
+
+        const { data: conversation } = await supabase
+          .from("conversations")
+          .upsert(
+            {
+              business_id: connection.business_id,
+              customer_phone: message.from,
+              customer_name: customerName,
+              last_message_at: receivedAt,
+              last_message_preview: body.slice(0, 140),
+              status: "open",
+            },
+            { onConflict: "business_id,customer_phone" }
+          )
+          .select("id")
+          .single();
+
+        if (!conversation) continue;
+
+        // whatsapp_message_id is unique — Meta retries webhook delivery,
+        // so this upsert (rather than insert) makes re-delivery a no-op
+        // instead of a duplicate message.
+        await supabase.from("messages").upsert(
+          {
+            conversation_id: conversation.id,
+            business_id: connection.business_id,
+            direction: "inbound",
+            whatsapp_message_id: message.id,
+            from_number: message.from,
+            to_number: metadata.phone_number_id,
+            message_type: message.type,
+            body,
+          },
+          { onConflict: "whatsapp_message_id" }
+        );
+      }
+    }
+  }
+}

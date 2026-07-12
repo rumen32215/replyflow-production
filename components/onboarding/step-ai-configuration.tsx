@@ -115,8 +115,8 @@ export function StepAiConfiguration() {
   return (
     <StepShell
       step={4}
-      title="Train your AI in plain English"
-      subtitle="No complicated settings — just answer like you're briefing a new employee."
+      title="Teach ReplyFlow about your business"
+subtitle="Answer a few simple questions so ReplyFlow can reply to customers the way you would."
       backHref="/onboarding/business-details"
     >
       <div className="space-y-6">
@@ -125,11 +125,11 @@ export function StepAiConfiguration() {
             <span className="mr-2 inline-flex h-5 w-5 items-center justify-center rounded-full bg-accent text-[10px] font-extrabold text-primary">
               Q1
             </span>
-            What do you do?
+            Tell ReplyFlow about your business
           </Label>
           <Textarea
             id="description"
-            placeholder="We fix boilers, leaks, and emergency plumbing issues..."
+            placeholder="Example: We repair boilers, fix leaks, install bathrooms and help with emergency plumbing. Always ask customers for their postcode and photos before booking."
             value={store.businessDescription}
             onChange={(e) => store.setField("businessDescription", e.target.value)}
           />
@@ -141,7 +141,7 @@ export function StepAiConfiguration() {
             <span className="mr-2 inline-flex h-5 w-5 items-center justify-center rounded-full bg-accent text-[10px] font-extrabold text-primary">
               Q2
             </span>
-            What services do you offer?
+            Which services would you like ReplyFlow to mention to customers?
           </Label>
           <div className="flex flex-wrap gap-2">
             {PLUMBING_SERVICES.map((service) => (
@@ -241,7 +241,7 @@ export function StepAiConfiguration() {
 
         <Button type="button" variant="success" className="mt-2 w-full" onClick={handleSubmit} disabled={submitting}>
           {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
-          Finish Setup
+          Launch ReplyFlow
         </Button>
       </div>
     </StepShell>

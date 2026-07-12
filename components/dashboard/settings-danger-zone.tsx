@@ -61,7 +61,7 @@ export function SettingsDangerZone({ businessName }: { businessName: string }) {
           <DialogHeader>
             <DialogTitle>Delete your account?</DialogTitle>
             <DialogDescription>
-              This permanently deletes {businessName} and every conversation, message, and setting attached to it.
+              This permanently deletes [{businessName}] and every conversation, message, and setting attached to it.
               There is no way to undo this.
             </DialogDescription>
           </DialogHeader>

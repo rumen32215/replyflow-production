@@ -4,37 +4,62 @@ import { createServiceClient } from "@/lib/supabase/service";
 
 export const runtime = "nodejs";
 
-/**
- * Two-client pattern, same as app/api/whatsapp/connect: the session
- * client identifies *who* is asking (so this route can only ever
- * delete the caller's own account, never an id passed in the body),
- * and the service-role client does the actual deletion, since
- * deleting an auth user requires admin privileges no session has.
- */
 export async function POST() {
-  const supabase = createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  try {
+    const supabase = createClient();
 
-  if (!user) {
-    return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser();
+
+    if (userError) {
+      return NextResponse.json(
+        { step: "getUser", error: userError.message },
+        { status: 500 }
+      );
+    }
+
+    if (!user) {
+      return NextResponse.json(
+        { step: "auth", error: "Not authenticated" },
+        { status: 401 }
+      );
+    }
+
+    const service = createServiceClient();
+
+    const { error: businessDeleteError } = await service
+      .from("businesses")
+      .delete()
+      .eq("owner_id", user.id);
+
+    if (businessDeleteError) {
+      return NextResponse.json(
+        { step: "deleteBusiness", error: businessDeleteError.message },
+        { status: 500 }
+      );
+    }
+
+    const { error: userDeleteError } =
+      await service.auth.admin.deleteUser(user.id);
+
+    if (userDeleteError) {
+      return NextResponse.json(
+        { step: "deleteUser", error: userDeleteError.message },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json({ success: true });
+  } catch (e: any) {
+    return NextResponse.json(
+      {
+        step: "catch",
+        error: e?.message,
+        stack: e?.stack,
+      },
+      { status: 500 }
+    );
   }
-
-  const service = createServiceClient();
-
-  // businesses -> whatsapp_connections / conversations / messages / ai_configurations
-  // all cascade via "on delete cascade" foreign keys (see migrations 0001, 0003, 0004),
-  // so deleting the business row is sufficient to clean up everything else.
-  const { error: businessDeleteError } = await service.from("businesses").delete().eq("owner_id", user.id);
-  if (businessDeleteError) {
-    return NextResponse.json({ error: businessDeleteError.message }, { status: 500 });
-  }
-
-  const { error: userDeleteError } = await service.auth.admin.deleteUser(user.id);
-  if (userDeleteError) {
-    return NextResponse.json({ error: userDeleteError.message }, { status: 500 });
-  }
-
-  return NextResponse.json({ deleted: true });
 }

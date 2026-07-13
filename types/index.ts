@@ -53,3 +53,28 @@ export interface Business {
   onboardingCompleted: boolean;
   createdAt: string;
 }
+
+export type JobStatus =
+  | "new_enquiry"
+  | "quote_requested"
+  | "quote_sent"
+  | "quote_accepted"
+  | "booked"
+  | "in_progress"
+  | "completed"
+  | "cancelled";
+
+export interface Job {
+  id: string;
+  businessId: string;
+  conversationId: string | null;
+  customerName: string;
+  jobTitle: string;
+  status: JobStatus;
+  estimatedValue: number | null;
+  scheduledFor: string | null;
+  completedAt: string | null;
+  notes: string | null;
+  createdAt: string;
+  updatedAt: string;
+}

@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { Sidebar } from "@/components/dashboard/sidebar";
-import { Topbar } from "@/components/dashboard/topbar";
+import { Sidebar } from "@/app/(dashboard)/sidebar";
+import { Topbar } from "@/app/(dashboard)/topbar";
 
 /**
  * Guards the whole (dashboard) route group server-side, same pattern as

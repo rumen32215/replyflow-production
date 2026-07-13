@@ -1,14 +1,17 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
-import { MessagesSquare, Bot, UserCheck } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
-import { StatCard } from "@/components/dashboard/stat-card";
-import { ActivationHero } from "@/components/dashboard/activation-hero";
-import { EmptyState } from "@/components/shared/empty-state";
-import { Table, TableHeader, TableRow, TableHead, TableBody } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
+import { BeforeYouArrived, buildOvernightLines } from "@/components/dashboard/before-you-arrived";
+import { TodaysFocus, pickFocus } from "@/components/dashboard/todays-focus";
+import { MorningBrief } from "@/components/dashboard/morning-brief";
+import { JumpIn } from "@/components/dashboard/jump-in";
+import { WaitingForYou, type WaitingCustomer } from "@/components/dashboard/waiting-for-you";
+import { GoodNews } from "@/components/dashboard/good-news";
+import { minutesSince, buildMorningBrief, estimateMinutesSaved } from "@/lib/dashboard-signals";
 
 export const metadata: Metadata = { title: "Dashboard — ReplyFlow" };
+
+const WAITING_THRESHOLD_MINUTES = 15;
 
 export default async function DashboardPage() {
   const supabase = createClient();
@@ -19,63 +22,157 @@ export default async function DashboardPage() {
 
   const { data: business } = await supabase
     .from("businesses")
-    .select("business_name, whatsapp_connected")
+    .select("id, business_name, whatsapp_connected")
     .eq("owner_id", user.id)
     .maybeSingle();
+  if (!business) redirect("/onboarding/business-info");
 
-  const businessName = business?.business_name ?? "there";
-  // Onboarding's WhatsApp step is currently a simulation (see
-  // components/onboarding/step-connect-whatsapp.tsx) — this flag is
-  // real data, but "connected" doesn't yet mean a live Meta webhook.
-  const whatsappConnected = business?.whatsapp_connected ?? false;
+  const businessId = business.id;
+  const whatsappConnected = business.whatsapp_connected ?? false;
 
-  // Placeholder until AI Conversations (Phase 5) exists — no
-  // conversations table to count yet, so this is hardcoded, not faked
-  // as if it were live. Everything below reacts to this being zero.
-  const todaysEnquiries = 0;
+  const { data: aiConfig } = await supabase
+    .from("ai_configurations")
+    .select("system_prompt")
+    .eq("business_id", businessId)
+    .maybeSingle();
+  const aiConfigured = Boolean(aiConfig?.system_prompt && aiConfig.system_prompt.trim().length > 0);
+
+  // "Overnight" = since 6am today, server time. A fixed window rather
+  // than "since last visit" — simpler, not gameable by refreshing, and
+  // matches how a person actually thinks about "overnight."
+  const overnightStart = new Date();
+  overnightStart.setHours(6, 0, 0, 0);
+  const overnightStartIso = overnightStart.toISOString();
+
+  const startOfToday = new Date();
+  startOfToday.setHours(0, 0, 0, 0);
+  const startOfTodayIso = startOfToday.toISOString();
+
+  const [
+    { count: newEnquiriesOvernight },
+    { count: photosOvernight },
+    { count: quotesAcceptedOvernight },
+    { count: jobsBookedOvernight },
+    { data: openConversations },
+    { data: pendingBookingJobs },
+    { count: enquiriesToday },
+    { data: wonJobsToday },
+  ] = await Promise.all([
+    supabase
+      .from("conversations")
+      .select("id", { count: "exact", head: true })
+      .eq("business_id", businessId)
+      .gte("created_at", overnightStartIso),
+    supabase
+      .from("messages")
+      .select("id", { count: "exact", head: true })
+      .eq("business_id", businessId)
+      .neq("message_type", "text")
+      .gte("created_at", overnightStartIso),
+    supabase
+      .from("jobs")
+      .select("id", { count: "exact", head: true })
+      .eq("business_id", businessId)
+      .eq("status", "quote_accepted")
+      .gte("updated_at", overnightStartIso),
+    supabase
+      .from("jobs")
+      .select("id", { count: "exact", head: true })
+      .eq("business_id", businessId)
+      .eq("status", "booked")
+      .gte("updated_at", overnightStartIso),
+    // Open conversations, oldest first — today's "customer's turn"
+    // heuristic is simply status = 'open'. There's no message-sending
+    // feature yet, so every conversation with a reply is still
+    // functionally waiting on a human; once sending exists, this
+    // should switch to checking the latest message's direction instead.
+    supabase
+      .from("conversations")
+      .select("id, customer_name, customer_phone, last_message_preview, last_message_at")
+      .eq("business_id", businessId)
+      .eq("status", "open")
+      .order("last_message_at", { ascending: true }),
+    supabase
+      .from("jobs")
+      .select("id, customer_name, job_title")
+      .eq("business_id", businessId)
+      .eq("status", "quote_accepted")
+      .order("updated_at", { ascending: false })
+      .limit(1),
+    supabase
+      .from("conversations")
+      .select("id", { count: "exact", head: true })
+      .eq("business_id", businessId)
+      .gte("created_at", startOfTodayIso),
+    supabase
+      .from("jobs")
+      .select("estimated_value")
+      .eq("business_id", businessId)
+      .in("status", ["quote_accepted", "booked", "completed"])
+      .gte("updated_at", startOfTodayIso),
+  ]);
+
+  const waitingCustomers: WaitingCustomer[] = (openConversations ?? [])
+    .filter((c) => c.last_message_at) // a conversation with no message yet isn't meaningfully "waiting"
+    .map((c) => ({
+      conversationId: c.id,
+      name: c.customer_name || c.customer_phone,
+      reason: c.last_message_preview || "New enquiry",
+      minutes: minutesSince(c.last_message_at as string),
+    }));
+
+  const oldestWaiting = waitingCustomers[0]
+    ? { name: waitingCustomers[0].name, minutes: waitingCustomers[0].minutes, conversationId: waitingCustomers[0].conversationId }
+    : null;
+
+  const pendingBookingJob = pendingBookingJobs?.[0]
+    ? { name: pendingBookingJobs[0].customer_name, jobTitle: pendingBookingJobs[0].job_title }
+    : null;
+
+  const focus = pickFocus({
+    whatsappConnected,
+    aiConfigured,
+    oldestWaiting,
+    pendingBooking: pendingBookingJob,
+    waitingThresholdMinutes: WAITING_THRESHOLD_MINUTES,
+  });
+
+  const overnightLines = buildOvernightLines({
+    newEnquiries: newEnquiriesOvernight ?? 0,
+    photos: photosOvernight ?? 0,
+    quotesAccepted: quotesAcceptedOvernight ?? 0,
+    jobsBooked: jobsBookedOvernight ?? 0,
+    needsReply: waitingCustomers.length,
+  });
+
+  const briefText = buildMorningBrief({
+    enquiriesToday: enquiriesToday ?? 0,
+    jobsBookedToday: jobsBookedOvernight ?? 0,
+    waitingCustomer: oldestWaiting ? { name: oldestWaiting.name, minutes: oldestWaiting.minutes } : null,
+  });
+
+  const potentialWorkWon = (wonJobsToday ?? []).reduce((sum, job) => sum + (job.estimated_value ?? 0), 0);
 
   return (
-    <div className="mx-auto max-w-5xl">
-      <div className="mb-8">
-        <h1 className="text-[26px] font-extrabold tracking-tight">Good morning, {businessName} 👋</h1>
+    <div className="mx-auto max-w-3xl space-y-6">
+      <div>
+        <h1 className="text-[26px] font-extrabold tracking-tight">Good morning, {business.business_name} 👋</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          {new Date().toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" })}
+          {new Date().toLocaleDateString("en-GB", { weekday: "long" })} •{" "}
+          {new Date().toLocaleTimeString("en-GB", { hour: "numeric", minute: "2-digit" })}
         </p>
       </div>
 
-      {todaysEnquiries === 0 && <ActivationHero whatsappConnected={whatsappConnected} />}
-
-      <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <StatCard icon={MessagesSquare} label="Today's Enquiries" value="0" />
-        <StatCard icon={Bot} label="AI Handled" value="0" tone="success" />
-        <StatCard icon={UserCheck} label="Human Replies" value="0" />
-      </div>
-
-      <div className="rounded-2xl border border-border bg-card">
-        <div className="flex items-center justify-between border-b border-border px-6 py-4">
-          <h2 className="text-[15px] font-bold">Recent Enquiries</h2>
-          <Badge variant="outline">Live once WhatsApp is connected</Badge>
-        </div>
-
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Customer</TableHead>
-              <TableHead>Enquiry</TableHead>
-              <TableHead>Handled by</TableHead>
-              <TableHead>Status</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody />
-        </Table>
-
-        <EmptyState
-          className="border-none"
-          icon={MessagesSquare}
-          title="No enquiries yet"
-          description="They'll appear here the moment your AI receptionist starts qualifying them."
-        />
-      </div>
+      <BeforeYouArrived lines={overnightLines} />
+      <TodaysFocus focus={focus} />
+      <MorningBrief text={briefText} />
+      <JumpIn />
+      <WaitingForYou customers={waitingCustomers} />
+      <GoodNews
+        enquiriesToday={enquiriesToday ?? 0}
+        potentialWorkWon={potentialWorkWon}
+        estimatedMinutesSaved={estimateMinutesSaved(enquiriesToday ?? 0)}
+      />
     </div>
   );
 }

@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { MessageCircle, Building2, Brain } from "lucide-react";
+import { Zap, Camera, TrendingUp } from "lucide-react";
 import { AuthCard } from "@/components/auth/auth-card";
 import { Button } from "@/components/ui/button";
 import { createClient } from "@/lib/supabase/server";
@@ -12,12 +12,19 @@ export const metadata: Metadata = { title: "Welcome — ReplyFlow" };
 // prerendered (see app/page.tsx for the full explanation).
 export const dynamic = "force-dynamic";
 
-const PREVIEW = [
-  { icon: MessageCircle, title: "Connect WhatsApp", desc: "Link your existing WhatsApp Business number" },
-  { icon: Building2, title: "Tell us about your business", desc: "Name, trade, hours and coverage area" },
-  { icon: Brain, title: "Train your AI", desc: "A few plain-English questions, that's it" },
+const BENEFITS = [
+  { icon: Zap, label: "Replies instantly" },
+  { icon: Camera, label: "Collects photos" },
+  { icon: TrendingUp, label: "Helps you win more jobs" },
 ];
 
+/**
+ * Onboarding Screen 1 — "hiring" moment, not a form. No inputs on this
+ * screen at all; business details moved to guided setup tasks inside
+ * the dashboard (see the onboarding redesign brief). This is still the
+ * same /welcome route used as the auth->onboarding bridge — only the
+ * content and destination changed.
+ */
 export default async function WelcomePage() {
   const supabase = createClient();
   const {
@@ -27,33 +34,37 @@ export default async function WelcomePage() {
   if (!user) redirect("/login");
 
   return (
-    <AuthCard>
-      <div className="mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-accent to-success/10 text-2xl">
-        👋
+    <AuthCard className="text-center">
+      <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-3xl bg-gradient-to-br from-primary to-success shadow-elevated">
+        <svg viewBox="0 0 24 24" fill="none" className="h-8 w-8">
+          <path d="M4 20l1.6-4.8A8 8 0 1112 20a7.96 7.96 0 01-3.9-1L4 20z" fill="white" />
+        </svg>
       </div>
-      <h1 className="mb-2 text-[25px] font-extrabold tracking-tight">Welcome to ReplyFlow.</h1>
-      <p className="mb-7 text-[14.5px] text-muted-foreground">Let&apos;s get you ready in under 2 minutes.</p>
 
-      <ul className="mb-8 divide-y divide-border">
-        {PREVIEW.map((item, i) => (
-          <li key={item.title} className="flex items-center gap-3.5 py-3.5">
-            <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-border text-[11px] font-bold text-muted-foreground">
-              {i + 1}
+      <h1 className="mb-2.5 text-[26px] font-extrabold leading-tight tracking-tight">
+        Meet your new AI receptionist.
+      </h1>
+      <p className="mb-8 text-[15px] leading-relaxed text-muted-foreground">
+        ReplyFlow answers customers while you&apos;re busy.
+      </p>
+
+      <ul className="mb-8 flex flex-col gap-3">
+        {BENEFITS.map((benefit) => (
+          <li
+            key={benefit.label}
+            className="flex items-center gap-3 rounded-xl border border-border bg-background px-4 py-3.5 text-left"
+          >
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent text-primary">
+              <benefit.icon className="h-4 w-4" />
             </span>
-            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] border border-border bg-background text-muted-foreground">
-              <item.icon className="h-4 w-4" />
-            </span>
-            <span>
-              <span className="block text-sm font-semibold">{item.title}</span>
-              <span className="block text-xs text-muted-foreground">{item.desc}</span>
-            </span>
+            <span className="text-[14.5px] font-semibold">{benefit.label}</span>
           </li>
         ))}
       </ul>
 
-      <Link href="/onboarding/business-info">
-        <Button variant="default" className="w-full">
-          Let&apos;s go
+      <Link href="/onboarding/demo">
+        <Button variant="primary" size="lg" className="w-full">
+          Hire ReplyFlow
         </Button>
       </Link>
     </AuthCard>

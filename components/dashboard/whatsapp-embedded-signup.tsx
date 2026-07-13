@@ -31,7 +31,7 @@ type SignupState = "idle" | "awaiting-signup" | "connecting" | "connected" | "er
  * We need all three values before calling our backend, so both are
  * captured into refs and reconciled in tryFinish() whichever arrives last.
  */
-export function WhatsAppEmbeddedSignup() {
+export function WhatsAppEmbeddedSignup({ redirectTo }: { redirectTo?: string } = {}) {
   const router = useRouter();
   const [state, setState] = useState<SignupState>("idle");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -97,7 +97,11 @@ export function WhatsAppEmbeddedSignup() {
 
       setState("connected");
       toast({ variant: "success", title: "WhatsApp connected", description: data.displayPhoneNumber });
-      router.refresh();
+      if (redirectTo) {
+        router.push(redirectTo);
+      } else {
+        router.refresh();
+      }
     } catch (err) {
       setState("error");
       setErrorMessage(err instanceof Error ? err.message : "Something went wrong");

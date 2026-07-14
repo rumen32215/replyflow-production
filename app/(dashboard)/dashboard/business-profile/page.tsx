@@ -21,7 +21,9 @@ export default async function BusinessProfilePage() {
     .eq("owner_id", user.id)
     .maybeSingle();
 
-  redirect("/welcome")
+  if (!business) {
+  redirect("/welcome");
+}
 
   const defaultValues: OnboardingData = {
     businessName: business.business_name,

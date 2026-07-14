@@ -19,8 +19,10 @@ export default async function SettingsPage() {
     .select("id, business_name, notify_new_enquiry, notify_daily_summary")
     .eq("owner_id", user.id)
     .maybeSingle();
-
-  redirect("/welcome")
+if (!business) {
+  redirect("/welcome");
+}
+  
   return (
     <div className="mx-auto max-w-2xl space-y-8">
       <div>

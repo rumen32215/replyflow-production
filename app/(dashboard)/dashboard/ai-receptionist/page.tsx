@@ -14,7 +14,7 @@ export default async function AiReceptionistPage() {
   if (!user) redirect("/login");
 
   const { data: business } = await supabase.from("businesses").select("id").eq("owner_id", user.id).maybeSingle();
-  if (!business) redirect("/onboarding/business-info");
+  redirect("/welcome")
 
   // No row yet is the normal first-visit state (ai_configurations is
   // only created once someone saves here) — fall back to sensible

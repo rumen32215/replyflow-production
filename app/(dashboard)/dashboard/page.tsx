@@ -25,7 +25,7 @@ export default async function DashboardPage() {
     .select("id, business_name, whatsapp_connected")
     .eq("owner_id", user.id)
     .maybeSingle();
-  if (!business) redirect("/onboarding/business-info");
+  if (!business) redirect("/welcome");
 
   const businessId = business.id;
   const whatsappConnected = business.whatsapp_connected ?? false;

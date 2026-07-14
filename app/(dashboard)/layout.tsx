@@ -26,8 +26,8 @@ export default async function DashboardLayout({ children }: { children: React.Re
     .eq("owner_id", user.id)
     .maybeSingle();
 
-  if (!business?.onboarding_completed) redirect("/onboarding/business-info");
-
+  if (!business?.onboarding_completed)
+  redirect("/welcome");
   return (
     <div className="flex h-screen bg-background">
       <Sidebar />

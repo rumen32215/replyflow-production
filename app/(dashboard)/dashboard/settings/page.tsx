@@ -20,8 +20,7 @@ export default async function SettingsPage() {
     .eq("owner_id", user.id)
     .maybeSingle();
 
-  if (!business) redirect("/onboarding/business-info");
-
+  redirect("/welcome")
   return (
     <div className="mx-auto max-w-2xl space-y-8">
       <div>

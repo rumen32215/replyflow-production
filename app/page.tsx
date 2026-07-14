@@ -31,8 +31,8 @@ export default async function RootPage() {
     .eq("owner_id", user.id)
     .maybeSingle();
 
-  if (!business) redirect("/onboarding/business-info");
-  if (!business.onboarding_completed) redirect("/onboarding/business-info");
+  if (!business) redirect("/welcome");
+if (!business.onboarding_completed) redirect("/welcome");
 
   redirect("/dashboard");
 }

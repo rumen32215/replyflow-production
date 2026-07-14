@@ -11,11 +11,16 @@ export const runtime = "nodejs";
  * — we treat those IDs as untrusted and confirm the phone number
  * directly with Meta before storing anything.
  *
- * Uses the *user-session* Supabase client to identify the caller (so a
- * random POST can't attach a WhatsApp number to someone else's
- * business), then switches to the service-role client to write into
- * whatsapp_connections, since that table has no authenticated-write
- * policy by design (see supabase/migrations/0003).
+ * Onboarding no longer collects business details up front (see the
+ * Screen 1/2/3 redesign — business name/phone/hours moved to guided
+ * setup tasks inside the dashboard). That means a `businesses` row may
+ * not exist yet the first time this route runs. Rather than requiring
+ * onboarding to create one first, this route creates a minimal one on
+ * the fly if missing — using the real WhatsApp number Meta just
+ * returned as the business phone, so the user is never asked to type
+ * one. This also marks onboarding complete: with setup moved to the
+ * dashboard, "onboarded" now means "WhatsApp is connected," not
+ * "every field is filled in."
  */
 export async function POST(request: Request) {
   const { code, wabaId, phoneNumberId } = (await request.json().catch(() => ({}))) as {
@@ -36,21 +41,29 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
 
-  const { data: business } = await supabase
-    .from("businesses")
-    .select("id")
-    .eq("owner_id", user.id)
-    .maybeSingle();
-  if (!business) {
-    return NextResponse.json({ error: "No business found for this account" }, { status: 404 });
-  }
-
   try {
     const tokenResponse = await exchangeCodeForToken(code);
     const phoneDetails = await getPhoneNumberDetails(phoneNumberId, tokenResponse.access_token);
     await subscribeAppToWaba(wabaId, tokenResponse.access_token);
 
     const service = createServiceClient();
+
+    let { data: business } = await supabase.from("businesses").select("id").eq("owner_id", user.id).maybeSingle();
+
+    if (!business) {
+      const placeholderName = user.email ? `${user.email.split("@")[0]}'s Business` : "My Business";
+      const { data: created, error: createError } = await service
+        .from("businesses")
+        .insert({ owner_id: user.id, business_name: placeholderName, phone: phoneDetails.display_phone_number })
+        .select("id")
+        .single();
+      if (createError) throw createError;
+      business = created;
+    }
+
+    if (!business) {
+      throw new Error("Failed to create business record");
+    }
 
     const { error: upsertError } = await service.from("whatsapp_connections").upsert(
       {
@@ -71,7 +84,7 @@ export async function POST(request: Request) {
 
     const { error: businessUpdateError } = await service
       .from("businesses")
-      .update({ whatsapp_connected: true })
+      .update({ whatsapp_connected: true, onboarding_completed: true })
       .eq("id", business.id);
     if (businessUpdateError) throw businessUpdateError;
 

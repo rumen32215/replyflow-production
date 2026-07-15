@@ -114,7 +114,7 @@ export function HireDemo() {
           ))}
         </div>
 
-        <Link href="/onboarding/connect-whatsapp">
+        <Link href="/dashboard">
           <Button variant="primary" size="lg" className="w-full">
             Connect WhatsApp
           </Button>

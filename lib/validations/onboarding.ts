@@ -1,10 +1,11 @@
 import { z } from "zod";
 
 /**
- * One schema per onboarding step so each step can validate independently
- * (and so the Zustand store in hooks/use-onboarding-store.ts stays typed).
- * businessDetailsSchema / aiConfigSchema are merged into one Supabase
- * write on the final step — see components/onboarding/StepSuccess.tsx.
+ * Schemas for the full business record. Onboarding itself no longer
+ * collects most of this (it asks only name + trade — see
+ * hooks/use-onboarding-store.ts); these schemas now serve the
+ * dashboard's Business Profile form, where owners personalise
+ * everything after value has been delivered (Decision 005 / 006).
  */
 
 export const businessInfoSchema = z.object({
@@ -30,7 +31,7 @@ export type BusinessDetailsInput = z.infer<typeof businessDetailsSchema>;
 export const aiConfigSchema = z.object({
   businessDescription: z
     .string()
-    .min(10, "Tell the AI a little more about what you do (10+ characters)"),
+    .min(10, "Tell your receptionist a little more about what you do (10+ characters)"),
   services: z.array(z.string()).min(1, "Select at least one service"),
   chargesCalloutFee: z.boolean(),
   calloutFeeAmount: z.string().optional(),

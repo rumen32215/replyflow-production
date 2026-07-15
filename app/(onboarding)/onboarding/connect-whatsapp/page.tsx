@@ -1,23 +1,17 @@
-import type { Metadata } from "next";
-import { WhatsAppEmbeddedSignup } from "@/components/dashboard/whatsapp-embedded-signup";
-
-export const metadata: Metadata = { title: "Connect WhatsApp — ReplyFlow" };
+import { redirect } from "next/navigation";
 
 /**
- * Screen 3 of onboarding — the real Meta Embedded Signup, not the old
- * simulated placeholder. Same component the dashboard's WhatsApp page
- * uses (see components/dashboard/whatsapp-embedded-signup.tsx); only
- * difference here is redirectTo, which sends the user straight to the
- * dashboard on success instead of refreshing in place.
+ * WhatsApp is no longer part of the onboarding journey — connecting a
+ * number happens later, from the dashboard's setup checklist ("Today's
+ * Focus" surfaces "Connect WhatsApp" until it's done) and the dedicated
+ * /dashboard/whatsapp page. The route itself is kept (old emails,
+ * bookmarks, muscle memory) and simply forwards to the real home of
+ * the feature. The Embedded Signup component was never deleted — see
+ * components/dashboard/whatsapp-embedded-signup.tsx, still used by
+ * app/(dashboard)/dashboard/whatsapp/page.tsx.
  */
+export const dynamic = "force-dynamic";
+
 export default function ConnectWhatsAppPage() {
-  return (
-    <div className="rounded-3xl border border-border bg-card p-8 text-center shadow-elevated sm:p-10">
-      <h1 className="mb-2 text-[22px] font-extrabold tracking-tight">Connect WhatsApp</h1>
-      <p className="mb-7 text-[14.5px] leading-relaxed text-muted-foreground">
-        Link your WhatsApp Business number so ReplyFlow can start answering for real.
-      </p>
-      <WhatsAppEmbeddedSignup redirectTo="/dashboard" />
-    </div>
-  );
+  redirect("/dashboard/whatsapp");
 }

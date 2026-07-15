@@ -11,7 +11,8 @@ const inter = Inter({
 
 export const metadata: Metadata = {
   title: "ReplyFlow — Never miss another customer",
-  description: "The AI front desk for service businesses. Not a chatbot. An employee.",
+  description:
+    "The front desk for service businesses. Your receptionist answers every customer while you're on the tools.",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

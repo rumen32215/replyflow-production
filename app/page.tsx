@@ -12,10 +12,14 @@ export const dynamic = "force-dynamic";
  * Root of the *application* (not the marketing site — the landing page
  * stays a separate static file for now per the current brief). Routes
  * the visitor to wherever they actually belong:
- *   no session          -> /login
- *   session, no business record yet -> /onboarding/business-info
- *   session, onboarding incomplete  -> resume at the right step
- *   session, onboarding complete    -> /dashboard
+ *   no session            -> /login
+ *   onboarding unfinished -> /welcome (Screen 1 of onboarding)
+ *   onboarding complete   -> /dashboard
+ *
+ * A verified account with no businesses row shouldn't exist any more
+ * (the row is created in /auth/callback), but if one does, /welcome ->
+ * onboarding -> preparing repairs it — so both "no row" and "row, not
+ * completed" resolve to the same place.
  */
 export default async function RootPage() {
   const supabase = createClient();
@@ -31,8 +35,7 @@ export default async function RootPage() {
     .eq("owner_id", user.id)
     .maybeSingle();
 
-  if (!business) redirect("/welcome");
-if (!business.onboarding_completed) redirect("/welcome");
+  if (!business?.onboarding_completed) redirect("/welcome");
 
   redirect("/dashboard");
 }

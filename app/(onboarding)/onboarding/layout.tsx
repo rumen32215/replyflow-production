@@ -9,7 +9,7 @@ import { Logo } from "@/components/shared/logo";
 /**
  * Shared chrome for every onboarding step: topbar, gradient stage, and
  * the slide/fade transition between steps. Individual step pages only
- * render their form content (see components/onboarding/step-shell.tsx)
+ * render their form content
  * — this is what makes the 5 steps feel like one continuous flow
  * instead of 5 separate pages.
  */

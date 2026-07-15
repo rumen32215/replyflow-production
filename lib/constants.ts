@@ -40,13 +40,6 @@ export const GREETING_STYLES = [
   },
 ] as const;
 
-export const ONBOARDING_STEPS = [
-  { path: "business-info", label: "Business Information" },
-  { path: "connect-whatsapp", label: "Connect WhatsApp" },
-  { path: "business-details", label: "Business Details" },
-  { path: "ai-configuration", label: "AI Configuration" },
-] as const;
-
 /**
  * Sidebar nav. Every item routes to a real page — the ones without a
  * feature behind them yet (Conversations, AI Receptionist, Business
@@ -67,5 +60,5 @@ export const DASHBOARD_NAV = [
 
 export const BRAND = {
   name: "ReplyFlow",
-  tagline: "Not a chatbot. An employee.",
+  tagline: "Never miss another customer.",
 } as const;

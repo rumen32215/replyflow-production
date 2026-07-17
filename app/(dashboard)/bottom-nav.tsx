@@ -26,7 +26,7 @@ function isActive(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-export function BottomNav() {
+export function BottomNav({ receptionistName = null }: { receptionistName?: string | null }) {
   const pathname = usePathname();
 
   return (
@@ -39,6 +39,8 @@ export function BottomNav() {
         {DASHBOARD_NAV.map((item) => {
           const Icon = ICONS[item.icon];
           const active = isActive(pathname, item.href);
+          // The chosen name, not the role — same pattern as the sidebar.
+          const label = item.href === "/dashboard/receptionist" && receptionistName ? receptionistName : item.label;
           return (
             <Link
               key={item.href}
@@ -57,8 +59,8 @@ export function BottomNav() {
               )}
               <motion.span whileTap={{ scale: 0.9 }} className="flex flex-col items-center gap-0.5">
                 <Icon className="h-[21px] w-[21px]" strokeWidth={active ? 2.4 : 2} />
-                <span className={cn("text-[10.5px] leading-tight", active ? "font-semibold" : "font-medium")}>
-                  {item.label}
+                <span className={cn("truncate text-[10.5px] leading-tight", active ? "font-semibold" : "font-medium")}>
+                  {label}
                 </span>
               </motion.span>
             </Link>

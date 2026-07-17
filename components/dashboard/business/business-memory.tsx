@@ -22,6 +22,7 @@ import { SettleCard, GentleSwap, EASE, press } from "@/components/shared/motion"
 import { Acknowledgement, ACK, randomAck, useAcknowledgement } from "@/components/shared/acknowledgement";
 import { PhonePreview } from "@/components/shared/phone-preview";
 import { TeachingCard } from "@/components/shared/teaching-card";
+import { ConfidenceBar } from "@/components/shared/confidence-bar";
 import { Switch } from "@/components/ui/switch";
 import { createClient } from "@/lib/supabase/client";
 import {
@@ -34,7 +35,7 @@ import {
   KNOWLEDGE_PREVIEW_SCENARIOS,
   type BusinessKnowledge,
 } from "@/lib/knowledge";
-import { buildBrain, confidenceLabelFor } from "@/lib/intelligence";
+import { buildBrain } from "@/lib/intelligence";
 import { servicesForTrade, accessSuggestionsForTrade } from "@/lib/trades";
 import { cn } from "@/lib/utils";
 
@@ -219,15 +220,6 @@ export function BusinessMemory({
   );
 
   const knowledgePercent = brain.percentFor("knowledge");
-  /** Confidence, not a bare number — colour communicates where she
-   * genuinely stands, not a generic blue bar for every value. */
-  const confidenceBucket = confidenceLabelFor(knowledgePercent);
-  const confidence =
-    confidenceBucket === "Complete"
-      ? { label: "Complete", barClass: "bg-success", textClass: "text-success" }
-      : confidenceBucket === "Growing"
-        ? { label: "Growing", barClass: "bg-blue-600", textClass: "text-blue-600" }
-        : { label: "Learning", barClass: "bg-slate-400", textClass: "text-slate-500" };
 
   // Proactive learning (One Thought Ahead): ReplyFlow notices what it
   // doesn't know yet and asks — the owner never has to think of it.
@@ -594,19 +586,7 @@ export function BusinessMemory({
         <div className="min-w-0 space-y-4 lg:order-1">
           {/* Business understanding — not a game, a gentle signal. */}
           <SettleCard delay={0.05} className="rounded-2xl border border-border bg-card p-5 shadow-sm">
-            <div className="flex items-baseline justify-between">
-              <h2 className="text-[15px] font-bold tracking-tight">How well I understand you</h2>
-              <span className={cn("text-[13px] font-bold", confidence.textClass)}>{confidence.label}</span>
-            </div>
-            <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-muted">
-              <motion.div
-                className={cn("h-full rounded-full", confidence.barClass)}
-                initial={false}
-                animate={{ width: `${Math.max(knowledgePercent, 4)}%` }}
-                transition={{ duration: 0.6, ease: EASE }}
-              />
-            </div>
-            <p className="mt-1.5 text-[11px] text-muted-foreground">{knowledgePercent}% of what I could know</p>
+            <ConfidenceBar title="How well I understand you" percent={knowledgePercent} />
             <AnimatePresence mode="wait" initial={false}>
               {nextLesson ? (
                 <motion.button

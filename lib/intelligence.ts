@@ -177,6 +177,23 @@ const TOPIC_DEFINITIONS: readonly TopicDef[] = [
   },
 ];
 
+/**
+ * One thing the Brain is thinking, in its own calm voice — the unit
+ * every screen renders identically via `components/shared/insight.tsx`.
+ * This is the actual product concept: no page decides what's worth
+ * observing, they only ask the Brain and render what it hands back.
+ * `priority` is what keeps this calm rather than noisy — every
+ * consumer caps how many it shows (usually 1), so on a quiet day nothing
+ * appears at all rather than padding the list with filler.
+ */
+export interface Observation {
+  id: string;
+  text: string;
+  tone: "watching" | "handled" | "worry" | "learning" | "confident";
+  href?: string;
+  priority: number;
+}
+
 export interface Brain {
   topics: (Topic & { done: boolean })[];
   percent: number;
@@ -184,6 +201,8 @@ export interface Brain {
   confidenceLabel: "Learning" | "Growing" | "Complete";
   gaps: Topic[];
   nextTopic: Topic | null;
+  /** The unified, ranked stream — see `Observation` above. */
+  observations: Observation[];
   thoughts: {
     watching: string[];
     handled: string[];
@@ -240,6 +259,91 @@ export function buildBrain(input: BrainInput): Brain {
     }
   }
 
+  // The unified stream — built from the exact same real facts above,
+  // never a second, independently-invented set. Ranked so the most
+  // urgent real thing always wins; every consumer decides only how
+  // many of these it has room to show, never what they are.
+  //
+  // Scoped to domains this caller actually supplied: a page that only
+  // passes `receptionist` (e.g. the Receptionist page) never sees a
+  // Business Knowledge gap surface as if it were its own — omitted
+  // domains read as "not done" for percent/gap-list purposes, but they
+  // must never leak into what a specific page claims to be thinking.
+  const providedDomains = new Set<TopicDomain>([
+    ...(input.knowledge ? (["knowledge"] as const) : []),
+    ...(input.receptionist ? (["receptionist"] as const) : []),
+    ...(input.diary ? (["diary"] as const) : []),
+  ]);
+  const relevantGaps = gaps.filter((t) => providedDomains.has(t.domain));
+  const relevantWorries = worriesAbout.filter((t) => providedDomains.has(t.domain));
+
+  const observations: Observation[] = [];
+
+  if (activity && activity.waitingCount > 0 && activity.oldestWaitingName && activity.oldestWaitingMinutes !== null) {
+    const suffix = activity.waitingCount > 1 ? ` (and ${activity.waitingCount - 1} more)` : "";
+    observations.push({
+      id: "watching:waiting",
+      text: `${activity.oldestWaitingName} has been waiting${suffix}`,
+      tone: "watching",
+      priority: 1,
+    });
+  }
+
+  const topWorry = relevantWorries[0];
+  if (topWorry) {
+    observations.push({
+      id: `worry:${topWorry.id}`,
+      text: `I still don't know ${topWorry.label} — that's worth teaching me soon`,
+      tone: "worry",
+      href: topWorry.href,
+      priority: 2,
+    });
+  }
+
+  const topLearning = relevantGaps.find((g) => g !== topWorry);
+  if (topLearning) {
+    observations.push({
+      id: `learning:${topLearning.id}`,
+      text: `I'd like to learn ${topLearning.label} next`,
+      tone: "learning",
+      href: topLearning.href,
+      priority: 3,
+    });
+  }
+
+  if (activity?.completedToday) {
+    observations.push({
+      id: "handled:completed",
+      text: `${activity.completedToday} ${activity.completedToday === 1 ? "job" : "jobs"} completed today`,
+      tone: "handled",
+      priority: 4,
+    });
+  }
+  if (activity?.bookedToday) {
+    observations.push({
+      id: "handled:booked",
+      text: `${activity.bookedToday} ${activity.bookedToday === 1 ? "job" : "jobs"} booked in today`,
+      tone: "handled",
+      priority: 4,
+    });
+  }
+
+  if (relevantGaps.length === 0 && providedDomains.size > 0) {
+    // Scoped to what this caller actually asked about — a single-domain
+    // page (e.g. Receptionist) never claims to know the whole business.
+    const allThree = providedDomains.size === 3;
+    const text = allThree
+      ? "I know everything I need — your business, how you like things run, and your diary"
+      : providedDomains.has("receptionist")
+        ? "I know exactly how you like things run"
+        : providedDomains.has("knowledge")
+          ? "I know everything I need about your business"
+          : "I know how you like your diary managed";
+    observations.push({ id: "confident:complete", text, tone: "confident", priority: 5 });
+  }
+
+  observations.sort((a, b) => a.priority - b.priority);
+
   return {
     topics,
     percent,
@@ -247,6 +351,7 @@ export function buildBrain(input: BrainInput): Brain {
     confidenceLabel: confidenceLabelFor(percent),
     gaps,
     nextTopic: gaps[0] ?? null,
+    observations,
     thoughts: {
       watching,
       handled,

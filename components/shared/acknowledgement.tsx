@@ -17,10 +17,10 @@ import { cn } from "@/lib/utils";
 export const ACK = {
   remember: "Perfect. I'll remember that.",
   helpful: "That's helpful.",
-  updated: "I've updated how I'll answer.",
-  gotIt: "Got it.",
+  updated: "I've updated how I'll answer future enquiries.",
+  gotIt: "I understand.",
   nice: "Nice.",
-  useNextTime: "I'll use that next time.",
+  useNextTime: "I'll start using that approach.",
   diary: "I've updated the diary.",
   ready: "I'm ready.",
   learning: "Learning...",
@@ -29,15 +29,18 @@ export const ACK = {
 /** A pool of natural, interchangeable acknowledgements — used instead
  * of one fixed phrase per field, since tapping the same chip several
  * times in a row and seeing the identical sentence every time reads
- * as robotic, not alive. Picked without repeating the last one shown. */
+ * as robotic, not alive. Picked without repeating the last one shown.
+ * The coaching voice matters here: these should read like a colleague
+ * confirming instruction, not a save-toast. */
 const ROTATING_ACKS = [
+  "I understand.",
   "Got it.",
   "Perfect.",
-  "Saved.",
   "I'll remember that.",
+  "I'll start using that approach.",
   "Thanks, that helps.",
   "Customers won't see this — but I will.",
-  "I'll use that from now on.",
+  "I've updated how I'll answer future enquiries.",
 ] as const;
 
 let lastAckIndex = -1;

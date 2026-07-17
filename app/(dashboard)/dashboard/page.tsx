@@ -40,7 +40,7 @@ export default async function HomePage() {
   const { data: business } = await supabase
     .from("businesses")
     .select(
-      "id, business_name, whatsapp_connected, availability, opening_time, closing_time, business_description, services, service_areas, business_knowledge"
+      "id, business_name, logo_url, whatsapp_connected, availability, opening_time, closing_time, business_description, services, service_areas, business_knowledge"
     )
     .eq("owner_id", user.id)
     .maybeSingle();
@@ -219,10 +219,11 @@ export default async function HomePage() {
   const showSetupProgress = !whatsappConnected && !showChecklist && brain.percent >= 40;
 
   return (
-    <div className="mx-auto max-w-2xl space-y-6">
-      <SettleCard className="rounded-2xl border border-border bg-card p-5 shadow-sm">
+    <div className="mx-auto max-w-2xl space-y-7">
+      <SettleCard className="rounded-2xl border border-border bg-card p-6 shadow-sm">
         <HomeGreeting
           name={business.business_name}
+          logoUrl={business.logo_url}
           supportLine={presenceLine}
           rotateCalm={rotateCalm}
           whatsappConnected={whatsappConnected}
@@ -253,7 +254,7 @@ export default async function HomePage() {
             waiting={needsYou.length}
             remaining={remainingToday}
           />
-          <WhatsOnMyMind thoughts={brain.thoughts} />
+          <WhatsOnMyMind observations={brain.observations} />
         </>
       )}
     </div>

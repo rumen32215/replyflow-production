@@ -13,6 +13,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { SettleCard, GentleSwap, Reveal, press, EASE } from "@/components/shared/motion";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { formatWaitingTime, calmStatusMessages } from "@/lib/dashboard-signals";
 
 /**
@@ -46,12 +47,14 @@ export function greetingForNow(): string {
  */
 export function HomeGreeting({
   name,
+  logoUrl = null,
   supportLine,
   rotateCalm = false,
   whatsappConnected = false,
   topGaps = [],
 }: {
   name: string;
+  logoUrl?: string | null;
   supportLine: string;
   rotateCalm?: boolean;
   whatsappConnected?: boolean;
@@ -70,10 +73,17 @@ export function HomeGreeting({
   const line = rotateCalm ? messages[calmIndex % messages.length] : supportLine;
 
   return (
-    <div className="flex items-start gap-3">
-      <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-success/10 text-success">
-        <Headset className="h-[18px] w-[18px]" />
-      </div>
+    <div className="flex items-start gap-3.5">
+      {/* The business's own logo takes this spot when set — the
+       * business is the centre of the experience, not ReplyFlow
+       * itself; falls back to the headset badge (her presence)
+       * otherwise. */}
+      <Avatar className="mt-0.5 h-10 w-10 shrink-0 border border-success/20 bg-success/10 text-success">
+        {logoUrl && <AvatarImage src={logoUrl} alt="" />}
+        <AvatarFallback className="bg-transparent text-success">
+          <Headset className="h-[18px] w-[18px]" />
+        </AvatarFallback>
+      </Avatar>
       <div className="min-w-0">
         <h1 className="text-[22px] font-extrabold tracking-tight md:text-[24px]" suppressHydrationWarning>
           {greetingForNow()}, {name}.
@@ -227,7 +237,7 @@ export function TodayCard({
   const upNextDate = upNext?.scheduledFor ? new Date(upNext.scheduledFor) : null;
 
   return (
-    <SettleCard delay={0.06} className="rounded-2xl border border-border bg-card p-5 shadow-sm">
+    <SettleCard delay={0.06} className="rounded-2xl border border-border bg-card p-6 shadow-sm">
       {showRightNow && <RightNowSection job={rightNow} allCaughtUp={allCaughtUp} />}
 
       {upNext && (
@@ -298,7 +308,7 @@ export function ReadyStatus({ state }: { state: ReadyStatusState }) {
     : "I'm ready to go. Once WhatsApp is connected, I'll start watching for messages.";
 
   return (
-    <SettleCard delay={0.05} className="rounded-2xl border border-border bg-card p-5 shadow-sm">
+    <SettleCard delay={0.05} className="rounded-2xl border border-border bg-card p-6 shadow-sm">
       <div className="flex items-center gap-3.5">
         <div className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-success/10 text-success">
           <Sparkles className="h-4 w-4" />
@@ -330,7 +340,7 @@ export function ReadyStatus({ state }: { state: ReadyStatusState }) {
 export function SetupProgress({ percent }: { percent: number }) {
   const ready = percent >= 100;
   return (
-    <SettleCard delay={0.04} className="rounded-2xl border border-success/25 bg-success/5 p-5 shadow-sm">
+    <SettleCard delay={0.04} className="rounded-2xl border border-success/25 bg-success/5 p-6 shadow-sm">
       <div className="flex items-baseline justify-between">
         <h2 className="text-[15px] font-bold tracking-tight">
           {ready ? "I'm ready to go live" : "Almost ready"}

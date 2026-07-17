@@ -7,6 +7,8 @@ import { SettleCard, press, EASE } from "@/components/shared/motion";
 import { Acknowledgement, ACK, useAcknowledgement } from "@/components/shared/acknowledgement";
 import { Switch, SwitchVisual } from "@/components/ui/switch";
 import { CollapsibleRule } from "@/components/dashboard/availability/collapsible-rule";
+import { InsightList } from "@/components/shared/insight";
+import { buildBrain } from "@/lib/intelligence";
 import { createClient } from "@/lib/supabase/client";
 import {
   DAY_KEYS,
@@ -128,6 +130,11 @@ export function AvailabilityDiary({
   // Knowledge already have — every rule change below visibly changes
   // what she'd actually say.
   const liveReply = describeBookingReply(availability, now);
+
+  // The same shared Brain (lib/intelligence.ts) every other teaching
+  // surface reads from — this page only ever passes its own domain in,
+  // so it only ever says something true about the diary specifically.
+  const brain = buildBrain({ diary: { rules: availability.rules } });
 
   // Short "current value" summaries for each rule's collapsed row —
   // the narrative descriptions stay put inside, once expanded.
@@ -375,11 +382,17 @@ export function AvailabilityDiary({
         </AnimatePresence>
       </SettleCard>
 
-      {/* Booking rules — what actually protects a tradesperson's time,
-       * not just two toggles. */}
+      {/* Booking rules — teaching, not configuring. Each rule below is
+       * framed as a coaching question, the same interaction model as
+       * Receptionist, not a settings label — the answer converts into
+       * how the diary actually behaves. */}
       <SettleCard delay={0.2} className="rounded-2xl border border-border bg-card p-5 shadow-sm">
-        <h2 className="text-[15px] font-bold tracking-tight">Booking rules</h2>
-        <p className="mb-3 mt-0.5 text-[12.5px] text-muted-foreground">How I protect your time.</p>
+        <h2 className="text-[15px] font-bold tracking-tight">Teaching my booking rules</h2>
+        <p className="mb-3 mt-0.5 text-[12.5px] text-muted-foreground">
+          Answer like you&apos;re briefing someone new — I&apos;ll turn it into how I actually behave.
+        </p>
+
+        <InsightList observations={brain.observations} limit={1} className="mb-4" />
 
         {/* The same "teach it, watch it" proof as Receptionist and
          * Business Knowledge — change a rule, watch this change. */}
@@ -398,7 +411,7 @@ export function AvailabilityDiary({
             onToggle={() => toggleRule("sameDay")}
           >
             <RuleRow
-              label="Same-day bookings"
+              label="What would you usually do if somebody wanted a same-day booking?"
               description="I'll offer today's slots to customers while they're free"
               checked={availability.rules.sameDay}
               onChange={(v) => updateRules({ sameDay: v })}
@@ -413,7 +426,7 @@ export function AvailabilityDiary({
             onToggle={() => toggleRule("emergency")}
           >
             <RuleRow
-              label="Emergency call-outs"
+              label="When would you make an exception and fit someone in outside your normal hours?"
               description="I'll fit urgent jobs in outside normal hours when it's genuinely needed"
               checked={availability.rules.emergency}
               onChange={(v) => updateRules({ emergency: v })}
@@ -449,7 +462,7 @@ export function AvailabilityDiary({
             onToggle={() => toggleRule("weekendEmergencyOnly")}
           >
             <RuleRow
-              label="Only emergency jobs at weekends"
+              label="What about weekends — emergencies only, or business as usual?"
               description="I'll protect your weekend — only genuine emergencies get offered Saturday and Sunday"
               checked={availability.rules.weekendEmergencyOnly}
               onChange={(v) => updateRules({ weekendEmergencyOnly: v })}
@@ -464,7 +477,7 @@ export function AvailabilityDiary({
             onToggle={() => toggleRule("minNotice")}
           >
             <ChipRow
-              label="How much notice do I need?"
+              label="How much warning do you need before a booking?"
               description="I'll never book you in with less warning than this, so you're never caught out"
               options={[
                 { label: "None", value: 0 },
@@ -486,7 +499,7 @@ export function AvailabilityDiary({
             onToggle={() => toggleRule("maxJobs")}
           >
             <ChipRow
-              label="Most jobs in one day"
+              label="Would you rather finish earlier, or fit one more job in on a busy day?"
               description="I'll start saying the day's full once we reach this, so you're never overloaded"
               options={[
                 { label: "No limit", value: null },
@@ -509,7 +522,7 @@ export function AvailabilityDiary({
             onToggle={() => toggleRule("travel")}
           >
             <ChipRow
-              label="Travel time between jobs"
+              label="How much travel between jobs is too much?"
               description="I'll always leave this much time so you're never rushed getting to the next one"
               options={[
                 { label: "None", value: 0 },
@@ -532,7 +545,7 @@ export function AvailabilityDiary({
             onToggle={() => toggleRule("radius")}
           >
             <ChipRow
-              label="Working radius"
+              label="How far is too far to travel for a job?"
               description="I'll only offer jobs within this distance, so you're never driving further than makes sense"
               options={[
                 { label: "5 miles", value: 5 },
@@ -555,7 +568,7 @@ export function AvailabilityDiary({
             onToggle={() => toggleRule("lunchBreak")}
           >
             <RuleRow
-              label="Block out a lunch break"
+              label="Do you need a proper break in the middle of the day?"
               description="I'll never book over this window, so you always get a proper break"
               checked={availability.rules.lunchBreak.enabled}
               onChange={(v) => updateRules({ lunchBreak: { ...availability.rules.lunchBreak, enabled: v } })}

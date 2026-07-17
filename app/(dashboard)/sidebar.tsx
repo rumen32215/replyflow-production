@@ -27,7 +27,7 @@ function isActive(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-export function Sidebar() {
+export function Sidebar({ receptionistName = null }: { receptionistName?: string | null }) {
   const pathname = usePathname();
 
   return (
@@ -40,6 +40,9 @@ export function Sidebar() {
         {DASHBOARD_NAV.map((item) => {
           const Icon = ICONS[item.icon];
           const active = isActive(pathname, item.href);
+          // The chosen name, not the role — a character, not a
+          // database field — wherever it fits naturally in the chrome.
+          const label = item.href === "/dashboard/receptionist" && receptionistName ? receptionistName : item.label;
 
           return (
             <Link
@@ -58,7 +61,7 @@ export function Sidebar() {
                 />
               )}
               <Icon className="relative h-4 w-4" />
-              <span className="relative">{item.label}</span>
+              <span className="relative truncate">{label}</span>
             </Link>
           );
         })}

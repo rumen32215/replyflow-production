@@ -7,6 +7,8 @@ import { SettleCard, GentleSwap, press } from "@/components/shared/motion";
 import { Acknowledgement, ACK, randomAck, useAcknowledgement } from "@/components/shared/acknowledgement";
 import { PhonePreview } from "@/components/shared/phone-preview";
 import { TeachingCard } from "@/components/shared/teaching-card";
+import { ConfidenceBar } from "@/components/shared/confidence-bar";
+import { InsightList } from "@/components/shared/insight";
 import { buildBrain } from "@/lib/intelligence";
 import { Textarea } from "@/components/ui/textarea";
 import { createClient } from "@/lib/supabase/client";
@@ -308,7 +310,22 @@ export function ReceptionistPlayground({
         {/* Teaching her — one topic per chat turn, not a settings
          * panel. Same underlying options as before; a conversation
          * container instead of titled cards. */}
-        <div className="min-w-0 space-y-4 lg:order-1">
+        <div className="min-w-0 space-y-5 lg:order-1">
+          {/* Growth, made persistent rather than a one-off toast — and
+           * whatever the Brain (lib/intelligence.ts) is thinking right
+           * now, in the exact same voice Front Desk already uses. This
+           * page only ever passes its own domain in, so it only ever
+           * claims to know its own domain — never Business Knowledge's
+           * or the diary's. */}
+          <SettleCard delay={0.03} className="rounded-2xl border border-border bg-card p-5 shadow-sm">
+            <ConfidenceBar
+              title="How well I know your style"
+              percent={receptionistPercent}
+              caption={`${receptionistPercent}% of how you like things run`}
+            />
+            <InsightList observations={brain.observations} limit={1} className="mt-3.5" />
+          </SettleCard>
+
           <TeachingTurn delay={0.05} question="How should I sound when I answer?" learned>
             <div className="flex flex-wrap gap-2">
               {TONES.map((t) => {

@@ -30,7 +30,7 @@ export function Topbar({
         >
           <Settings className="h-[17px] w-[17px]" />
         </Link>
-        <Avatar className="h-8 w-8 border border-border">
+        <Avatar className="h-9 w-9 border border-border">
           {logoUrl && <AvatarImage src={logoUrl} alt={businessName} />}
           <AvatarFallback className="text-xs">{businessName.slice(0, 1).toUpperCase()}</AvatarFallback>
         </Avatar>

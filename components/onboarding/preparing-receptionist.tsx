@@ -94,13 +94,16 @@ export function PreparingReceptionist() {
 
   const ready = sequenceDone && serverDone && !failed;
 
-  // The premium ending: no button. One beat after "ready", the
-  // dashboard simply opens.
+  // The premium ending: no button. One beat after "ready", onboarding
+  // hands over naturally to the Receptionist — the owner meets their
+  // new employee, they don't land on a dashboard. (Final Brief:
+  // "The onboarding should end naturally by introducing the
+  // Receptionist. Not simply redirecting to the dashboard.")
   useEffect(() => {
     if (!ready) return;
     const t = setTimeout(() => {
       resetStore(); // onboarding is over — clear the persisted draft
-      router.replace("/dashboard");
+      router.replace("/dashboard/receptionist?welcome=1");
     }, READY_HOLD_MS);
     return () => clearTimeout(t);
   }, [ready, resetStore, router]);

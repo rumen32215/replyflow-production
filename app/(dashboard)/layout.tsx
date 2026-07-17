@@ -2,13 +2,13 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { Sidebar } from "@/app/(dashboard)/sidebar";
 import { Topbar } from "@/app/(dashboard)/topbar";
+import { BottomNav } from "@/app/(dashboard)/bottom-nav";
 
 /**
- * Guards the whole (dashboard) route group server-side, same pattern as
- * app/(onboarding)/onboarding/success/page.tsx: no session -> /login,
- * onboarding not finished -> back into the wizard. Fetching the business
- * row here (not per-page) means every dashboard page gets it via layout
- * without refetching.
+ * Guards the whole (dashboard) route group server-side: no session ->
+ * /login, onboarding not finished -> back into the wizard. Mobile-first
+ * shell (Implementation Pack): bottom tab bar on phones, sidebar on
+ * desktop — the same five destinations, desktop simply gains space.
  */
 export const dynamic = "force-dynamic";
 
@@ -26,15 +26,17 @@ export default async function DashboardLayout({ children }: { children: React.Re
     .eq("owner_id", user.id)
     .maybeSingle();
 
-  if (!business?.onboarding_completed)
-  redirect("/welcome");
+  if (!business?.onboarding_completed) redirect("/welcome");
+
   return (
     <div className="flex h-screen bg-background">
       <Sidebar />
       <div className="flex flex-1 flex-col overflow-hidden">
         <Topbar businessName={business.business_name} logoUrl={business.logo_url} />
-        <main className="flex-1 overflow-y-auto px-8 py-8">{children}</main>
+        {/* pb-24 keeps content clear of the mobile tab bar */}
+        <main className="flex-1 overflow-y-auto px-4 pb-24 pt-6 md:px-8 md:pb-8 md:pt-8">{children}</main>
       </div>
+      <BottomNav />
     </div>
   );
 }

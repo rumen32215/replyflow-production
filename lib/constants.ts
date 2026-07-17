@@ -41,21 +41,21 @@ export const GREETING_STYLES = [
 ] as const;
 
 /**
- * Sidebar nav. Every item routes to a real page — the ones without a
- * feature behind them yet (Conversations, AI Receptionist, Business
- * Profile, WhatsApp Connection, Settings) render via
- * components/dashboard/coming-soon.tsx so the shell, routing, and auth
- * guard are all in place before the real feature lands. `available`
- * is kept as a pattern for future nav items that should be visibly
- * locked (e.g. Billing) rather than clickable.
+ * The five primary destinations — and only five (Dashboard Map:
+ * "These are the only five primary destinations"). Rendered as the
+ * bottom tab bar on mobile and the sidebar on desktop, from this one
+ * list. Settings lives in the topbar (genuine account preferences,
+ * not a place of work); WhatsApp connection is reached from Home's
+ * checklist and Settings, never from primary navigation.
+ *
+ * No AI terminology anywhere in labels (Decision 001).
  */
 export const DASHBOARD_NAV = [
-  { href: "/dashboard", label: "Dashboard", icon: "LayoutDashboard", available: true },
-  { href: "/dashboard/conversations", label: "Conversations", icon: "MessagesSquare", available: true },
-  { href: "/dashboard/ai-receptionist", label: "AI Receptionist", icon: "Bot", available: true },
-  { href: "/dashboard/business-profile", label: "Business Profile", icon: "Building2", available: true },
-  { href: "/dashboard/whatsapp", label: "WhatsApp Connection", icon: "MessageCircle", available: true },
-  { href: "/dashboard/settings", label: "Settings", icon: "Settings", available: true },
+  { href: "/dashboard", label: "Home", icon: "Home" },
+  { href: "/dashboard/conversations", label: "Conversations", icon: "MessagesSquare" },
+  { href: "/dashboard/receptionist", label: "Receptionist", icon: "Headset" },
+  { href: "/dashboard/availability", label: "Availability", icon: "CalendarDays" },
+  { href: "/dashboard/business", label: "Business", icon: "Building2" },
 ] as const;
 
 export const BRAND = {

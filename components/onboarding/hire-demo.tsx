@@ -188,10 +188,6 @@ export function HireDemo() {
             </AnimatePresence>
           </div>
         </div>
-
-
-     
-
       )}
     </div>
   );

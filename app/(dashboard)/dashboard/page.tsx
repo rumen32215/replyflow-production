@@ -1,19 +1,31 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { BeforeYouArrived, buildOvernightLines } from "@/components/dashboard/before-you-arrived";
-import { TodaysFocus, pickFocus } from "@/components/dashboard/todays-focus";
-import { MorningBrief } from "@/components/dashboard/morning-brief";
-import { JumpIn } from "@/components/dashboard/jump-in";
-import { WaitingForYou, type WaitingCustomer } from "@/components/dashboard/waiting-for-you";
-import { GoodNews } from "@/components/dashboard/good-news";
-import { minutesSince, buildMorningBrief, estimateMinutesSaved } from "@/lib/dashboard-signals";
+import {
+  HomeGreeting,
+  RightNowCard,
+  NeedsYou,
+  UpNext,
+  TodaysProgress,
+  GettingStartedChecklist,
+  TodayInTheDiary,
+  type NeedsYouItem,
+  type RightNowJob,
+} from "@/components/dashboard/home/home-experience";
+import { minutesSince } from "@/lib/dashboard-signals";
+import { parseAvailability, standingForDate, describeStanding } from "@/lib/availability";
 
-export const metadata: Metadata = { title: "Dashboard — ReplyFlow" };
+export const metadata: Metadata = { title: "Home — ReplyFlow" };
 
-const WAITING_THRESHOLD_MINUTES = 15;
-
-export default async function DashboardPage() {
+/**
+ * Home — "What needs my attention right now?" and nothing else
+ * (Home Experience V2). The page grows with the business
+ * (Dashboard States V1): a brand-new business sees the getting-started
+ * checklist; a working business sees Right Now / Needs You / Up Next /
+ * Today's Progress. Cards with nothing useful to say simply don't
+ * render — never empty widgets.
+ */
+export default async function HomePage() {
   const supabase = createClient();
   const {
     data: { user },
@@ -22,98 +34,64 @@ export default async function DashboardPage() {
 
   const { data: business } = await supabase
     .from("businesses")
-    .select("id, business_name, whatsapp_connected")
+    .select("id, business_name, whatsapp_connected, availability, opening_time, closing_time")
     .eq("owner_id", user.id)
     .maybeSingle();
   if (!business) redirect("/welcome");
 
   const businessId = business.id;
-  const whatsappConnected = business.whatsapp_connected ?? false;
-
-  const { data: aiConfig } = await supabase
-    .from("ai_configurations")
-    .select("system_prompt")
-    .eq("business_id", businessId)
-    .maybeSingle();
-  const aiConfigured = Boolean(aiConfig?.system_prompt && aiConfig.system_prompt.trim().length > 0);
-
-  // "Overnight" = since 6am today, server time. A fixed window rather
-  // than "since last visit" — simpler, not gameable by refreshing, and
-  // matches how a person actually thinks about "overnight."
-  const overnightStart = new Date();
-  overnightStart.setHours(6, 0, 0, 0);
-  const overnightStartIso = overnightStart.toISOString();
-
   const startOfToday = new Date();
   startOfToday.setHours(0, 0, 0, 0);
-  const startOfTodayIso = startOfToday.toISOString();
+  const endOfToday = new Date(startOfToday);
+  endOfToday.setDate(endOfToday.getDate() + 1);
+  const now = new Date();
 
   const [
-    { count: newEnquiriesOvernight },
-    { count: photosOvernight },
-    { count: quotesAcceptedOvernight },
-    { count: jobsBookedOvernight },
-    { data: openConversations },
-    { data: pendingBookingJobs },
-    { count: enquiriesToday },
-    { data: wonJobsToday },
+    { data: waitingConversations },
+    { count: conversationCount },
+    { data: todaysJobs },
+    { data: nextUpcomingJobs },
+    { count: completedEver },
   ] = await Promise.all([
+    // Waiting for Owner — the highest-priority state in the product.
+    // 'open' is the legacy status and reads as "waiting" until real
+    // receptionist replies exist.
+    supabase
+      .from("conversations")
+      .select("id, customer_name, customer_phone, last_message_preview, last_message_at, status")
+      .eq("business_id", businessId)
+      .in("status", ["waiting_owner", "open", "new"])
+      .order("last_message_at", { ascending: true })
+      .limit(5),
     supabase
       .from("conversations")
       .select("id", { count: "exact", head: true })
-      .eq("business_id", businessId)
-      .gte("created_at", overnightStartIso),
-    supabase
-      .from("messages")
-      .select("id", { count: "exact", head: true })
-      .eq("business_id", businessId)
-      .neq("message_type", "text")
-      .gte("created_at", overnightStartIso),
+      .eq("business_id", businessId),
     supabase
       .from("jobs")
-      .select("id", { count: "exact", head: true })
+      .select("id, customer_name, job_title, status, scheduled_for, notes")
       .eq("business_id", businessId)
-      .eq("status", "quote_accepted")
-      .gte("updated_at", overnightStartIso),
+      .in("status", ["booked", "in_progress", "completed"])
+      .gte("scheduled_for", startOfToday.toISOString())
+      .lt("scheduled_for", endOfToday.toISOString())
+      .order("scheduled_for", { ascending: true }),
     supabase
       .from("jobs")
-      .select("id", { count: "exact", head: true })
+      .select("id, customer_name, job_title, scheduled_for, notes")
       .eq("business_id", businessId)
       .eq("status", "booked")
-      .gte("updated_at", overnightStartIso),
-    // Open conversations, oldest first — today's "customer's turn"
-    // heuristic is simply status = 'open'. There's no message-sending
-    // feature yet, so every conversation with a reply is still
-    // functionally waiting on a human; once sending exists, this
-    // should switch to checking the latest message's direction instead.
-    supabase
-      .from("conversations")
-      .select("id, customer_name, customer_phone, last_message_preview, last_message_at")
-      .eq("business_id", businessId)
-      .eq("status", "open")
-      .order("last_message_at", { ascending: true }),
-    supabase
-      .from("jobs")
-      .select("id, customer_name, job_title")
-      .eq("business_id", businessId)
-      .eq("status", "quote_accepted")
-      .order("updated_at", { ascending: false })
+      .gte("scheduled_for", endOfToday.toISOString())
+      .order("scheduled_for", { ascending: true })
       .limit(1),
     supabase
-      .from("conversations")
+      .from("jobs")
       .select("id", { count: "exact", head: true })
       .eq("business_id", businessId)
-      .gte("created_at", startOfTodayIso),
-    supabase
-      .from("jobs")
-      .select("estimated_value")
-      .eq("business_id", businessId)
-      .in("status", ["quote_accepted", "booked", "completed"])
-      .gte("updated_at", startOfTodayIso),
+      .eq("status", "completed"),
   ]);
 
-  const waitingCustomers: WaitingCustomer[] = (openConversations ?? [])
-    .filter((c) => c.last_message_at) // a conversation with no message yet isn't meaningfully "waiting"
+  const needsYou: NeedsYouItem[] = (waitingConversations ?? [])
+    .filter((c) => c.last_message_at)
     .map((c) => ({
       conversationId: c.id,
       name: c.customer_name || c.customer_phone,
@@ -121,58 +99,94 @@ export default async function DashboardPage() {
       minutes: minutesSince(c.last_message_at as string),
     }));
 
-  const oldestWaiting = waitingCustomers[0]
-    ? { name: waitingCustomers[0].name, minutes: waitingCustomers[0].minutes, conversationId: waitingCustomers[0].conversationId }
+  const jobsToday = todaysJobs ?? [];
+  const inProgress = jobsToday.find((j) => j.status === "in_progress");
+  const nextTodayBooked = jobsToday.find(
+    (j) => j.status === "booked" && j.scheduled_for && new Date(j.scheduled_for) >= now
+  );
+  const currentSource = inProgress ?? nextTodayBooked ?? null;
+
+  const rightNow: RightNowJob | null = currentSource
+    ? {
+        id: currentSource.id,
+        customerName: currentSource.customer_name,
+        jobTitle: currentSource.job_title,
+        scheduledFor: currentSource.scheduled_for,
+        notes: currentSource.notes,
+        isCurrent: Boolean(inProgress),
+      }
     : null;
 
-  const pendingBookingJob = pendingBookingJobs?.[0]
-    ? { name: pendingBookingJobs[0].customer_name, jobTitle: pendingBookingJobs[0].job_title }
+  // Up Next = the next meaningful commitment after Right Now — never
+  // the full diary (Home Experience V2).
+  const upNextSource =
+    jobsToday.find(
+      (j) =>
+        j.status === "booked" &&
+        j.scheduled_for &&
+        new Date(j.scheduled_for) >= now &&
+        j.id !== currentSource?.id
+    ) ?? nextUpcomingJobs?.[0] ?? null;
+
+  const upNext: RightNowJob | null = upNextSource
+    ? {
+        id: upNextSource.id,
+        customerName: upNextSource.customer_name,
+        jobTitle: upNextSource.job_title,
+        scheduledFor: upNextSource.scheduled_for,
+        notes: upNextSource.notes ?? null,
+        isCurrent: false,
+      }
     : null;
 
-  const focus = pickFocus({
-    whatsappConnected,
-    aiConfigured,
-    oldestWaiting,
-    pendingBooking: pendingBookingJob,
-    waitingThresholdMinutes: WAITING_THRESHOLD_MINUTES,
-  });
+  const completedToday = jobsToday.filter((j) => j.status === "completed").length;
+  const remainingToday = jobsToday.filter(
+    (j) => j.status !== "completed" && j.scheduled_for && new Date(j.scheduled_for) >= now
+  ).length;
 
-  const overnightLines = buildOvernightLines({
-    newEnquiries: newEnquiriesOvernight ?? 0,
-    photos: photosOvernight ?? 0,
-    quotesAccepted: quotesAcceptedOvernight ?? 0,
-    jobsBooked: jobsBookedOvernight ?? 0,
-    needsReply: waitingCustomers.length,
-  });
+  // State 1 (Dashboard States V1): a brand-new business never meets an
+  // empty dashboard — it meets its next step.
+  const isNewBusiness =
+    !business.whatsapp_connected || (conversationCount ?? 0) === 0 || (completedEver ?? 0) === 0;
+  const showChecklist = isNewBusiness && needsYou.length === 0 && jobsToday.length === 0;
 
-  const briefText = buildMorningBrief({
-    enquiriesToday: enquiriesToday ?? 0,
-    jobsBookedToday: jobsBookedOvernight ?? 0,
-    waitingCustomer: oldestWaiting ? { name: oldestWaiting.name, minutes: oldestWaiting.minutes } : null,
-  });
+  const availability = parseAvailability(business.availability, business.opening_time, business.closing_time);
+  const todayStanding = describeStanding(standingForDate(availability, now));
+  const diaryLine =
+    todayStanding === "Closed" || todayStanding === "Fully booked"
+      ? todayStanding === "Closed"
+        ? "Closed today — enjoy the day off."
+        : "Fully booked today."
+      : `Open ${todayStanding} today.`;
 
-  const potentialWorkWon = (wonJobsToday ?? []).reduce((sum, job) => sum + (job.estimated_value ?? 0), 0);
+  const supportLine = showChecklist
+    ? "Your receptionist is ready for its first customer."
+    : needsYou.length > 0
+      ? `${needsYou.length === 1 ? "One customer needs" : `${needsYou.length} customers need`} you — everything else is looked after.`
+      : "Everything is under control.";
 
   return (
-    <div className="mx-auto max-w-3xl space-y-6">
-      <div>
-        <h1 className="text-[26px] font-extrabold tracking-tight">Good morning, {business.business_name} 👋</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          {new Date().toLocaleDateString("en-GB", { weekday: "long" })} •{" "}
-          {new Date().toLocaleTimeString("en-GB", { hour: "numeric", minute: "2-digit" })}
-        </p>
-      </div>
+    <div className="mx-auto max-w-2xl space-y-6">
+      <HomeGreeting name={business.business_name} supportLine={supportLine} />
 
-      <BeforeYouArrived lines={overnightLines} />
-      <TodaysFocus focus={focus} />
-      <MorningBrief text={briefText} />
-      <JumpIn />
-      <WaitingForYou customers={waitingCustomers} />
-      <GoodNews
-        enquiriesToday={enquiriesToday ?? 0}
-        potentialWorkWon={potentialWorkWon}
-        estimatedMinutesSaved={estimateMinutesSaved(enquiriesToday ?? 0)}
-      />
+      {showChecklist ? (
+        <GettingStartedChecklist
+          state={{
+            whatsappConnected: business.whatsapp_connected ?? false,
+            hasFirstEnquiry: (conversationCount ?? 0) > 0,
+            hasFirstBooking: (completedEver ?? 0) > 0,
+          }}
+        />
+      ) : (
+        <>
+          <RightNowCard job={rightNow} allCaughtUp={needsYou.length === 0} />
+          <NeedsYou items={needsYou} />
+          <UpNext job={upNext} />
+          <TodaysProgress completed={completedToday} waiting={needsYou.length} remaining={remainingToday} />
+        </>
+      )}
+
+      <TodayInTheDiary line={diaryLine} />
     </div>
   );
 }

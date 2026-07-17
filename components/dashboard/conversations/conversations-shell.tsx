@@ -5,14 +5,10 @@ import { ConversationList, type ConversationListItem } from "@/components/dashbo
 import { cn } from "@/lib/utils";
 
 /**
- * app/(dashboard)/dashboard/conversations/layout.tsx renders this once
- * and passes the current route's page content in as `children` — the
- * base route renders a "select a conversation" placeholder, [id]
- * renders the actual thread. This component only decides *which panes
- * are visible*, driven by whether the current path is the list route
- * or a specific conversation:
- *   - desktop (md+): both panes always visible, side by side
- *   - mobile: list route -> list only; conversation route -> thread only
+ * Two-pane front desk. Desktop: list + thread side by side. Mobile:
+ * one pane at a time — the list route shows the list, a conversation
+ * route shows the thread (with its own back control). Breaks out of
+ * the page padding so it feels like a full working surface.
  */
 export function ConversationsShell({
   conversations,
@@ -25,7 +21,7 @@ export function ConversationsShell({
   const isDetailView = pathname !== "/dashboard/conversations";
 
   return (
-    <div className="-m-8 flex h-[calc(100vh-73px)] overflow-hidden">
+    <div className="-mx-4 -mb-24 -mt-6 flex h-[calc(100vh-60px-56px)] overflow-hidden md:-mx-8 md:-mb-8 md:-mt-8 md:h-[calc(100vh-73px)]">
       <div
         className={cn(
           "w-full shrink-0 border-r border-border bg-card md:w-[340px]",

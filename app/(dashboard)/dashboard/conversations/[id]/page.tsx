@@ -3,11 +3,18 @@ import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
-import { Badge } from "@/components/ui/badge";
+import { ConversationStory } from "@/components/dashboard/conversations/conversation-story";
+import { statusLabel, groupForStatus } from "@/lib/conversations";
 import { cn } from "@/lib/utils";
 
 export const metadata: Metadata = { title: "Conversation — ReplyFlow" };
 
+/**
+ * A conversation opens with its story (what's been collected, where
+ * things stand, the obvious next action) before the messages — the
+ * owner should never have to read a whole thread to understand it
+ * (Conversations V1: five-second rule).
+ */
 export default async function ConversationDetailPage({ params }: { params: { id: string } }) {
   const supabase = createClient();
   const {
@@ -15,9 +22,7 @@ export default async function ConversationDetailPage({ params }: { params: { id:
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  // RLS (see supabase/migrations/0003) already scopes this to the
-  // signed-in owner's own business — a conversation id belonging to
-  // someone else simply returns no row here, not a 403.
+  // RLS (0003) scopes this to the signed-in owner's business.
   const { data: conversation } = await supabase
     .from("conversations")
     .select("id, customer_name, customer_phone, status")
@@ -31,6 +36,10 @@ export default async function ConversationDetailPage({ params }: { params: { id:
     .select("id, direction, body, message_type, created_at")
     .eq("conversation_id", conversation.id)
     .order("created_at", { ascending: true });
+
+  const allMessages = messages ?? [];
+  const photoCount = allMessages.filter((m) => m.message_type !== "text").length;
+  const group = groupForStatus(conversation.status);
 
   return (
     <div className="flex h-full flex-col">
@@ -49,16 +58,34 @@ export default async function ConversationDetailPage({ params }: { params: { id:
           <p className="truncate text-[14px] font-bold">{conversation.customer_name || conversation.customer_phone}</p>
           <p className="truncate text-[12px] text-muted-foreground">{conversation.customer_phone}</p>
         </div>
-        <Badge variant={conversation.status === "open" ? "success" : "outline"} className="shrink-0">
-          {conversation.status}
-        </Badge>
+        <span
+          className={cn(
+            "shrink-0 rounded-full border px-2.5 py-1 text-[11px] font-semibold",
+            group === "waiting" && "border-amber-200 bg-amber-50 text-amber-700",
+            group === "active" && "border-primary/20 bg-accent text-primary",
+            group === "booked" && "border-success/25 bg-success/10 text-success",
+            group === "done" && "border-border bg-muted text-muted-foreground"
+          )}
+        >
+          {statusLabel(conversation.status)}
+        </span>
       </div>
 
-      <div className="flex-1 space-y-3 overflow-y-auto p-6">
-        {!messages || messages.length === 0 ? (
-          <p className="py-8 text-center text-sm text-muted-foreground">No messages in this conversation yet.</p>
+      <ConversationStory
+        conversationId={conversation.id}
+        status={conversation.status}
+        customerPhone={conversation.customer_phone}
+        messageCount={allMessages.length}
+        photoCount={photoCount}
+      />
+
+      <div className="flex-1 space-y-3 overflow-y-auto p-5 md:p-6">
+        {allMessages.length === 0 ? (
+          <p className="py-8 text-center text-sm text-muted-foreground">
+            Nothing has been said yet — I&apos;ll bring every message here.
+          </p>
         ) : (
-          messages.map((m) => (
+          allMessages.map((m) => (
             <div key={m.id} className={cn("flex", m.direction === "inbound" ? "justify-start" : "justify-end")}>
               <div
                 className={cn(
@@ -84,11 +111,9 @@ export default async function ConversationDetailPage({ params }: { params: { id:
       </div>
 
       {/*
-        No message-sending yet — outbound messages require the AI
-        Conversations engine / a "send via WhatsApp" API call, neither
-        of which exists yet. A disabled composer here would imply
-        functionality that isn't real; leaving it out until sending is
-        actually wired up is the more honest state.
+        No composer yet — sending doesn't exist until the conversation
+        engine is wired to WhatsApp. A disabled input would imply
+        functionality that isn't real (Trust before features).
       */}
     </div>
   );

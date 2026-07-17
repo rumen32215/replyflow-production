@@ -5,7 +5,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { Plus, X } from "lucide-react";
 import { SettleCard, press, EASE } from "@/components/shared/motion";
 import { Acknowledgement, ACK, useAcknowledgement } from "@/components/shared/acknowledgement";
-import { Switch } from "@/components/ui/switch";
+import { Switch, SwitchVisual } from "@/components/ui/switch";
 import { createClient } from "@/lib/supabase/client";
 import {
   DAY_KEYS,
@@ -33,7 +33,7 @@ export function AvailabilityDiary({
   initial: Availability;
 }) {
   const supabase = createClient();
-  const { message, isError, acknowledge, softError } = useAcknowledgement();
+  const { message, isError, isSaving, startSaving, acknowledge, softError } = useAcknowledgement();
   const [availability, setAvailability] = useState<Availability>(initial);
   const [addingDayOff, setAddingDayOff] = useState(false);
   const [dayOffDate, setDayOffDate] = useState("");
@@ -47,6 +47,7 @@ export function AvailabilityDiary({
       return;
     }
     const t = setTimeout(async () => {
+      startSaving();
       const { error } = await supabase
         .from("businesses")
         .update({ availability })
@@ -154,7 +155,7 @@ export function AvailabilityDiary({
                 : "One tap and I'll offer customers the next available day."}
             </p>
           </div>
-          <Switch checked={todayFullyBooked} aria-hidden className="pointer-events-none" />
+          <SwitchVisual checked={todayFullyBooked} />
         </motion.button>
       </SettleCard>
 
@@ -341,6 +342,7 @@ export function AvailabilityDiary({
         <Acknowledgement
           message={message}
           isError={isError}
+          isSaving={isSaving}
           className="rounded-full border border-border bg-card px-4 py-2 shadow-md"
         />
       </div>

@@ -7,23 +7,27 @@ import {
   NeedsYou,
   UpNext,
   TodaysProgress,
-  GettingStartedChecklist,
-  TodayInTheDiary,
+  ReadyStatus,
+  HerProfileLink,
   type NeedsYouItem,
   type RightNowJob,
 } from "@/components/dashboard/home/home-experience";
-import { minutesSince } from "@/lib/dashboard-signals";
+import { FastLane, ConnectWhatsAppBanner } from "@/components/dashboard/home/fast-lane";
+import { SettleCard } from "@/components/shared/motion";
+import { minutesSince, buildPresenceLine } from "@/lib/dashboard-signals";
 import { parseAvailability, standingForDate, describeStanding } from "@/lib/availability";
 
-export const metadata: Metadata = { title: "Home — ReplyFlow" };
+export const metadata: Metadata = { title: "Front Desk — ReplyFlow" };
 
 /**
- * Home — "What needs my attention right now?" and nothing else
- * (Home Experience V2). The page grows with the business
- * (Dashboard States V1): a brand-new business sees the getting-started
- * checklist; a working business sees Right Now / Needs You / Up Next /
- * Today's Progress. Cards with nothing useful to say simply don't
- * render — never empty widgets.
+ * Front Desk (ReplyFlow V3) — the moment the app is opened, she's
+ * there: one honest line about right now, and a fast lane so nothing
+ * routine or urgent ever waits on a conversation with her. The page
+ * still grows with the business (Dashboard States V1): a brand-new
+ * business sees the getting-started checklist; a working business
+ * sees Right Now / Needs You / Up Next / Today's Progress beneath the
+ * fast lane. Cards with nothing useful to say simply don't render —
+ * never empty widgets.
  */
 export default async function HomePage() {
   const supabase = createClient();
@@ -144,10 +148,11 @@ export default async function HomePage() {
     (j) => j.status !== "completed" && j.scheduled_for && new Date(j.scheduled_for) >= now
   ).length;
 
+  const whatsappConnected = business.whatsapp_connected ?? false;
+
   // State 1 (Dashboard States V1): a brand-new business never meets an
   // empty dashboard — it meets its next step.
-  const isNewBusiness =
-    !business.whatsapp_connected || (conversationCount ?? 0) === 0 || (completedEver ?? 0) === 0;
+  const isNewBusiness = !whatsappConnected || (conversationCount ?? 0) === 0 || (completedEver ?? 0) === 0;
   const showChecklist = isNewBusiness && needsYou.length === 0 && jobsToday.length === 0;
 
   const availability = parseAvailability(business.availability, business.opening_time, business.closing_time);
@@ -159,24 +164,31 @@ export default async function HomePage() {
         : "Fully booked today."
       : `Open ${todayStanding} today.`;
 
-  const supportLine = showChecklist
-    ? "Your receptionist is ready for its first customer."
-    : needsYou.length > 0
-      ? `${needsYou.length === 1 ? "One customer needs" : `${needsYou.length} customers need`} you — everything else is looked after.`
-      : "Everything is under control.";
+  const oldestWaiting = needsYou[0] ?? null;
+  const presenceLine = buildPresenceLine({
+    isNewBusiness: showChecklist,
+    waitingCount: needsYou.length,
+    waitingCustomer: oldestWaiting ? { name: oldestWaiting.name, minutes: oldestWaiting.minutes } : null,
+    jobsBookedToday: jobsToday.length,
+  });
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">
-      <HomeGreeting name={business.business_name} supportLine={supportLine} />
+      <SettleCard className="rounded-2xl border border-border bg-card p-5 shadow-sm">
+        <HomeGreeting name={business.business_name} supportLine={presenceLine} />
+        <div className="my-4 h-px bg-border/70" />
+        <FastLane
+          businessId={businessId}
+          waitingCount={needsYou.length}
+          diaryLine={diaryLine}
+          initialAvailability={availability}
+        />
+      </SettleCard>
+
+      {!whatsappConnected && <ConnectWhatsAppBanner />}
 
       {showChecklist ? (
-        <GettingStartedChecklist
-          state={{
-            whatsappConnected: business.whatsapp_connected ?? false,
-            hasFirstEnquiry: (conversationCount ?? 0) > 0,
-            hasFirstBooking: (completedEver ?? 0) > 0,
-          }}
-        />
+        <ReadyStatus state={{ whatsappConnected }} />
       ) : (
         <>
           <RightNowCard job={rightNow} allCaughtUp={needsYou.length === 0} />
@@ -186,7 +198,7 @@ export default async function HomePage() {
         </>
       )}
 
-      <TodayInTheDiary line={diaryLine} />
+      <HerProfileLink line="Services, pricing, and everything I use when I reply." />
     </div>
   );
 }

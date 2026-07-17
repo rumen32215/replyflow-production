@@ -23,29 +23,45 @@ export const ACK = {
   useNextTime: "I'll use that next time.",
   diary: "I've updated the diary.",
   ready: "I'm ready.",
+  learning: "Learning...",
 } as const;
 
-const SOFT_ERROR = "I couldn't save that just yet. Let's try again.";
+/** Errors never panic — no red banners, no technical language, and
+ * never imply the owner's own words were lost (they weren't; the
+ * field still holds them, only the save is retried). */
+const SOFT_ERROR = "I'm having trouble saving this right now. Your text is still here.";
 
 export function useAcknowledgement(holdMs = 2200) {
   const [message, setMessage] = useState<string | null>(null);
   const [isError, setIsError] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  /** Call right before the actual save request goes out — never while
+   * the owner is still typing (Motion Language: acknowledgements only
+   * follow completed actions). Holds until acknowledge()/softError(). */
+  const startSaving = useCallback((text: string = ACK.learning) => {
+    if (timer.current) clearTimeout(timer.current);
+    setIsError(false);
+    setIsSaving(true);
+    setMessage(text);
+  }, []);
 
   const acknowledge = useCallback(
     (text: string = ACK.remember) => {
       if (timer.current) clearTimeout(timer.current);
       setIsError(false);
+      setIsSaving(false);
       setMessage(text);
       timer.current = setTimeout(() => setMessage(null), holdMs);
     },
     [holdMs]
   );
 
-  /** Errors never panic — no red banners, no technical language. */
   const softError = useCallback(() => {
     if (timer.current) clearTimeout(timer.current);
     setIsError(true);
+    setIsSaving(false);
     setMessage(SOFT_ERROR);
     timer.current = setTimeout(() => setMessage(null), holdMs + 1200);
   }, [holdMs]);
@@ -54,16 +70,18 @@ export function useAcknowledgement(holdMs = 2200) {
     if (timer.current) clearTimeout(timer.current);
   }, []);
 
-  return { message, isError, acknowledge, softError };
+  return { message, isError, isSaving, startSaving, acknowledge, softError };
 }
 
 export function Acknowledgement({
   message,
   isError = false,
+  isSaving = false,
   className,
 }: {
   message: string | null;
   isError?: boolean;
+  isSaving?: boolean;
   className?: string;
 }) {
   return (
@@ -78,11 +96,20 @@ export function Acknowledgement({
           role="status"
           aria-live="polite"
         >
-          {!isError && <GrowingCheck className="h-4 w-4" />}
+          {isSaving ? (
+            <motion.span
+              aria-hidden
+              className="h-2 w-2 shrink-0 rounded-full bg-primary"
+              animate={{ opacity: [1, 0.35, 1] }}
+              transition={{ duration: 1.1, repeat: Infinity, ease: "easeInOut" }}
+            />
+          ) : (
+            !isError && <GrowingCheck className="h-4 w-4" />
+          )}
           <span
             className={cn(
               "text-[13px] font-medium",
-              isError ? "text-muted-foreground" : "text-success"
+              isError || isSaving ? "text-muted-foreground" : "text-success"
             )}
           >
             {message}

@@ -31,7 +31,7 @@ export default async function ReceptionistPage({
 
   const { data: config } = await supabase
     .from("ai_configurations")
-    .select("tone, system_prompt, business_rules, escalation_rules")
+    .select("tone, tone_notes, system_prompt, business_rules, escalation_rules")
     .eq("business_id", business.id)
     .maybeSingle();
 
@@ -46,6 +46,7 @@ export default async function ReceptionistPage({
       calloutFeeAmount={business.callout_fee_amount}
       initial={{
         tone,
+        toneNotes: config?.tone_notes ?? "",
         systemPrompt: config?.system_prompt ?? "",
         businessRules: config?.business_rules ?? "",
         escalationRules: config?.escalation_rules ?? "",

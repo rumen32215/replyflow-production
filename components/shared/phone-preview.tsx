@@ -3,6 +3,7 @@
 import { motion } from "framer-motion";
 import { EASE } from "@/components/shared/motion";
 import { TypingDots, useTypedMessage } from "@/components/shared/typed-message";
+import { StatusPill, type StatusTone } from "@/components/shared/status";
 import { cn } from "@/lib/utils";
 
 /**
@@ -49,6 +50,7 @@ export function PhonePreview({
   businessName,
   turns,
   liveReply,
+  status,
   className,
 }: {
   businessName: string;
@@ -56,57 +58,71 @@ export function PhonePreview({
   turns: PreviewTurn[];
   /** The receptionist's latest reply — this one types itself. */
   liveReply: string;
+  /** Owner-facing conversation stage (never shown inside the chat
+   * chrome itself — customers don't see "Urgent"/"Waiting for owner"
+   * labels, so this renders above the frame, not inside it). While
+   * she's actively typing, this is always overridden to "Receptionist
+   * handling" regardless of what's passed in. */
+  status?: { label: string; tone: StatusTone };
   className?: string;
 }) {
   const { display, isThinking } = useTypedMessage(liveReply);
+  const shownStatus = isThinking ? { label: "Receptionist handling", tone: "active" as const } : status;
 
   return (
-    <div
-      className={cn(
-        "overflow-hidden rounded-[28px] border border-border bg-[#e7e1d8] shadow-md",
-        className
+    <div>
+      {shownStatus && (
+        <div className="mb-2 flex justify-end">
+          <StatusPill label={shownStatus.label} tone={shownStatus.tone} />
+        </div>
       )}
-    >
-      {/* Chat header */}
-      <div className="flex items-center gap-3 bg-[#075E54] px-4 py-3 text-white">
-        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/20 text-[12px] font-bold">
-          {businessName.slice(0, 1).toUpperCase() || "R"}
-        </div>
-        <div className="min-w-0">
-          <p className="truncate text-[13.5px] font-semibold leading-tight">{businessName}</p>
-          <p className="text-[11px] leading-tight text-white/75">online</p>
-        </div>
-      </div>
-
-      {/* Thread */}
       <div
-        className="space-y-2 px-3 py-4"
-        style={{
-          backgroundImage:
-            "radial-gradient(circle at 20% 10%, rgba(255,255,255,0.35), transparent 40%)",
-        }}
+        className={cn(
+          "overflow-hidden rounded-[28px] border border-border bg-[#e7e1d8] shadow-md",
+          className
+        )}
       >
-        {turns.map((turn, i) => (
-          <motion.div
-            key={`${i}-${turn.text}`}
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.35, ease: EASE, delay: i * 0.05 }}
-          >
-            <Bubble from={turn.from}>{turn.text}</Bubble>
-          </motion.div>
-        ))}
+        {/* Chat header */}
+        <div className="flex items-center gap-3 bg-[#075E54] px-4 py-3 text-white">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/20 text-[12px] font-bold">
+            {businessName.slice(0, 1).toUpperCase() || "R"}
+          </div>
+          <div className="min-w-0">
+            <p className="truncate text-[13.5px] font-semibold leading-tight">{businessName}</p>
+            <p className="text-[11px] leading-tight text-white/75">online</p>
+          </div>
+        </div>
 
-        <Bubble from="receptionist" className="min-h-[34px]">
-          {isThinking || display.length === 0 ? (
-            <TypingDots className="px-1 py-1" />
-          ) : (
-            <span>
-              {display}
-              <span className="ml-0.5 inline-block h-3.5 w-[2px] animate-pulse rounded bg-foreground/40 align-middle" />
-            </span>
-          )}
-        </Bubble>
+        {/* Thread */}
+        <div
+          className="space-y-2 px-3 py-4"
+          style={{
+            backgroundImage:
+              "radial-gradient(circle at 20% 10%, rgba(255,255,255,0.35), transparent 40%)",
+          }}
+        >
+          {turns.map((turn, i) => (
+            <motion.div
+              key={`${i}-${turn.text}`}
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.35, ease: EASE, delay: i * 0.05 }}
+            >
+              <Bubble from={turn.from}>{turn.text}</Bubble>
+            </motion.div>
+          ))}
+
+          <Bubble from="receptionist" className="min-h-[34px]">
+            {isThinking || display.length === 0 ? (
+              <TypingDots className="px-1 py-1" />
+            ) : (
+              <span>
+                {display}
+                <span className="ml-0.5 inline-block h-3.5 w-[2px] animate-pulse rounded bg-foreground/40 align-middle" />
+              </span>
+            )}
+          </Bubble>
+        </div>
       </div>
     </div>
   );

@@ -3,13 +3,13 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { motion } from "framer-motion";
-import { Home, MessagesSquare, Headset, CalendarDays, Building2, type LucideIcon } from "lucide-react";
+import { Home, MessagesSquare, Headset, CalendarDays, type LucideIcon } from "lucide-react";
 import { DASHBOARD_NAV } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 
 /**
  * The mobile tab bar — the primary way a tradesperson holds ReplyFlow.
- * Thumb-first: five large targets, instant touch acknowledgement, the
+ * Thumb-first: four large targets, instant touch acknowledgement, the
  * active indicator slides rather than flashes so the owner always
  * understands where they came from and where they are.
  */
@@ -19,7 +19,6 @@ const ICONS: Record<(typeof DASHBOARD_NAV)[number]["icon"], LucideIcon> = {
   MessagesSquare,
   Headset,
   CalendarDays,
-  Building2,
 };
 
 function isActive(pathname: string, href: string) {

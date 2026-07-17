@@ -29,4 +29,33 @@ const Switch = React.forwardRef<
 ));
 Switch.displayName = SwitchPrimitives.Root.displayName;
 
-export { Switch };
+/**
+ * Purely visual switch — same look as `Switch`, but renders as a
+ * `<span>`, not a real button. Radix's Switch root is a native
+ * `<button role="switch">`, so it can never be nested inside another
+ * clickable element (e.g. a whole row that's already a `<button>`) —
+ * that's invalid HTML (`<button>` cannot contain `<button>`) and
+ * breaks hydration. Use this wherever the toggle is just mirroring
+ * state for a tap target that lives on a surrounding element.
+ */
+function SwitchVisual({ checked, className }: { checked: boolean; className?: string }) {
+  return (
+    <span
+      aria-hidden
+      className={cn(
+        "inline-flex h-6 w-[42px] shrink-0 items-center rounded-full border-2 border-transparent transition-colors",
+        checked ? "bg-success" : "bg-muted",
+        className
+      )}
+    >
+      <span
+        className={cn(
+          "block h-5 w-5 rounded-full bg-white shadow ring-0 transition-transform",
+          checked ? "translate-x-[18px]" : "translate-x-0"
+        )}
+      />
+    </span>
+  );
+}
+
+export { Switch, SwitchVisual };

@@ -62,6 +62,42 @@ export function buildMorningBrief({ enquiriesToday, jobsBookedToday, waitingCust
   return parts.join(" ");
 }
 
+export interface PresenceLineInput {
+  isNewBusiness: boolean;
+  waitingCount: number;
+  waitingCustomer: { name: string; minutes: number } | null;
+  jobsBookedToday: number;
+}
+
+/**
+ * Her one honest sentence about right now, for the Front Desk presence
+ * header. Same deterministic, real-facts-only assembly as
+ * buildMorningBrief above — first person, and time-of-day independent
+ * (the page can be opened any time, not only in the morning), so it
+ * never claims something that isn't true.
+ */
+export function buildPresenceLine({
+  isNewBusiness,
+  waitingCount,
+  waitingCustomer,
+  jobsBookedToday,
+}: PresenceLineInput): string {
+  if (isNewBusiness) {
+    return "I'm ready for your first customer.";
+  }
+
+  if (waitingCustomer) {
+    const suffix = waitingCount > 1 ? ` (plus ${waitingCount - 1} more)` : "";
+    return `${waitingCustomer.name} has been waiting ${formatWaitingTime(waitingCustomer.minutes)}${suffix}, so I'd start there.`;
+  }
+
+  if (jobsBookedToday > 0) {
+    return `Everything's handled — ${jobsBookedToday} ${jobsBookedToday === 1 ? "job" : "jobs"} booked in today.`;
+  }
+
+  return "Everything's quiet — I'll let you know the moment someone gets in touch.";
+}
+
 /** Estimated, not measured — always presented with the word "estimated"
  * attached wherever it's rendered, never as a bare precise figure. */
 export function estimateMinutesSaved(enquiriesToday: number): number {

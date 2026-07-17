@@ -1,36 +1,43 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
-import { Check, ChevronDown, Plus, X } from "lucide-react";
-import { SettleCard, EASE, press } from "@/components/shared/motion";
+import { Check, ChevronDown, Headset, Plus, X } from "lucide-react";
+import { SettleCard, GentleSwap, EASE, press } from "@/components/shared/motion";
 import { Acknowledgement, ACK, useAcknowledgement } from "@/components/shared/acknowledgement";
+import { PhonePreview } from "@/components/shared/phone-preview";
 import { Switch } from "@/components/ui/switch";
 import { createClient } from "@/lib/supabase/client";
 import {
   parseKnowledge,
   understandingScore,
+  buildKnowledgeReply,
   PERSONALITY_SUGGESTIONS,
   PAYMENT_SUGGESTIONS,
   GUARANTEE_SUGGESTIONS,
+  ACCESS_SUGGESTIONS,
+  FAQ_SUGGESTIONS,
+  KNOWLEDGE_PREVIEW_SCENARIOS,
   type BusinessKnowledge,
 } from "@/lib/knowledge";
 import { PLUMBING_SERVICES } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 
 /**
- * Business memory — the living profile (Business Experience V2).
+ * Business knowledge — the living profile (Business Knowledge V2).
  *
- * The owner is not filling in forms; they're introducing ReplyFlow to
- * their business. Expandable knowledge cards, friendly questions,
- * tap-to-select suggestions, minimal typing. Nothing here is ever
- * "completed" — the page grows with the business, and a gentle
- * understanding score shows that a fuller memory means better
- * conversations.
+ * She's not presenting settings; she's asking questions because she
+ * wants to understand the business better. Every section is one of
+ * her conversation turns (her avatar, her question, a check once she
+ * knows it) — chips and suggestions do almost all the work, typing is
+ * reserved for the handful of things that genuinely need it. The live
+ * WhatsApp preview stays on screen throughout: every answer visibly
+ * changes how she'd actually reply to a real customer question about
+ * the business, the same "teach it, watch it, trust it" loop as the
+ * Receptionist page.
  *
- * Persistence is quiet: one debounced write, no Save button, the
- * receptionist simply acknowledges — "Perfect. I'll remember that."
+ * Persistence is quiet: one debounced write, no Save button — she
+ * shows "Learning..." while the save is in flight, then acknowledges.
  * FAQs live in ai_configurations.faqs (their original home) so the
  * conversation engine keeps reading them unchanged.
  */
@@ -73,7 +80,7 @@ export function BusinessMemory({
   initial: BusinessMemoryInitial;
 }) {
   const supabase = createClient();
-  const { message, isError, acknowledge, softError } = useAcknowledgement();
+  const { message, isError, isSaving, startSaving, acknowledge, softError } = useAcknowledgement();
 
   const [businessName, setBusinessName] = useState(initial.businessName);
   const [phone, setPhone] = useState(initial.phone);
@@ -86,6 +93,21 @@ export function BusinessMemory({
   const [knowledge, setKnowledge] = useState<BusinessKnowledge>(initial.knowledge);
   const [faqs, setFaqs] = useState<Faq[]>(initial.faqs);
   const [open, setOpen] = useState<SectionId | null>(null);
+  const [scenarioId, setScenarioId] = useState<string>(KNOWLEDGE_PREVIEW_SCENARIOS[0]?.id ?? "payment");
+
+  /* The live proof — every answer below is a fact this reply is built
+   * from, so watching it change is the whole point. */
+  const scenario = KNOWLEDGE_PREVIEW_SCENARIOS.find((s) => s.id === scenarioId) ?? KNOWLEDGE_PREVIEW_SCENARIOS[0]!;
+  const liveReply = buildKnowledgeReply(scenarioId, {
+    paymentMethods: knowledge.paymentMethods,
+    chargesCalloutFee,
+    calloutFeeAmount,
+    guarantees: knowledge.guarantees,
+    serviceAreas,
+    offersEmergency,
+    emergencyNotes: knowledge.emergencyNotes,
+    parkingAccess: knowledge.parkingAccess,
+  });
 
   /* ------------------------- quiet persistence ------------------------- */
   const firstRender = useRef(true);
@@ -97,6 +119,7 @@ export function BusinessMemory({
       return;
     }
     const t = setTimeout(async () => {
+      startSaving();
       const cleanedFaqs = faqs.filter((f) => f.question.trim() && f.answer.trim());
       const [businessResult, faqResult] = await Promise.all([
         supabase
@@ -395,11 +418,12 @@ export function BusinessMemory({
       known: Boolean(knowledge.parkingAccess.trim()),
       summary: knowledge.parkingAccess.trim() ? "Noted" : null,
       content: (
-        <MemoryTextarea
+        <SuggestibleTextarea
           label="Parking, access, or preparation"
           value={knowledge.parkingAccess}
           onChange={(v) => patchKnowledge({ parkingAccess: v })}
-          placeholder="e.g. Please make sure the stopcock is accessible before we arrive."
+          suggestions={ACCESS_SUGGESTIONS}
+          placeholder="Or add your own — e.g. Please make sure the stopcock is accessible before we arrive."
         />
       ),
     },
@@ -408,94 +432,117 @@ export function BusinessMemory({
   /* ------------------------------- layout ------------------------------- */
 
   return (
-    <div className="mx-auto max-w-2xl space-y-6">
-      <SettleCard>
+    <div className="mx-auto max-w-5xl">
+      <SettleCard className="mb-6">
         <h1 className="text-[24px] font-extrabold tracking-tight md:text-[26px]">
           What I know about your business
         </h1>
         <p className="mt-1 text-[14px] leading-relaxed text-muted-foreground">
-          Everything you teach me here makes every customer conversation better. There&apos;s no
-          finish line — add to it whenever something changes.
+          I&apos;m asking because it helps me understand the business better — there&apos;s no finish
+          line, add to it whenever something changes.
         </p>
       </SettleCard>
 
-      {/* Business understanding — not a game, a gentle signal. */}
-      <SettleCard delay={0.05} className="rounded-2xl border border-border bg-card p-5 shadow-sm">
-        <div className="flex items-baseline justify-between">
-          <h2 className="text-[15px] font-bold tracking-tight">How well I understand you</h2>
-          <span className="text-[13px] font-semibold text-primary">{score.percent}%</span>
-        </div>
-        <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-muted">
-          <motion.div
-            className="h-full rounded-full bg-primary"
-            initial={false}
-            animate={{ width: `${Math.max(score.percent, 4)}%` }}
-            transition={{ duration: 0.6, ease: EASE }}
-          />
-        </div>
-        <AnimatePresence mode="wait" initial={false}>
-          {nextLesson ? (
-            <motion.button
-              key={nextLesson.section}
-              {...press}
-              initial={{ opacity: 0, y: 4 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -4 }}
-              transition={{ duration: 0.25, ease: EASE }}
-              type="button"
-              onClick={() => setOpen(nextLesson.section)}
-              className="mt-3.5 flex w-full items-center justify-between rounded-xl border border-dashed border-border px-4 py-3 text-left transition-colors hover:border-primary"
-            >
-              <span className="text-[13px] font-medium text-foreground">{nextLesson.prompt}</span>
-              <span className="ml-3 shrink-0 text-[12.5px] font-semibold text-primary">Teach me</span>
-            </motion.button>
-          ) : (
-            <motion.p
-              key="complete"
-              initial={{ opacity: 0, y: 4 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="mt-3.5 text-[13px] text-muted-foreground"
-            >
-              I know your business well. Keep adding anything new — I&apos;ll use it straight away.
-            </motion.p>
-          )}
-        </AnimatePresence>
-      </SettleCard>
+      <div className="flex flex-col gap-6 lg:grid lg:grid-cols-[1fr_360px] lg:items-start">
+        {/* The live phone — the hero, same as the Receptionist page.
+         * First on mobile, sticky in the right column on desktop. */}
+        <div className="lg:order-2 lg:sticky lg:top-2 lg:self-start">
+          <div className="mb-2.5 flex flex-wrap items-center gap-1.5">
+            {KNOWLEDGE_PREVIEW_SCENARIOS.map((s) => (
+              <motion.button
+                key={s.id}
+                {...press}
+                type="button"
+                onClick={() => setScenarioId(s.id)}
+                className={cn(
+                  "rounded-full border px-3 py-1.5 text-[11.5px] font-semibold transition-colors",
+                  scenarioId === s.id
+                    ? "border-primary bg-accent text-primary"
+                    : "border-border bg-card text-muted-foreground hover:text-foreground"
+                )}
+              >
+                {s.label}
+              </motion.button>
+            ))}
+          </div>
 
-      {/* The living profile — knowledge revealed like papers laid on a desk. */}
-      <div className="space-y-3">
-        {sections.map((section, index) => (
-          <KnowledgeCard
-            key={section.id}
-            index={index}
-            title={section.title}
-            question={section.question}
-            known={section.known}
-            summary={section.summary}
-            open={open === section.id}
-            onToggle={() => setOpen(open === section.id ? null : section.id)}
-          >
-            {section.content}
-          </KnowledgeCard>
-        ))}
+          <GentleSwap swapKey={scenarioId}>
+            <PhonePreview
+              businessName={businessName || initial.businessName}
+              turns={[{ from: "customer", text: scenario.customerMessage }]}
+              liveReply={liveReply}
+            />
+          </GentleSwap>
+
+          <p className="mt-3 text-[11.5px] text-muted-foreground">This is exactly how I&apos;ll reply.</p>
+        </div>
+
+        <div className="min-w-0 space-y-4 lg:order-1">
+          {/* Business understanding — not a game, a gentle signal. */}
+          <SettleCard delay={0.05} className="rounded-2xl border border-border bg-card p-5 shadow-sm">
+            <div className="flex items-baseline justify-between">
+              <h2 className="text-[15px] font-bold tracking-tight">How well I understand you</h2>
+              <span className="text-[13px] font-semibold text-primary">{score.percent}%</span>
+            </div>
+            <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-muted">
+              <motion.div
+                className="h-full rounded-full bg-primary"
+                initial={false}
+                animate={{ width: `${Math.max(score.percent, 4)}%` }}
+                transition={{ duration: 0.6, ease: EASE }}
+              />
+            </div>
+            <AnimatePresence mode="wait" initial={false}>
+              {nextLesson ? (
+                <motion.button
+                  key={nextLesson.section}
+                  {...press}
+                  initial={{ opacity: 0, y: 4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -4 }}
+                  transition={{ duration: 0.25, ease: EASE }}
+                  type="button"
+                  onClick={() => setOpen(nextLesson.section)}
+                  className="mt-3.5 flex w-full items-center justify-between rounded-xl border border-dashed border-border px-4 py-3 text-left transition-colors hover:border-primary"
+                >
+                  <span className="text-[13px] font-medium text-foreground">{nextLesson.prompt}</span>
+                  <span className="ml-3 shrink-0 text-[12.5px] font-semibold text-primary">Teach me</span>
+                </motion.button>
+              ) : (
+                <motion.p
+                  key="complete"
+                  initial={{ opacity: 0, y: 4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="mt-3.5 text-[13px] text-muted-foreground"
+                >
+                  I know your business well. Keep adding anything new — I&apos;ll use it straight away.
+                </motion.p>
+              )}
+            </AnimatePresence>
+          </SettleCard>
+
+          {/* Her questions — one conversation turn per topic, revealed
+           * like papers laid on a desk. */}
+          <div className="space-y-3">
+            {sections.map((section, index) => (
+              <KnowledgeCard
+                key={section.id}
+                index={index}
+                question={section.question}
+                known={section.known}
+                summary={section.summary}
+                open={open === section.id}
+                onToggle={() => setOpen(open === section.id ? null : section.id)}
+              >
+                {section.content}
+              </KnowledgeCard>
+            ))}
+          </div>
+        </div>
       </div>
 
-      {/* Instant understanding — the memory feeds the receptionist. */}
-      <SettleCard delay={0.1}>
-        <Link
-          href="/dashboard/receptionist"
-          className="block rounded-2xl border border-border bg-card p-5 shadow-sm transition-colors hover:border-primary/50"
-        >
-          <p className="text-[14px] font-semibold">See what this changes</p>
-          <p className="mt-0.5 text-[12.5px] text-muted-foreground">
-            Everything I&apos;ve learned here shapes how I reply. Open the Receptionist to watch it
-            in action.
-          </p>
-        </Link>
-      </SettleCard>
-
       {/* One quiet acknowledgement bar, pinned clear of the tab bar. */}
-      <div className="pointer-events-none sticky bottom-20 flex min-h-[28px] justify-center md:bottom-4">
+      <div className="pointer-events-none sticky bottom-20 mt-6 flex min-h-[28px] justify-center md:bottom-4">
         <AnimatePresence>
           {message && (
             <motion.div
@@ -505,7 +552,7 @@ export function BusinessMemory({
               transition={{ duration: 0.3, ease: EASE }}
               className="rounded-full border border-border bg-card px-4 py-2 shadow-md"
             >
-              <Acknowledgement message={message} isError={isError} />
+              <Acknowledgement message={message} isError={isError} isSaving={isSaving} />
             </motion.div>
           )}
         </AnimatePresence>
@@ -516,9 +563,16 @@ export function BusinessMemory({
 
 /* ------------------------------ pieces ------------------------------ */
 
+/**
+ * One of her questions — same conversation-turn language as the
+ * Receptionist page (her avatar, her question as a received-message
+ * bubble, a check once she knows something here) with progressive
+ * disclosure kept for this page specifically: ten topics at once would
+ * be a wall, not a conversation, so each stays collapsed to a one-line
+ * summary in her voice until tapped open.
+ */
 function KnowledgeCard({
   index,
-  title,
   question,
   known,
   summary,
@@ -527,7 +581,6 @@ function KnowledgeCard({
   children,
 }: {
   index: number;
-  title: string;
   question: string;
   known: boolean;
   summary: string | null;
@@ -542,26 +595,33 @@ function KnowledgeCard({
         onClick={onToggle}
         whileTap={{ scale: 0.99 }}
         aria-expanded={open}
-        className="flex w-full items-center gap-3 px-5 py-4 text-left"
+        className="flex w-full items-start gap-2.5 px-4 py-3.5 text-left"
       >
-        <span
-          className={cn(
-            "flex h-5 w-5 shrink-0 items-center justify-center rounded-full border transition-colors",
-            known ? "border-success bg-success text-success-foreground" : "border-border"
+        <div className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent text-primary">
+          <Headset className="h-[15px] w-[15px]" />
+          {known && (
+            <motion.span
+              initial={{ scale: 0 }}
+              animate={{ scale: 1 }}
+              transition={{ type: "spring", stiffness: 380, damping: 22 }}
+              className="absolute -bottom-0.5 -right-0.5 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-success text-success-foreground ring-2 ring-card"
+            >
+              <Check className="h-2 w-2" strokeWidth={3.5} />
+            </motion.span>
           )}
-        >
-          {known && <Check className="h-3 w-3" strokeWidth={3.5} />}
-        </span>
-        <span className="min-w-0 flex-1">
-          <span className="block text-[14px] font-semibold">{title}</span>
-          <span className="mt-0.5 block truncate text-[12.5px] text-muted-foreground">
+        </div>
+        <span className="min-w-0 flex-1 pt-0.5">
+          <span className="inline-block max-w-full rounded-2xl rounded-tl-sm bg-muted px-3.5 py-2 text-[13px] leading-relaxed">
+            {question}
+          </span>
+          <span className="mt-1.5 block truncate text-[12px] text-muted-foreground">
             {summary ?? "I don't know this yet"}
           </span>
         </span>
         <motion.span
           animate={{ rotate: open ? 180 : 0 }}
           transition={{ duration: 0.25, ease: EASE }}
-          className="shrink-0 text-muted-foreground"
+          className="mt-1.5 shrink-0 text-muted-foreground"
         >
           <ChevronDown className="h-4 w-4" />
         </motion.span>
@@ -576,8 +636,7 @@ function KnowledgeCard({
             transition={{ duration: 0.3, ease: EASE }}
             className="overflow-hidden"
           >
-            <div className="border-t border-border px-5 pb-5 pt-4">
-              <p className="mb-3 text-[13px] font-medium text-foreground">{question}</p>
+            <div className="border-t border-border py-4 pl-[46px] pr-4">
               {children}
             </div>
           </motion.div>
@@ -658,6 +717,69 @@ function MemoryTextarea({
         className="w-full resize-none rounded-xl border border-border bg-background px-3.5 py-2.5 text-[13.5px] leading-relaxed outline-none transition-colors placeholder:text-muted-foreground/60 focus:border-primary"
       />
     </label>
+  );
+}
+
+/**
+ * A free-text field with common answers suggested above it — tapping
+ * one adds or removes that exact line; typing anything else is left
+ * completely untouched. Reduces typing without ever reinterpreting or
+ * losing whatever an owner already wrote here.
+ */
+function SuggestibleTextarea({
+  label,
+  value,
+  onChange,
+  suggestions,
+  placeholder,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  suggestions: readonly string[];
+  placeholder?: string;
+}) {
+  const lines = value
+    .split("\n")
+    .map((l) => l.trim())
+    .filter(Boolean);
+
+  function toggle(s: string) {
+    onChange(lines.includes(s) ? lines.filter((l) => l !== s).join("\n") : [...lines, s].join("\n"));
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap gap-2">
+        {suggestions.map((s) => {
+          const on = lines.includes(s);
+          return (
+            <motion.button
+              key={s}
+              {...press}
+              type="button"
+              aria-pressed={on}
+              onClick={() => toggle(s)}
+              className={cn(
+                "flex items-center gap-1.5 rounded-full border px-3.5 py-2 text-[12.5px] font-medium transition-colors",
+                on ? "border-primary bg-accent text-primary" : "border-border bg-card text-muted-foreground hover:text-foreground"
+              )}
+            >
+              <span
+                className={cn(
+                  "flex h-4 w-4 items-center justify-center rounded-full border transition-colors",
+                  on ? "border-primary bg-primary text-primary-foreground" : "border-border"
+                )}
+              >
+                {on && <Check className="h-2.5 w-2.5" strokeWidth={3.5} />}
+              </span>
+              {s}
+            </motion.button>
+          );
+        })}
+      </div>
+      <MemoryTextarea label={label} value={value} onChange={onChange} placeholder={placeholder} />
+    </div>
   );
 }
 
@@ -783,11 +905,33 @@ function FaqEditor({ faqs, onChange }: { faqs: Faq[]; onChange: (faqs: Faq[]) =>
     onChange(faqs.map((f, i) => (i === index ? { ...f, ...patch } : f)));
   }
 
+  const askedAlready = new Set(faqs.map((f) => f.question.trim()));
+  const suggestedQuestions = FAQ_SUGGESTIONS.filter((q) => !askedAlready.has(q));
+
   return (
     <div className="space-y-3">
       <p className="text-[12.5px] leading-relaxed text-muted-foreground">
         Teach me an answer once and I&apos;ll give it consistently, every time.
       </p>
+
+      {/* Suggested before asking the owner to write their own. */}
+      {suggestedQuestions.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          {suggestedQuestions.map((q) => (
+            <motion.button
+              key={q}
+              {...press}
+              type="button"
+              onClick={() => onChange([...faqs, { question: q, answer: "" }])}
+              className="flex items-center gap-1.5 rounded-full border border-dashed border-border bg-card px-3.5 py-2 text-[12.5px] font-medium text-muted-foreground transition-colors hover:border-primary hover:text-primary"
+            >
+              <Plus className="h-3 w-3" />
+              {q}
+            </motion.button>
+          ))}
+        </div>
+      )}
+
       <AnimatePresence initial={false}>
         {faqs.map((faq, index) => (
           <motion.div

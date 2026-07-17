@@ -4,16 +4,16 @@ import Link from "next/link";
 import { motion } from "framer-motion";
 import {
   ArrowRight,
+  BookOpen,
   CalendarDays,
   Check,
+  Headset,
   MapPin,
   MessageCircle,
-  Phone,
   Sparkles,
 } from "lucide-react";
 import { SettleCard, Reveal, press } from "@/components/shared/motion";
 import { formatWaitingTime } from "@/lib/dashboard-signals";
-import { cn } from "@/lib/utils";
 
 /**
  * Home — the owner's morning briefing (Home Experience V2).
@@ -32,14 +32,26 @@ export function greetingForNow(): string {
   return "Good evening";
 }
 
+/**
+ * Her presence — the first thing Front Desk shows, every time it's
+ * opened. The headset badge marks this as her speaking (not a page
+ * title); no SettleCard of its own, since it sits inside the same
+ * panel as the fast lane beneath it (Front Desk V3: she's felt right
+ * above the actions, not in a separate floating card).
+ */
 export function HomeGreeting({ name, supportLine }: { name: string; supportLine: string }) {
   return (
-    <SettleCard>
-      <h1 className="text-[24px] font-extrabold tracking-tight md:text-[26px]" suppressHydrationWarning>
-        {greetingForNow()}, {name}.
-      </h1>
-      <p className="mt-1 text-[14px] text-muted-foreground">{supportLine}</p>
-    </SettleCard>
+    <div className="flex items-start gap-3">
+      <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+        <Headset className="h-[18px] w-[18px]" />
+      </div>
+      <div className="min-w-0">
+        <h1 className="text-[22px] font-extrabold tracking-tight md:text-[24px]" suppressHydrationWarning>
+          {greetingForNow()}, {name}.
+        </h1>
+        <p className="mt-1 text-[14px] leading-relaxed text-muted-foreground">{supportLine}</p>
+      </div>
+    </div>
   );
 }
 
@@ -209,96 +221,60 @@ export function TodaysProgress({
   );
 }
 
-/* --------------------------- State 1: the checklist -------------------------- */
+/* ------------------------ State 1: before the first enquiry ------------------- */
 
-export interface ChecklistState {
+export interface ReadyStatusState {
   whatsappConnected: boolean;
-  hasFirstEnquiry: boolean;
-  hasFirstBooking: boolean;
 }
 
-export function GettingStartedChecklist({ state }: { state: ChecklistState }) {
-  const steps = [
-    { label: "Receptionist ready", done: true, href: "/dashboard/receptionist" },
-    { label: "Connect WhatsApp", done: state.whatsappConnected, href: "/dashboard/whatsapp" },
-    { label: "Receive your first enquiry", done: state.hasFirstEnquiry, href: null },
-    { label: "Complete your first booking", done: state.hasFirstBooking, href: null },
-  ];
-  const next = steps.find((s) => !s.done);
+/**
+ * What she's doing right now for a brand-new business — replaces the
+ * old milestone checklist. She never reads as a setup wizard waiting
+ * on steps; she always has one true, live thing to say (Front Desk
+ * V3 / One Thought Ahead: never a blank screen waiting for progress).
+ */
+export function ReadyStatus({ state }: { state: ReadyStatusState }) {
+  const line = state.whatsappConnected
+    ? "No enquiries yet. I'll let you know the moment someone gets in touch."
+    : "I'm ready to go. Once WhatsApp is connected, I'll start watching for messages.";
 
   return (
     <SettleCard delay={0.05} className="rounded-2xl border border-border bg-card p-5 shadow-sm">
-      <div className="mb-1 flex items-center gap-2">
-        <Sparkles className="h-4 w-4 text-primary" />
-        <p className="text-[15px] font-bold tracking-tight">Your receptionist is ready.</p>
-      </div>
-      <p className="mb-4 text-[13px] leading-relaxed text-muted-foreground">
-        {next?.label === "Connect WhatsApp"
-          ? "Connect WhatsApp and I can start looking after your customers."
-          : "Here's how your first customer will arrive."}
-      </p>
-      <div className="space-y-1.5">
-        {steps.map((step, i) => {
-          const row = (
-            <div
-              className={cn(
-                "flex items-center gap-3 rounded-xl px-3 py-2.5 text-[13.5px]",
-                step.done ? "text-muted-foreground" : "font-semibold",
-                !step.done && step.href && "bg-accent/70 text-primary"
-              )}
-            >
-              <span
-                className={cn(
-                  "flex h-5 w-5 shrink-0 items-center justify-center rounded-full border",
-                  step.done ? "border-success bg-success text-success-foreground" : "border-border bg-card"
-                )}
-              >
-                {step.done && (
-                  <motion.span
-                    initial={{ scale: 0.6 }}
-                    animate={{ scale: 1 }}
-                    transition={{ type: "spring", stiffness: 320, damping: 20, delay: 0.15 + i * 0.05 }}
-                  >
-                    <Check className="h-3 w-3" strokeWidth={3} />
-                  </motion.span>
-                )}
-              </span>
-              <span className={cn(step.done && "line-through decoration-border")}>{step.label}</span>
-              {!step.done && step.href && <ArrowRight className="ml-auto h-3.5 w-3.5" />}
-            </div>
-          );
-          return (
-            <Reveal key={step.label} index={i}>
-              {!step.done && step.href ? (
-                <Link href={step.href} className="block">
-                  <motion.div {...press}>{row}</motion.div>
-                </Link>
-              ) : (
-                row
-              )}
-            </Reveal>
-          );
-        })}
+      <div className="flex items-center gap-3.5">
+        <div className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-accent text-primary">
+          <Sparkles className="h-4 w-4" />
+          {state.whatsappConnected && (
+            <motion.span
+              aria-hidden
+              className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full bg-success ring-2 ring-card"
+              animate={{ opacity: [1, 0.45, 1] }}
+              transition={{ duration: 2.2, repeat: Infinity, ease: "easeInOut" }}
+            />
+          )}
+        </div>
+        <p className="text-[14px] font-semibold leading-snug">{line}</p>
       </div>
     </SettleCard>
   );
 }
 
-/* --------------------------- Availability at a glance ------------------------ */
+/* ------------------------------- Her Profile ---------------------------------- */
 
-export function TodayInTheDiary({ line }: { line: string }) {
+/** Business ("her profile") dropped off primary nav in V3 — reached
+ * from a single quiet link on Front Desk instead of a competing tab. */
+export function HerProfileLink({ line }: { line: string }) {
   return (
-    <SettleCard delay={0.22}>
-      <Link href="/dashboard/availability" className="group block">
+    <SettleCard delay={0.26}>
+      <Link href="/dashboard/business" className="group block">
         <motion.div
           {...press}
           className="flex items-center gap-3 rounded-2xl border border-border bg-card p-4 shadow-sm transition-shadow group-hover:shadow-md"
         >
           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-accent text-primary">
-            <Phone className="h-4 w-4" />
+            <BookOpen className="h-4 w-4" />
           </div>
           <div className="min-w-0 flex-1">
-            <p className="text-[14px] font-semibold">Today&apos;s diary</p>
+            <p className="text-[14px] font-semibold">What she knows about your business</p>
             <p className="truncate text-[12.5px] text-muted-foreground">{line}</p>
           </div>
           <ArrowRight className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" />

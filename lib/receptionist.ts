@@ -78,18 +78,52 @@ export interface PreviewKnowledge {
   calloutFeeAmount: string | null;
 }
 
+/**
+ * What kind of exchange this is — drives which reply is composed
+ * below. Kept separate from the scenario's id/label/message so the
+ * owner-facing scenario picker can show real customer problems
+ * (Receptionist V3.1) while the underlying reply logic keeps its
+ * original four behaviours.
+ */
+export type ScenarioKind = "standard" | "quote" | "emergency" | "price";
+
 export interface PreviewScenario {
   id: string;
   label: string;
   customerMessage: string;
+  kind: ScenarioKind;
 }
 
+/** Real customer problems, not developer categories — this is what
+ * watching real customers looks like, not "Scenario 3: Emergency." */
 export const PREVIEW_SCENARIOS: readonly PreviewScenario[] = [
-  { id: "problem", label: "A new enquiry", customerMessage: "Hi, my boiler isn't working." },
-  { id: "quote", label: "A quote request", customerMessage: "Can someone give me a quote?" },
-  { id: "emergency", label: "An emergency", customerMessage: "Water is pouring through my ceiling!" },
-  { id: "price", label: "A price question", customerMessage: "How much do you charge for a call-out?" },
+  { id: "boiler-leak", label: "Boiler leaking", customerMessage: "Hi, my boiler's leaking water from underneath — can someone come out?", kind: "emergency" },
+  { id: "no-hot-water", label: "No hot water", customerMessage: "We've had no hot water since this morning, can you help?", kind: "standard" },
+  { id: "kitchen-tap", label: "Kitchen tap", customerMessage: "My kitchen tap won't stop dripping — how much would that be to fix?", kind: "price" },
+  { id: "radiator", label: "Radiator issue", customerMessage: "One of my radiators isn't heating up properly.", kind: "standard" },
+  { id: "blocked-drain", label: "Blocked drain", customerMessage: "The drain outside our kitchen is completely blocked.", kind: "standard" },
+  { id: "bathroom-install", label: "Bathroom installation", customerMessage: "Could I get a quote for a full bathroom installation?", kind: "quote" },
 ] as const;
+
+/**
+ * Which stage this simulated exchange is in — shown as a StatusPill
+ * next to the preview so the owner instantly reads what's happening,
+ * the same way conversation status works in the real inbox. Honest
+ * about what a single demo exchange can actually represent: it never
+ * claims a booking or a closed conversation, only what's genuinely
+ * derivable from the scenario and what's been taught (Receptionist
+ * V1: never guess).
+ */
+export function deriveScenarioStatus(scenario: PreviewScenario, k: Pick<PreviewKnowledge, "escalation">): {
+  label: string;
+  tone: "urgent" | "waiting-owner" | "waiting";
+} {
+  if (scenario.kind === "emergency") {
+    if (k.escalation.has("flooding")) return { label: "Waiting for owner", tone: "waiting-owner" };
+    return { label: "Urgent", tone: "urgent" };
+  }
+  return { label: "Waiting for customer", tone: "waiting" };
+}
 
 function greetingFor(tone: Tone, businessName: string): string {
   switch (tone) {
@@ -117,7 +151,7 @@ export function buildPreviewConversation(k: PreviewKnowledge, scenario: PreviewS
   const rule = (id: string) => k.rules.has(id);
   const parts: string[] = [];
 
-  if (scenario.id === "emergency") {
+  if (scenario.kind === "emergency") {
     if (k.escalation.has("flooding")) {
       parts.push("That sounds urgent — I'm letting the owner know right now, and turning off your water at the stopcock will help in the meantime.");
     } else {
@@ -126,7 +160,7 @@ export function buildPreviewConversation(k: PreviewKnowledge, scenario: PreviewS
       if (has("ask-postcode")) parts.push("Could I take your postcode so we can get on our way?");
       else parts.push("Could I take your address?");
     }
-  } else if (scenario.id === "price") {
+  } else if (scenario.kind === "price") {
     if (rule("no-exact-prices")) {
       parts.push("I can't give an exact price over chat, but the team will confirm pricing after a quick look at the job.");
     }
@@ -142,7 +176,7 @@ export function buildPreviewConversation(k: PreviewKnowledge, scenario: PreviewS
     if (has("ask-photos") || rule("always-ask-photos")) {
       parts.push("If you can send a couple of photos, that'll help us give you a much better idea.");
     }
-  } else if (scenario.id === "quote") {
+  } else if (scenario.kind === "quote") {
     parts.push("Of course — happy to help with that.");
     if (has("ask-photos") || rule("always-ask-photos")) {
       parts.push("Could you send me a few photos of the job first? That way the quote will be accurate.");
@@ -165,7 +199,7 @@ export function buildPreviewConversation(k: PreviewKnowledge, scenario: PreviewS
     }
   }
 
-  if (has("someone-will-contact") && scenario.id !== "emergency") {
+  if (has("someone-will-contact") && scenario.kind !== "emergency") {
     parts.push("A team member will be in touch shortly after that.");
   }
 

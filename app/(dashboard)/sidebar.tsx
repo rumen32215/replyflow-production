@@ -3,16 +3,16 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { motion } from "framer-motion";
-import { Home, MessagesSquare, Headset, CalendarDays, Building2, type LucideIcon } from "lucide-react";
+import { Home, MessagesSquare, Headset, CalendarDays, type LucideIcon } from "lucide-react";
 import { Logo } from "@/components/shared/logo";
 import { DASHBOARD_NAV } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 
 /**
- * Desktop-only sidebar. The same five destinations as the mobile
- * bottom nav (Dashboard Map) — desktop gains space, never different
- * functionality. Navigation never flashes: the active highlight
- * gently slides between items via a shared layoutId.
+ * Desktop-only sidebar. The same four destinations as the mobile
+ * bottom nav — desktop gains space, never different functionality.
+ * Navigation never flashes: the active highlight gently slides
+ * between items via a shared layoutId.
  */
 
 const ICONS: Record<(typeof DASHBOARD_NAV)[number]["icon"], LucideIcon> = {
@@ -20,7 +20,6 @@ const ICONS: Record<(typeof DASHBOARD_NAV)[number]["icon"], LucideIcon> = {
   MessagesSquare,
   Headset,
   CalendarDays,
-  Building2,
 };
 
 function isActive(pathname: string, href: string) {

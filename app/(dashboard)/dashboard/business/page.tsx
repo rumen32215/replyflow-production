@@ -24,7 +24,7 @@ export default async function BusinessPage() {
   const { data: business } = await supabase
     .from("businesses")
     .select(
-      "id, business_name, phone, business_description, services, service_areas, offers_emergency_callouts, charges_callout_fee, callout_fee_amount, business_knowledge"
+      "id, business_name, trade, phone, business_description, services, service_areas, offers_emergency_callouts, charges_callout_fee, callout_fee_amount, business_knowledge"
     )
     .eq("owner_id", user.id)
     .maybeSingle();
@@ -51,6 +51,7 @@ export default async function BusinessPage() {
   return (
     <BusinessMemory
       businessId={business.id}
+      trade={business.trade}
       initial={{
         businessName: business.business_name ?? "",
         phone: business.phone ?? "",

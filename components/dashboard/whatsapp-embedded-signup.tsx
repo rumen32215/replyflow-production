@@ -5,6 +5,7 @@ import Script from "next/script";
 import { useRouter } from "next/navigation";
 import { Check, Loader2, MessageCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { GentleSwap } from "@/components/shared/motion";
 import { toast } from "@/hooks/use-toast";
 
 declare global {
@@ -145,20 +146,22 @@ export function WhatsAppEmbeddedSignup({ redirectTo }: { redirectTo?: string } =
       <Script src="https://connect.facebook.net/en_US/sdk.js" strategy="lazyOnload" onLoad={() => setSdkReady(true)} />
 
       <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-success/10 text-success">
-        {state === "connecting" || state === "awaiting-signup" ? (
-          <Loader2 className="h-6 w-6 animate-spin" />
-        ) : state === "connected" ? (
-          <Check className="h-6 w-6" strokeWidth={3} />
-        ) : (
-          <MessageCircle className="h-6 w-6" />
-        )}
+        <GentleSwap swapKey={state}>
+          {state === "connecting" || state === "awaiting-signup" ? (
+            <Loader2 className="h-6 w-6 animate-spin" />
+          ) : state === "connected" ? (
+            <Check className="h-6 w-6" strokeWidth={3} />
+          ) : (
+            <MessageCircle className="h-6 w-6" />
+          )}
+        </GentleSwap>
       </div>
 
       <p className="mb-1 text-[15px] font-bold">
         {state === "connected"
-          ? "WhatsApp connected"
+          ? "I'm connected"
           : state === "connecting"
-          ? "Finishing connection..."
+          ? "Finishing up..."
           : state === "awaiting-signup"
           ? "Complete signup in the popup..."
           : "Connect your WhatsApp Business account"}
@@ -167,8 +170,8 @@ export function WhatsAppEmbeddedSignup({ redirectTo }: { redirectTo?: string } =
         {state === "error"
           ? errorMessage
           : missingConfig
-          ? "Meta app credentials aren't configured in this environment yet."
-          : "You'll be guided through Meta's official signup flow."}
+          ? "This environment isn't set up for WhatsApp yet."
+          : "I'll guide you through Meta's official signup flow."}
       </p>
 
       {state !== "connected" && (

@@ -107,15 +107,20 @@ export function buildPresenceLine({
  * — rotation never gets to obscure something true. The WhatsApp line
  * only appears when the connection is actually live.
  */
-export function calmStatusMessages(whatsappConnected: boolean): readonly string[] {
+export function calmStatusMessages(whatsappConnected: boolean, topGap: string | null = null): readonly string[] {
   const base = [
     "Everything's quiet — I'll let you know the moment someone gets in touch.",
     "Inbox checked. Nothing needs you right now.",
     "Watching for new enquiries.",
     "Ready for your next customer.",
     "Everything looks good.",
-  ] as const;
-  return whatsappConnected ? [...base, "WhatsApp connection is steady."] : base;
+  ];
+  const withWhatsapp = whatsappConnected ? [...base, "WhatsApp connection is steady."] : base;
+  // A real, occasional nudge — not another reassurance. Reuses the
+  // same gap Business Knowledge's understanding score already found,
+  // so it's earned, never invented, and shows up rarely (it's just
+  // one more stop in the same rotation, not a separate alert).
+  return topGap ? [...withWhatsapp, `I still don't know ${topGap} — want to teach me?`] : withWhatsapp;
 }
 
 /** Estimated, not measured — always presented with the word "estimated"

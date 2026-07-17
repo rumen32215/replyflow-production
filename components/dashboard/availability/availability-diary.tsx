@@ -12,6 +12,7 @@ import {
   DAY_LABELS,
   standingForDate,
   describeStanding,
+  describeBookingReply,
   toDateString,
   dayKeyForDate,
   type Availability,
@@ -113,6 +114,10 @@ export function AvailabilityDiary({
   // computed live from the real date, not a fixed label.
   const todayWeekday = now.toLocaleDateString("en-GB", { weekday: "long" });
   const tomorrowWeekday = tomorrow.toLocaleDateString("en-GB", { weekday: "long" });
+  // The same "teach it, watch it" proof Receptionist and Business
+  // Knowledge already have — every rule change below visibly changes
+  // what she'd actually say.
+  const liveReply = describeBookingReply(availability, now);
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">
@@ -351,17 +356,27 @@ export function AvailabilityDiary({
       <SettleCard delay={0.2} className="rounded-2xl border border-border bg-card p-5 shadow-sm">
         <h2 className="text-[15px] font-bold tracking-tight">Booking rules</h2>
         <p className="mb-3 mt-0.5 text-[12.5px] text-muted-foreground">How I protect your time.</p>
+
+        {/* The same "teach it, watch it" proof as Receptionist and
+         * Business Knowledge — change a rule, watch this change. */}
+        <div className="mb-4 rounded-xl bg-yellow-50/60 px-3.5 py-3">
+          <p className="mb-1 text-[10.5px] font-bold uppercase tracking-widest text-yellow-700/70">
+            If someone asks &quot;are you free today?&quot;
+          </p>
+          <p className="text-[13px] italic leading-relaxed text-yellow-950">{liveReply}</p>
+        </div>
+
         <div className="divide-y divide-border">
           <RuleRow
             label="Same-day bookings"
-            description="Let customers book for today"
+            description="I'll offer today's slots to customers while they're free"
             checked={availability.rules.sameDay}
             onChange={(v) => updateRules({ sameDay: v })}
           />
           <div className="py-2.5">
             <RuleRow
               label="Emergency call-outs"
-              description="Accept urgent jobs outside normal hours"
+              description="I'll fit urgent jobs in outside normal hours when it's genuinely needed"
               checked={availability.rules.emergency}
               onChange={(v) => updateRules({ emergency: v })}
               noPadding
@@ -390,14 +405,14 @@ export function AvailabilityDiary({
           </div>
           <RuleRow
             label="Only emergency jobs at weekends"
-            description="Keep Saturday and Sunday for urgent work only"
+            description="I'll protect your weekend — only genuine emergencies get offered Saturday and Sunday"
             checked={availability.rules.weekendEmergencyOnly}
             onChange={(v) => updateRules({ weekendEmergencyOnly: v })}
           />
 
           <ChipRow
             label="How much notice do I need?"
-            description="I won't offer a slot sooner than this"
+            description="I'll never book you in with less warning than this, so you're never caught out"
             options={[
               { label: "None", value: 0 },
               { label: "2 hours", value: 2 },
@@ -411,7 +426,7 @@ export function AvailabilityDiary({
 
           <ChipRow
             label="Most jobs in one day"
-            description="I'll say the day's full once we reach this"
+            description="I'll start saying the day's full once we reach this, so you're never overloaded"
             options={[
               { label: "No limit", value: null },
               { label: "2", value: 2 },
@@ -425,8 +440,8 @@ export function AvailabilityDiary({
           />
 
           <ChipRow
-            label="Travel buffer between jobs"
-            description="Time I'll always leave to get to the next one"
+            label="Travel time between jobs"
+            description="I'll always leave this much time so you're never rushed getting to the next one"
             options={[
               { label: "None", value: 0 },
               { label: "15 min", value: 15 },
@@ -441,7 +456,7 @@ export function AvailabilityDiary({
 
           <ChipRow
             label="Working radius"
-            description="How far I'll offer to travel from base"
+            description="I'll only offer jobs within this distance, so you're never driving further than makes sense"
             options={[
               { label: "5 miles", value: 5 },
               { label: "10 miles", value: 10 },
@@ -457,7 +472,7 @@ export function AvailabilityDiary({
           <div className="py-2.5">
             <RuleRow
               label="Block out a lunch break"
-              description="I won't offer this window to customers"
+              description="I'll never book over this window, so you always get a proper break"
               checked={availability.rules.lunchBreak.enabled}
               onChange={(v) => updateRules({ lunchBreak: { ...availability.rules.lunchBreak, enabled: v } })}
             />

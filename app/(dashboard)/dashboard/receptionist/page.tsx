@@ -24,7 +24,7 @@ export default async function ReceptionistPage({
 
   const { data: business } = await supabase
     .from("businesses")
-    .select("id, business_name, offers_emergency_callouts, charges_callout_fee, callout_fee_amount, greeting_style")
+    .select("id, business_name, trade, offers_emergency_callouts, charges_callout_fee, callout_fee_amount, greeting_style")
     .eq("owner_id", user.id)
     .maybeSingle();
   if (!business) redirect("/welcome");
@@ -41,6 +41,7 @@ export default async function ReceptionistPage({
     <ReceptionistPlayground
       businessId={business.id}
       businessName={business.business_name}
+      trade={business.trade}
       offersEmergency={business.offers_emergency_callouts ?? true}
       chargesCalloutFee={business.charges_callout_fee ?? false}
       calloutFeeAmount={business.callout_fee_amount}

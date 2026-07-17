@@ -56,16 +56,6 @@ export const GUARANTEE_SUGGESTIONS = [
   "Manufacturer warranties honoured",
 ] as const;
 
-/** Common before-arrival instructions — tapped, not typed, but the
- * owner can still add anything specific alongside them. */
-export const ACCESS_SUGGESTIONS = [
-  "Please make sure the stopcock is accessible",
-  "There's parking available on the street",
-  "Please keep pets secured",
-  "Let us know the door code or key safe in advance",
-  "Please clear access to the work area",
-] as const;
-
 /** What customers usually ask — suggested before the owner has to
  * think of their own (Business Profile V1's own example list). */
 export const FAQ_SUGGESTIONS = [

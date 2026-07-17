@@ -135,3 +135,39 @@ export function describeStanding(standing: DayStanding): string {
       return `${standing.open} – ${standing.close}`;
   }
 }
+
+/**
+ * What she'd actually say if a customer asked "are you free today?" —
+ * the same "teach it, watch it, trust it" proof the Receptionist and
+ * Business Knowledge pages already have, built the same deterministic
+ * way (real facts only, never guessed). Every booking rule that's
+ * genuinely relevant today shows up here, so changing a rule visibly
+ * changes what she'd say, the same as everywhere else in the product.
+ */
+export function describeBookingReply(availability: Availability, now: Date): string {
+  const standing = standingForDate(availability, now);
+  const parts: string[] = [];
+
+  if (standing.kind === "open") {
+    parts.push(`Yes — we're open today until ${standing.close}.`);
+  } else if (standing.kind === "fully-booked") {
+    parts.push("We're fully booked today, but I can offer you the next available day.");
+  } else if (standing.kind === "off") {
+    parts.push(`We're closed today (${standing.reason.toLowerCase()}), but I can find you a slot soon after.`);
+  } else {
+    parts.push("We're closed today, but I can find you a slot soon after.");
+  }
+
+  const { rules } = availability;
+  if (rules.minNoticeHours > 0) {
+    parts.push(`I'll just need ${rules.minNoticeHours} hour${rules.minNoticeHours === 1 ? "" : "s"}' notice.`);
+  }
+  if (rules.maxJobsPerDay !== null) {
+    parts.push(`We take up to ${rules.maxJobsPerDay} job${rules.maxJobsPerDay === 1 ? "" : "s"} a day, so it's worth booking ahead.`);
+  }
+  if (rules.weekendEmergencyOnly && [0, 6].includes(now.getDay())) {
+    parts.push("Weekends are for emergencies only, so I'd check if this can wait until Monday.");
+  }
+
+  return parts.join(" ");
+}

@@ -6,7 +6,6 @@ import {
   AlertTriangle,
   Ban,
   Check,
-  ChevronDown,
   CreditCard,
   DoorOpen,
   HelpCircle,
@@ -22,6 +21,7 @@ import {
 import { SettleCard, GentleSwap, EASE, press } from "@/components/shared/motion";
 import { Acknowledgement, ACK, randomAck, useAcknowledgement } from "@/components/shared/acknowledgement";
 import { PhonePreview } from "@/components/shared/phone-preview";
+import { TeachingCard } from "@/components/shared/teaching-card";
 import { Switch } from "@/components/ui/switch";
 import { createClient } from "@/lib/supabase/client";
 import {
@@ -31,12 +31,11 @@ import {
   PERSONALITY_SUGGESTIONS,
   PAYMENT_SUGGESTIONS,
   GUARANTEE_SUGGESTIONS,
-  ACCESS_SUGGESTIONS,
   FAQ_SUGGESTIONS,
   KNOWLEDGE_PREVIEW_SCENARIOS,
   type BusinessKnowledge,
 } from "@/lib/knowledge";
-import { PLUMBING_SERVICES } from "@/lib/constants";
+import { servicesForTrade, accessSuggestionsForTrade } from "@/lib/trades";
 import { cn } from "@/lib/utils";
 
 /**
@@ -90,12 +89,16 @@ type SectionId =
 
 export function BusinessMemory({
   businessId,
+  trade,
   initial,
 }: {
   businessId: string;
+  trade: string | null;
   initial: BusinessMemoryInitial;
 }) {
   const supabase = createClient();
+  const serviceSuggestions = servicesForTrade(trade);
+  const accessSuggestions = accessSuggestionsForTrade(trade);
   const { message, isError, isSaving, startSaving, acknowledge, softError } = useAcknowledgement();
 
   const [businessName, setBusinessName] = useState(initial.businessName);
@@ -226,6 +229,25 @@ export function BusinessMemory({
   };
   const nextLesson = score.missing.map((m) => MISSING_TO_SECTION[m]).find(Boolean) ?? null;
 
+  // She leads the interview rather than waiting to be asked: the very
+  // first thing she doesn't know yet opens on its own. Once it's
+  // answered (this lesson is no longer the "next" gap), she
+  // automatically advances to the next one — the same "ask, listen,
+  // ask the next thing" rhythm as a real interview, not ten panels
+  // sitting open at once. If the owner has manually opened a
+  // different section, that choice is left alone.
+  const prevNextSectionId = useRef<SectionId | null | undefined>(undefined);
+  useEffect(() => {
+    const newNext = nextLesson?.section ?? null;
+    if (prevNextSectionId.current === undefined) {
+      setOpen(newNext);
+    } else if (newNext !== prevNextSectionId.current) {
+      setOpen((current) => (current === prevNextSectionId.current ? newNext : current));
+    }
+    prevNextSectionId.current = newNext;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nextLesson?.section]);
+
   /* ------------------------------ sections ------------------------------ */
 
   const summarise = (items: string[]) =>
@@ -293,7 +315,7 @@ export function BusinessMemory({
       summary: summarise(services),
       content: (
         <ChipEditor
-          suggestions={[...PLUMBING_SERVICES]}
+          suggestions={[...serviceSuggestions]}
           items={services}
           onChange={(next) => learn(() => setServices(next))}
           addPlaceholder="Add another service"
@@ -478,7 +500,7 @@ export function BusinessMemory({
           label="Parking, access, or preparation"
           value={knowledge.parkingAccess}
           onChange={(v) => patchKnowledge({ parkingAccess: v })}
-          suggestions={ACCESS_SUGGESTIONS}
+          suggestions={accessSuggestions}
           placeholder="Or add your own — e.g. Please make sure the stopcock is accessible before we arrive."
         />
       ),
@@ -582,11 +604,11 @@ export function BusinessMemory({
            * like papers laid on a desk. */}
           <div className="space-y-3">
             {sections.map((section, index) => (
-              <KnowledgeCard
+              <TeachingCard
                 key={section.id}
                 index={index}
                 icon={section.icon}
-                iconClass={section.iconClass}
+                avatarClass={section.iconClass}
                 question={section.question}
                 known={section.known}
                 summary={section.summary}
@@ -594,7 +616,7 @@ export function BusinessMemory({
                 onToggle={() => setOpen(open === section.id ? null : section.id)}
               >
                 {section.content}
-              </KnowledgeCard>
+              </TeachingCard>
             ))}
           </div>
         </div>
@@ -621,93 +643,6 @@ export function BusinessMemory({
 }
 
 /* ------------------------------ pieces ------------------------------ */
-
-/**
- * One of her questions — same conversation-turn language as the
- * Receptionist page (her avatar, her question as a received-message
- * bubble, a check once she knows something here) with progressive
- * disclosure kept for this page specifically: ten topics at once would
- * be a wall, not a conversation, so each stays collapsed to a one-line
- * summary in her voice until tapped open.
- */
-function KnowledgeCard({
-  index,
-  icon: Icon,
-  iconClass,
-  question,
-  known,
-  summary,
-  open,
-  onToggle,
-  children,
-}: {
-  index: number;
-  icon: LucideIcon;
-  iconClass: string;
-  question: string;
-  known: boolean;
-  summary: string | null;
-  open: boolean;
-  onToggle: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <SettleCard delay={0.04 * index} className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm transition-shadow hover:shadow-md">
-      <motion.button
-        type="button"
-        onClick={onToggle}
-        whileTap={{ scale: 0.99 }}
-        aria-expanded={open}
-        className="flex w-full items-start gap-2.5 px-4 py-3.5 text-left"
-      >
-        <div className={cn("relative flex h-8 w-8 shrink-0 items-center justify-center rounded-full", iconClass)}>
-          <Icon className="h-[15px] w-[15px]" />
-          {known && (
-            <motion.span
-              initial={{ scale: 0 }}
-              animate={{ scale: 1 }}
-              transition={{ type: "spring", stiffness: 380, damping: 22 }}
-              className="absolute -bottom-0.5 -right-0.5 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-success text-success-foreground ring-2 ring-card"
-            >
-              <Check className="h-2 w-2" strokeWidth={3.5} />
-            </motion.span>
-          )}
-        </div>
-        <span className="min-w-0 flex-1 pt-0.5">
-          <span className="inline-block max-w-full rounded-2xl rounded-tl-sm bg-muted px-3.5 py-2 text-[13px] leading-relaxed">
-            {question}
-          </span>
-          <span className="mt-1.5 block truncate text-[12px] text-muted-foreground">
-            {summary ?? "I don't know this yet"}
-          </span>
-        </span>
-        <motion.span
-          animate={{ rotate: open ? 180 : 0 }}
-          transition={{ duration: 0.25, ease: EASE }}
-          className="mt-1.5 shrink-0 text-muted-foreground"
-        >
-          <ChevronDown className="h-4 w-4" />
-        </motion.span>
-      </motion.button>
-
-      <AnimatePresence initial={false}>
-        {open && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: "auto", opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.3, ease: EASE }}
-            className="overflow-hidden"
-          >
-            <div className="border-t border-border py-4 pl-[46px] pr-4">
-              {children}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </SettleCard>
-  );
-}
 
 function ToggleRow({
   label,
@@ -933,8 +868,9 @@ function ChipEditor({
               addDraft();
             }
           }}
+          onBlur={addDraft}
           placeholder={addPlaceholder}
-          className="min-w-0 flex-1 rounded-xl border border-border bg-background px-3.5 py-2.5 text-[13.5px] outline-none transition-colors placeholder:text-muted-foreground/60 focus:border-primary"
+          className="min-w-0 flex-1 rounded-xl border border-border bg-background px-3.5 py-2.5 text-[13.5px] outline-none transition-colors placeholder:text-muted-foreground/60 focus:border-blue-500"
         />
         <motion.button
           {...press}

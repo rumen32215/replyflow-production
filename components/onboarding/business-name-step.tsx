@@ -94,7 +94,7 @@ export function BusinessNameStep() {
           value={name}
           onChange={(e) => update(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && next()}
-          placeholder="ABC Plumbing"
+          placeholder="Acme Services"
           maxLength={80}
           aria-label="Business name"
           className="h-16 w-full rounded-2xl border-2 border-border bg-background px-5 text-[19px] font-semibold tracking-tight outline-none transition-all duration-300 placeholder:font-normal placeholder:text-muted-foreground/40 focus:border-primary focus:shadow-[0_0_0_4px_rgba(37,99,235,0.08),0_12px_32px_-12px_rgba(37,99,235,0.25)]"

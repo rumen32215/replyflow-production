@@ -2,17 +2,18 @@
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { motion } from "framer-motion";
-import { Briefcase, Check, Headset, Smile, Zap, type LucideIcon } from "lucide-react";
+import { AlertTriangle, Briefcase, Check, Headset, ListChecks, ShieldCheck, Smile, Zap, type LucideIcon } from "lucide-react";
 import { SettleCard, GentleSwap, press } from "@/components/shared/motion";
 import { Acknowledgement, ACK, randomAck, useAcknowledgement } from "@/components/shared/acknowledgement";
 import { PhonePreview } from "@/components/shared/phone-preview";
+import { TeachingCard } from "@/components/shared/teaching-card";
 import { Textarea } from "@/components/ui/textarea";
 import { createClient } from "@/lib/supabase/client";
 import {
   BEHAVIOUR_OPTIONS,
   RULE_OPTIONS,
   ESCALATION_OPTIONS,
-  PREVIEW_SCENARIOS,
+  scenariosForTrade,
   parseOptions,
   composeOptions,
   buildPreviewConversation,
@@ -43,6 +44,18 @@ import { cn } from "@/lib/utils";
  * an owner taught previously is parsed back into toggles losslessly.
  */
 
+type TopicId = "behaviours" | "rules" | "escalation";
+const TOPIC_ORDER: readonly TopicId[] = ["behaviours", "rules", "escalation"];
+
+/** One-line collapsed summary in her voice — labels she's already
+ * ticked, plus any free-text notes, never the raw persisted string. */
+function summariseTopic(selected: Set<string>, notes: string, options: readonly TeachingOption[]): string | null {
+  const parts = [...options.filter((o) => selected.has(o.id)).map((o) => o.label)];
+  if (notes.trim()) parts.push(notes.trim());
+  if (parts.length === 0) return null;
+  return parts.length <= 2 ? parts.join(", ") : `${parts.slice(0, 2).join(", ")} + ${parts.length - 2} more`;
+}
+
 const TONES: { value: Tone; label: string; description: string; icon: LucideIcon; accent: string }[] = [
   { value: "friendly", label: "Friendly", description: "Warm and personal", icon: Smile, accent: "bg-purple-500 shadow-purple-500/25" },
   { value: "professional", label: "Professional", description: "Polished and courteous", icon: Briefcase, accent: "bg-blue-600 shadow-blue-600/25" },
@@ -60,6 +73,7 @@ interface SavedConfig {
 export function ReceptionistPlayground({
   businessId,
   businessName,
+  trade,
   offersEmergency,
   chargesCalloutFee,
   calloutFeeAmount,
@@ -68,6 +82,7 @@ export function ReceptionistPlayground({
 }: {
   businessId: string;
   businessName: string;
+  trade: string | null;
   offersEmergency: boolean;
   chargesCalloutFee: boolean;
   calloutFeeAmount: string | null;
@@ -75,6 +90,7 @@ export function ReceptionistPlayground({
   justHired: boolean;
 }) {
   const supabase = createClient();
+  const scenarios = useMemo(() => scenariosForTrade(trade), [trade]);
   const { message, isError, isSaving, startSaving, acknowledge, softError } = useAcknowledgement();
 
   const parsed = useMemo(
@@ -94,9 +110,34 @@ export function ReceptionistPlayground({
   const [rulesNotes, setRulesNotes] = useState<string>(parsed.rules.notes);
   const [escalation, setEscalation] = useState<Set<string>>(parsed.escalation.selected);
   const [escalationNotes, setEscalationNotes] = useState<string>(parsed.escalation.notes);
-  const [scenarioId, setScenarioId] = useState<string>(PREVIEW_SCENARIOS[0]?.id ?? "problem");
+  const [scenarioId, setScenarioId] = useState<string>(scenarios[0]?.id ?? "problem");
 
-  const scenario = PREVIEW_SCENARIOS.find((s) => s.id === scenarioId) ?? PREVIEW_SCENARIOS[0]!;
+  // She leads the interview: only the next thing she doesn't know yet
+  // is open. Behaviours, rules, and escalation are asked one at a
+  // time — not three permanent panels — and once every topic here is
+  // taught, the default view becomes a compact, browsable summary
+  // (all three collapsed, tap any to reopen). Tone stays permanently
+  // visible above these: it always has a value, so it's never part of
+  // the "what don't I know yet" queue.
+  const topicsLearned: Record<TopicId, boolean> = {
+    behaviours: behaviours.size > 0 || behavioursNotes.length > 0,
+    rules: rules.size > 0 || rulesNotes.length > 0,
+    escalation: escalation.size > 0 || escalationNotes.length > 0,
+  };
+  const nextTopicId = TOPIC_ORDER.find((id) => !topicsLearned[id]) ?? null;
+  const [open, setOpen] = useState<TopicId | null>(null);
+  const prevNextTopicId = useRef<TopicId | null | undefined>(undefined);
+  useEffect(() => {
+    if (prevNextTopicId.current === undefined) {
+      setOpen(nextTopicId);
+    } else if (nextTopicId !== prevNextTopicId.current) {
+      setOpen((current) => (current === prevNextTopicId.current ? nextTopicId : current));
+    }
+    prevNextTopicId.current = nextTopicId;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nextTopicId]);
+
+  const scenario = scenarios.find((s) => s.id === scenarioId) ?? scenarios[0]!;
   const { turns, liveReply } = buildPreviewConversation(
     {
       businessName,
@@ -182,7 +223,7 @@ export function ReceptionistPlayground({
          * below teaching), sticky in the right column on desktop. */}
         <div className="lg:order-2 lg:sticky lg:top-2 lg:self-start">
           <div className="mb-2.5 flex flex-wrap items-center gap-1.5">
-            {PREVIEW_SCENARIOS.map((s) => (
+            {scenarios.map((s) => (
               <motion.button
                 key={s.id}
                 {...press}
@@ -259,14 +300,20 @@ export function ReceptionistPlayground({
             />
           </TeachingTurn>
 
-          <TeachingTurn
-            delay={0.1}
-            learned={behaviours.size > 0 || behavioursNotes.length > 0}
+          <TeachingCard
+            index={1}
+            icon={ListChecks}
+            avatarClass="bg-purple-100 text-purple-600"
+            bubbleClass="bg-purple-50/70"
             question={
               behaviours.size > 0
                 ? "Here's what I do when someone gets in touch — anything to add?"
                 : "What should I always do when someone gets in touch?"
             }
+            known={topicsLearned.behaviours}
+            summary={summariseTopic(behaviours, behavioursNotes, BEHAVIOUR_OPTIONS)}
+            open={open === "behaviours"}
+            onToggle={() => setOpen(open === "behaviours" ? null : "behaviours")}
           >
             <OptionChips options={BEHAVIOUR_OPTIONS} selected={behaviours} onToggle={(id) => toggle(behaviours, setBehaviours, id, randomAck())} />
             <OwnWordsInput
@@ -279,13 +326,18 @@ export function ReceptionistPlayground({
               placeholder="What should she always do that isn't covered by those options?"
               example={'e.g. "Always ask if this has happened before."'}
             />
-          </TeachingTurn>
+          </TeachingCard>
 
-          <TeachingTurn
-            delay={0.15}
-            accent="slate"
-            learned={rules.size > 0 || rulesNotes.length > 0}
+          <TeachingCard
+            index={2}
+            icon={ShieldCheck}
+            avatarClass="bg-slate-200 text-slate-700"
+            bubbleClass="bg-slate-100"
             question={rules.size > 0 ? "These are the house rules I never break — anything else?" : "Are there things I should never get wrong?"}
+            known={topicsLearned.rules}
+            summary={summariseTopic(rules, rulesNotes, RULE_OPTIONS)}
+            open={open === "rules"}
+            onToggle={() => setOpen(open === "rules" ? null : "rules")}
           >
             <RuleList options={RULE_OPTIONS} selected={rules} onToggle={(id) => toggle(rules, setRules, id, randomAck())} />
             <OwnWordsInput
@@ -298,15 +350,26 @@ export function ReceptionistPlayground({
               placeholder="What's a hard rule she should never break?"
               example={'e.g. "Never agree to same-day emergency call-outs after 6pm."'}
             />
-          </TeachingTurn>
+          </TeachingCard>
 
-          <TeachingTurn
-            delay={0.2}
-            accent="amber"
-            boxed
-            learned={escalation.size > 0 || escalationNotes.length > 0}
+          <TeachingCard
+            index={3}
+            icon={AlertTriangle}
+            avatarClass="bg-amber-100 text-amber-700"
+            bubbleClass="bg-amber-50"
+            className="border-amber-200/70"
             question={escalation.size > 0 ? "I'll come straight to you in these situations — anything to add?" : "When should I stop and come get you?"}
+            known={topicsLearned.escalation}
+            summary={summariseTopic(escalation, escalationNotes, ESCALATION_OPTIONS)}
+            open={open === "escalation"}
+            onToggle={() => setOpen(open === "escalation" ? null : "escalation")}
           >
+            {!offersEmergency && (
+              <p className="mb-3 rounded-lg bg-amber-100/60 px-3 py-2 text-[12px] leading-relaxed text-amber-800">
+                You told me you don&apos;t take emergency call-outs — I already won&apos;t promise a visit. This is just about
+                which situations are still serious enough to bring you in personally.
+              </p>
+            )}
             <OptionChips options={ESCALATION_OPTIONS} selected={escalation} onToggle={(id) => toggle(escalation, setEscalation, id, randomAck())} accent="amber" />
             <OwnWordsInput
               value={escalationNotes}
@@ -318,7 +381,7 @@ export function ReceptionistPlayground({
               placeholder="When else should she stop and bring you in personally?"
               example={'e.g. "Come get me if someone mentions an insurance claim."'}
             />
-          </TeachingTurn>
+          </TeachingCard>
         </div>
       </div>
     </div>

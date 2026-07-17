@@ -217,6 +217,7 @@ export default async function HomePage() {
           supportLine={presenceLine}
           rotateCalm={rotateCalm}
           whatsappConnected={whatsappConnected}
+          topGap={knowledgeScore.missing[0] ?? null}
         />
         <div className="my-4 h-px bg-border/70" />
         <FastLane

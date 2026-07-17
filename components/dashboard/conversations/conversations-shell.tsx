@@ -12,9 +12,11 @@ import { cn } from "@/lib/utils";
  */
 export function ConversationsShell({
   conversations,
+  topGap,
   children,
 }: {
   conversations: ConversationListItem[];
+  topGap?: string | null;
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
@@ -28,7 +30,7 @@ export function ConversationsShell({
           isDetailView ? "hidden md:block" : "block"
         )}
       >
-        <ConversationList conversations={conversations} />
+        <ConversationList conversations={conversations} topGap={topGap} />
       </div>
 
       <div className={cn("min-w-0 flex-1 flex-col bg-background", isDetailView ? "flex" : "hidden md:flex")}>

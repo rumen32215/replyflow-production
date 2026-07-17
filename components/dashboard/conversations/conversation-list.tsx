@@ -43,12 +43,21 @@ function whenLabel(iso: string | null): string {
   return new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
 }
 
-export function ConversationList({ conversations }: { conversations: ConversationListItem[] }) {
+export function ConversationList({
+  conversations,
+  topGap = null,
+}: {
+  conversations: ConversationListItem[];
+  topGap?: string | null;
+}) {
   const pathname = usePathname();
 
   if (conversations.length === 0) {
     // Never "No conversations." — celebrate the calm and make quiet
-    // time productive (Conversations Experience V2: Empty State).
+    // time productive (Conversations Experience V2: Empty State). When
+    // there's a real, specific gap in what she knows, say that instead
+    // of just being calm — same restraint rule as Front Desk: specific
+    // and rare beats chatty, and it's the same gap signal, never invented.
     return (
       <div className="flex h-full flex-col">
         <div className="shrink-0 border-b border-border px-4 py-4">
@@ -58,19 +67,39 @@ export function ConversationList({ conversations }: { conversations: Conversatio
           <div className="flex h-12 w-12 items-center justify-center rounded-full bg-success/10 text-success">
             <Sparkles className="h-5 w-5" />
           </div>
-          <div>
-            <p className="text-[15px] font-bold">You&apos;re all caught up.</p>
-            <p className="mt-1 text-[13px] leading-relaxed text-muted-foreground">
-              When your first enquiry arrives, I&apos;ll bring it here.
-            </p>
-          </div>
-          <Link
-            href="/dashboard/receptionist"
-            className="mt-2 flex items-center gap-2 rounded-xl bg-accent px-4 py-2.5 text-[13px] font-semibold text-primary"
-          >
-            <Headset className="h-4 w-4" />
-            Teach your receptionist
-          </Link>
+          {topGap ? (
+            <>
+              <div>
+                <p className="text-[15px] font-bold">You&apos;re all caught up.</p>
+                <p className="mt-1 text-[13px] leading-relaxed text-muted-foreground">
+                  While it&apos;s quiet — I still don&apos;t know {topGap}. Want to teach me?
+                </p>
+              </div>
+              <Link
+                href="/dashboard/business"
+                className="mt-2 flex items-center gap-2 rounded-xl bg-accent px-4 py-2.5 text-[13px] font-semibold text-primary"
+              >
+                <Headset className="h-4 w-4" />
+                Teach me that
+              </Link>
+            </>
+          ) : (
+            <>
+              <div>
+                <p className="text-[15px] font-bold">You&apos;re all caught up.</p>
+                <p className="mt-1 text-[13px] leading-relaxed text-muted-foreground">
+                  When your first enquiry arrives, I&apos;ll bring it here.
+                </p>
+              </div>
+              <Link
+                href="/dashboard/receptionist"
+                className="mt-2 flex items-center gap-2 rounded-xl bg-accent px-4 py-2.5 text-[13px] font-semibold text-primary"
+              >
+                <Headset className="h-4 w-4" />
+                Teach your receptionist
+              </Link>
+            </>
+          )}
         </div>
       </div>
     );

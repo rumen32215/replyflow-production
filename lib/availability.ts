@@ -39,6 +39,9 @@ export interface BookingRules {
   travelBufferMinutes: number;
   weekendEmergencyOnly: boolean;
   workingRadiusMiles: number | null;
+  /** Free text — when emergency call-outs actually run (e.g. "24/7" or
+   * "Weekdays after 6pm"), since that varies too much to chip-select. */
+  emergencyHours: string;
 }
 
 export interface Availability {
@@ -71,6 +74,7 @@ export function defaultAvailability(opening = "08:00", closing = "17:30"): Avail
       travelBufferMinutes: 0,
       weekendEmergencyOnly: false,
       workingRadiusMiles: null,
+      emergencyHours: "",
     },
   };
 }

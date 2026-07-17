@@ -26,6 +26,30 @@ export const ACK = {
   learning: "Learning...",
 } as const;
 
+/** A pool of natural, interchangeable acknowledgements — used instead
+ * of one fixed phrase per field, since tapping the same chip several
+ * times in a row and seeing the identical sentence every time reads
+ * as robotic, not alive. Picked without repeating the last one shown. */
+const ROTATING_ACKS = [
+  "Got it.",
+  "Perfect.",
+  "Saved.",
+  "I'll remember that.",
+  "Thanks, that helps.",
+  "Customers won't see this — but I will.",
+  "I'll use that from now on.",
+] as const;
+
+let lastAckIndex = -1;
+export function randomAck(): string {
+  let index = Math.floor(Math.random() * ROTATING_ACKS.length);
+  if (ROTATING_ACKS.length > 1 && index === lastAckIndex) {
+    index = (index + 1) % ROTATING_ACKS.length;
+  }
+  lastAckIndex = index;
+  return ROTATING_ACKS[index]!;
+}
+
 /** Errors never panic — no red banners, no technical language, and
  * never imply the owner's own words were lost (they weren't; the
  * field still holds them, only the save is retried). */

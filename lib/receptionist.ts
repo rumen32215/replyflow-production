@@ -136,6 +136,30 @@ function greetingFor(tone: Tone, businessName: string): string {
   }
 }
 
+/** Personality changes more than the greeting — it colours every
+ * reply's opening words too, so picking a tone visibly demonstrates
+ * itself immediately, not just on the first message of the day. */
+function toneOpener(tone: Tone, mood: "sorry" | "glad"): string {
+  if (mood === "sorry") {
+    switch (tone) {
+      case "professional":
+        return "I'm sorry to hear that.";
+      case "concise":
+        return "Sorry to hear that.";
+      default:
+        return "Oh no, sorry to hear that!";
+    }
+  }
+  switch (tone) {
+    case "professional":
+      return "Certainly, I'd be happy to help with that.";
+    case "concise":
+      return "Sure, I can help.";
+    default:
+      return "Of course — happy to help with that!";
+  }
+}
+
 /**
  * Builds the settled turns plus the live reply for a scenario.
  * Every taught behaviour visibly changes the words — the owner sees
@@ -177,7 +201,7 @@ export function buildPreviewConversation(k: PreviewKnowledge, scenario: PreviewS
       parts.push("If you can send a couple of photos, that'll help us give you a much better idea.");
     }
   } else if (scenario.kind === "quote") {
-    parts.push("Of course — happy to help with that.");
+    parts.push(toneOpener(k.tone, "glad"));
     if (has("ask-photos") || rule("always-ask-photos")) {
       parts.push("Could you send me a few photos of the job first? That way the quote will be accurate.");
     } else if (has("ask-problem")) {
@@ -187,7 +211,7 @@ export function buildPreviewConversation(k: PreviewKnowledge, scenario: PreviewS
     if (rule("no-exact-prices")) parts.push("The team will confirm the final price after a quick look.");
   } else {
     // A standard new enquiry.
-    parts.push("I'm sorry to hear that.");
+    parts.push(toneOpener(k.tone, "sorry"));
     if (has("ask-photos") || rule("always-ask-photos")) {
       parts.push("Could you send me a few photos first so I can understand the job?");
     } else if (has("ask-problem")) {
@@ -205,7 +229,10 @@ export function buildPreviewConversation(k: PreviewKnowledge, scenario: PreviewS
 
   let reply = parts.join(" ").trim();
   if (!reply) reply = "Thanks for getting in touch — how can I help today?";
-  if (has("short-replies") && reply.length > 170) {
+  // Concise is a personality trait, not just the "short replies"
+  // behaviour toggle — picking it should visibly shorten replies on
+  // its own, so the tone alone proves what it means.
+  if ((has("short-replies") || k.tone === "concise") && reply.length > 170) {
     // Keep replies phone-sized: first two sentences only.
     const sentences = reply.match(/[^.!?]+[.!?]/g) ?? [reply];
     reply = sentences.slice(0, 2).join(" ").trim();

@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import {
@@ -11,8 +12,8 @@ import {
   MessageCircle,
   Sparkles,
 } from "lucide-react";
-import { SettleCard, Reveal, press } from "@/components/shared/motion";
-import { formatWaitingTime } from "@/lib/dashboard-signals";
+import { SettleCard, GentleSwap, Reveal, press, EASE } from "@/components/shared/motion";
+import { formatWaitingTime, calmStatusMessages } from "@/lib/dashboard-signals";
 
 /**
  * Home — the owner's morning briefing (Home Experience V2).
@@ -37,18 +38,47 @@ export function greetingForNow(): string {
  * title); no SettleCard of its own, since it sits inside the same
  * panel as the fast lane beneath it (Front Desk V3: she's felt right
  * above the actions, not in a separate floating card).
+ *
+ * When there's genuinely nothing pressing, the line gently rotates
+ * through a few calm, honest variants — proof she's watching, not
+ * idle. Any real fact (someone waiting, a job booked) always wins and
+ * never rotates away.
  */
-export function HomeGreeting({ name, supportLine }: { name: string; supportLine: string }) {
+export function HomeGreeting({
+  name,
+  supportLine,
+  rotateCalm = false,
+  whatsappConnected = false,
+}: {
+  name: string;
+  supportLine: string;
+  rotateCalm?: boolean;
+  whatsappConnected?: boolean;
+}) {
+  const messages = calmStatusMessages(whatsappConnected);
+  const [calmIndex, setCalmIndex] = useState(0);
+
+  useEffect(() => {
+    if (!rotateCalm) return;
+    const t = setInterval(() => setCalmIndex((i) => (i + 1) % messages.length), 6000);
+    return () => clearInterval(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rotateCalm]);
+
+  const line = rotateCalm ? messages[calmIndex % messages.length] : supportLine;
+
   return (
     <div className="flex items-start gap-3">
-      <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+      <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-success/10 text-success">
         <Headset className="h-[18px] w-[18px]" />
       </div>
       <div className="min-w-0">
         <h1 className="text-[22px] font-extrabold tracking-tight md:text-[24px]" suppressHydrationWarning>
           {greetingForNow()}, {name}.
         </h1>
-        <p className="mt-1 text-[14px] leading-relaxed text-muted-foreground">{supportLine}</p>
+        <GentleSwap swapKey={rotateCalm ? calmIndex : -1} className="mt-1">
+          <p className="text-[14px] leading-relaxed text-muted-foreground">{line}</p>
+        </GentleSwap>
       </div>
     </div>
   );
@@ -88,14 +118,14 @@ export function RightNowCard({ job, allCaughtUp }: { job: RightNowJob | null; al
   return (
     <SettleCard
       delay={0.05}
-      className="relative overflow-hidden rounded-2xl border border-primary/25 bg-card p-5 shadow-md"
+      className="relative overflow-hidden rounded-2xl border border-success/25 bg-card p-5 shadow-md"
     >
       <div
         aria-hidden
         className="pointer-events-none absolute inset-0"
-        style={{ background: "radial-gradient(circle at 100% 0%, rgba(37,99,235,0.06), transparent 55%)" }}
+        style={{ background: "radial-gradient(circle at 100% 0%, rgba(34,197,94,0.07), transparent 55%)" }}
       />
-      <p className="relative text-[11px] font-bold uppercase tracking-widest text-primary">
+      <p className="relative text-[11px] font-bold uppercase tracking-widest text-success">
         {job.isCurrent ? "Right now" : "Next job"}
       </p>
       <p className="relative mt-2 text-[18px] font-bold tracking-tight">{job.jobTitle}</p>
@@ -163,7 +193,7 @@ export function UpNext({ job }: { job: RightNowJob | null }) {
     <SettleCard delay={0.14}>
       <h2 className="mb-2.5 text-[15px] font-bold tracking-tight">Up next</h2>
       <div className="flex items-center gap-3 rounded-2xl border border-border bg-card p-4 shadow-sm">
-        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-accent text-primary">
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-success/10 text-success">
           <CalendarDays className="h-4 w-4" />
         </div>
         <div className="min-w-0 flex-1">
@@ -200,7 +230,7 @@ export function TodaysProgress({
   const rows = [
     { icon: <Check className="h-3.5 w-3.5 text-success" />, label: `${completed} ${completed === 1 ? "job" : "jobs"} completed`, show: completed > 0 },
     { icon: <MessageCircle className="h-3.5 w-3.5 text-amber-500" />, label: `${waiting} waiting for you`, show: waiting > 0 },
-    { icon: <CalendarDays className="h-3.5 w-3.5 text-primary" />, label: `${remaining} remaining today`, show: remaining > 0 },
+    { icon: <CalendarDays className="h-3.5 w-3.5 text-success" />, label: `${remaining} remaining today`, show: remaining > 0 },
   ].filter((r) => r.show);
 
   return (
@@ -240,7 +270,7 @@ export function ReadyStatus({ state }: { state: ReadyStatusState }) {
   return (
     <SettleCard delay={0.05} className="rounded-2xl border border-border bg-card p-5 shadow-sm">
       <div className="flex items-center gap-3.5">
-        <div className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-accent text-primary">
+        <div className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-success/10 text-success">
           <Sparkles className="h-4 w-4" />
           {state.whatsappConnected && (
             <motion.span
@@ -253,6 +283,43 @@ export function ReadyStatus({ state }: { state: ReadyStatusState }) {
         </div>
         <p className="text-[14px] font-semibold leading-snug">{line}</p>
       </div>
+    </SettleCard>
+  );
+}
+
+/* ----------------------------- Setup progress --------------------------------- */
+
+/**
+ * The final stretch before going live — appears once the essentials
+ * (Business Knowledge, teaching her how to speak) are substantially
+ * done, so the owner feels themselves approaching a real milestone
+ * rather than an open-ended checklist. This is a progress narrative
+ * only: it never disables or hides the real Connect WhatsApp step,
+ * which stays fully usable throughout (nothing here is a gate).
+ */
+export function SetupProgress({ percent }: { percent: number }) {
+  const ready = percent >= 100;
+  return (
+    <SettleCard delay={0.04} className="rounded-2xl border border-success/25 bg-success/5 p-5 shadow-sm">
+      <div className="flex items-baseline justify-between">
+        <h2 className="text-[15px] font-bold tracking-tight">
+          {ready ? "I'm ready to go live" : "Almost ready"}
+        </h2>
+        <span className="text-[13px] font-bold text-success">{percent}%</span>
+      </div>
+      <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-muted">
+        <motion.div
+          className="h-full rounded-full bg-success"
+          initial={false}
+          animate={{ width: `${Math.max(percent, 4)}%` }}
+          transition={{ duration: 0.6, ease: EASE }}
+        />
+      </div>
+      <p className="mt-3 text-[13px] leading-relaxed text-muted-foreground">
+        {ready
+          ? "You've taught me everything I need. Connect WhatsApp below and I'll start looking after real customers."
+          : "Finish teaching me your business and how to talk to customers, and I'll be ready to connect WhatsApp and go live."}
+      </p>
     </SettleCard>
   );
 }

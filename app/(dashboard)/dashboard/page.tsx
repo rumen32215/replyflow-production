@@ -8,6 +8,7 @@ import {
   UpNext,
   TodaysProgress,
   ReadyStatus,
+  SetupProgress,
   type NeedsYouItem,
   type RightNowJob,
 } from "@/components/dashboard/home/home-experience";
@@ -15,6 +16,7 @@ import { FastLane, ConnectWhatsAppBanner } from "@/components/dashboard/home/fas
 import { SettleCard } from "@/components/shared/motion";
 import { minutesSince, buildPresenceLine } from "@/lib/dashboard-signals";
 import { parseAvailability, standingForDate, describeStanding } from "@/lib/availability";
+import { parseKnowledge, understandingScore } from "@/lib/knowledge";
 
 export const metadata: Metadata = { title: "Front Desk — ReplyFlow" };
 
@@ -37,7 +39,9 @@ export default async function HomePage() {
 
   const { data: business } = await supabase
     .from("businesses")
-    .select("id, business_name, whatsapp_connected, availability, opening_time, closing_time")
+    .select(
+      "id, business_name, whatsapp_connected, availability, opening_time, closing_time, business_description, services, service_areas, business_knowledge"
+    )
     .eq("owner_id", user.id)
     .maybeSingle();
   if (!business) redirect("/welcome");
@@ -55,6 +59,7 @@ export default async function HomePage() {
     { data: todaysJobs },
     { data: nextUpcomingJobs },
     { count: completedEver },
+    { data: config },
   ] = await Promise.all([
     // Waiting for Owner — the highest-priority state in the product.
     // 'open' is the legacy status and reads as "waiting" until real
@@ -91,6 +96,11 @@ export default async function HomePage() {
       .select("id", { count: "exact", head: true })
       .eq("business_id", businessId)
       .eq("status", "completed"),
+    supabase
+      .from("ai_configurations")
+      .select("tone_notes, system_prompt, business_rules, escalation_rules, faqs")
+      .eq("business_id", businessId)
+      .maybeSingle(),
   ]);
 
   const needsYou: NeedsYouItem[] = (waitingConversations ?? [])
@@ -154,6 +164,30 @@ export default async function HomePage() {
   const isNewBusiness = !whatsappConnected || (conversationCount ?? 0) === 0 || (completedEver ?? 0) === 0;
   const showChecklist = isNewBusiness && needsYou.length === 0 && jobsToday.length === 0;
 
+  // How ready is she, overall — Business Knowledge's existing
+  // understanding score, averaged with whether she's actually been
+  // taught how to speak (tone notes, behaviours, rules, escalation).
+  // Purely a progress narrative: it never disables or hides the real
+  // Connect WhatsApp step below, which stays fully usable regardless.
+  const knowledgeScore = understandingScore({
+    businessDescription: business.business_description,
+    services: business.services ?? [],
+    serviceAreas: business.service_areas ?? [],
+    knowledge: parseKnowledge(business.business_knowledge),
+    faqCount: Array.isArray(config?.faqs) ? (config.faqs as unknown[]).length : 0,
+  });
+  const taughtSignals = [
+    Boolean(config?.tone_notes?.trim()),
+    Boolean(config?.system_prompt?.trim()),
+    Boolean(config?.business_rules?.trim()),
+    Boolean(config?.escalation_rules?.trim()),
+  ];
+  const receptionistPercent = Math.round(
+    (taughtSignals.filter(Boolean).length / taughtSignals.length) * 100
+  );
+  const setupPercent = Math.round((knowledgeScore.percent + receptionistPercent) / 2);
+  const showSetupProgress = !whatsappConnected && !showChecklist && setupPercent >= 40;
+
   const availability = parseAvailability(business.availability, business.opening_time, business.closing_time);
   const todayStanding = describeStanding(standingForDate(availability, now));
   const diaryLine =
@@ -170,11 +204,20 @@ export default async function HomePage() {
     waitingCustomer: oldestWaiting ? { name: oldestWaiting.name, minutes: oldestWaiting.minutes } : null,
     jobsBookedToday: jobsToday.length,
   });
+  // Nothing specific to report — safe to gently rotate through calm,
+  // reassuring variants instead of one static line (never when there's
+  // a real fact to state, like someone waiting or a job booked).
+  const rotateCalm = !oldestWaiting && jobsToday.length === 0;
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">
       <SettleCard className="rounded-2xl border border-border bg-card p-5 shadow-sm">
-        <HomeGreeting name={business.business_name} supportLine={presenceLine} />
+        <HomeGreeting
+          name={business.business_name}
+          supportLine={presenceLine}
+          rotateCalm={rotateCalm}
+          whatsappConnected={whatsappConnected}
+        />
         <div className="my-4 h-px bg-border/70" />
         <FastLane
           businessId={businessId}
@@ -184,6 +227,7 @@ export default async function HomePage() {
         />
       </SettleCard>
 
+      {showSetupProgress && <SetupProgress percent={setupPercent} />}
       {!whatsappConnected && <ConnectWhatsAppBanner />}
 
       {showChecklist ? (

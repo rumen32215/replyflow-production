@@ -17,7 +17,7 @@ import { cn } from "@/lib/utils";
  * hierarchy, not four equal tiles: who's waiting is the one thing
  * that can genuinely interrupt the owner's day, so it leads, larger
  * and on its own; the diary and teaching are quick, equal-weight
- * habits; her business knowledge earns its own identity (indigo, not
+ * habits; her business knowledge earns its own identity (blue, not
  * another grey settings shortcut) rather than competing for the same
  * visual space; marking today fully booked is a rare, occasional
  * flip, so it's the quietest thing here, not a tile at all.
@@ -78,14 +78,14 @@ export function FastLane({ businessId, waitingCount, diaryLine, initialAvailabil
         <motion.div
           {...press}
           className={cn(
-            "flex items-center gap-3.5 rounded-2xl border p-4 shadow-sm transition-colors",
-            waitingCount > 0 ? "border-primary/25 bg-primary/[0.06]" : "border-border bg-muted/20"
+            "flex items-center gap-3.5 rounded-2xl border p-4 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md",
+            waitingCount > 0 ? "border-success/25 bg-success/[0.06]" : "border-border bg-muted/20"
           )}
         >
           <div
             className={cn(
               "flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl",
-              waitingCount > 0 ? "bg-primary text-primary-foreground" : "bg-accent text-primary"
+              waitingCount > 0 ? "bg-success text-success-foreground" : "bg-success/10 text-success"
             )}
           >
             <MessagesSquare className="h-5 w-5" />
@@ -100,7 +100,7 @@ export function FastLane({ businessId, waitingCount, diaryLine, initialAvailabil
               {waitingCount > 0 ? "Tap to see who needs you" : "Nobody's waiting on you right now"}
             </p>
           </div>
-          <ArrowRight className={cn("h-4 w-4 shrink-0", waitingCount > 0 ? "text-primary" : "text-muted-foreground")} />
+          <ArrowRight className={cn("h-4 w-4 shrink-0", waitingCount > 0 ? "text-success" : "text-muted-foreground")} />
         </motion.div>
       </Link>
 
@@ -118,18 +118,18 @@ export function FastLane({ businessId, waitingCount, diaryLine, initialAvailabil
       <Link href="/dashboard/business" className="group block">
         <motion.div
           {...press}
-          className="flex items-center gap-3 rounded-2xl border border-indigo-200/70 bg-indigo-50/50 p-3.5 shadow-sm"
+          className="flex items-center gap-3 rounded-2xl border border-blue-200/70 bg-blue-50/50 p-3.5 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md"
         >
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-indigo-600 text-white">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-blue-600 text-white">
             <BookOpen className="h-4 w-4" />
           </div>
           <div className="min-w-0 flex-1">
-            <p className="text-[13.5px] font-bold text-indigo-950">Everything she knows</p>
-            <p className="mt-0.5 truncate text-[11.5px] text-indigo-700/70">
+            <p className="text-[13.5px] font-bold text-blue-950">Everything she knows</p>
+            <p className="mt-0.5 truncate text-[11.5px] text-blue-700/70">
               Services, pricing, guarantees, and more
             </p>
           </div>
-          <ArrowRight className="h-4 w-4 shrink-0 text-indigo-500 transition-transform group-hover:translate-x-0.5" />
+          <ArrowRight className="h-4 w-4 shrink-0 text-blue-500 transition-transform group-hover:translate-x-0.5" />
         </motion.div>
       </Link>
 
@@ -168,14 +168,14 @@ export function ConnectWhatsAppBanner() {
       <Link href="/dashboard/whatsapp" className="group block">
         <motion.div
           {...press}
-          className="flex items-center gap-3.5 rounded-2xl bg-primary p-4 text-primary-foreground shadow-md"
+          className="flex items-center gap-3.5 rounded-2xl bg-success p-4 text-success-foreground shadow-md transition-all hover:-translate-y-0.5 hover:shadow-lg"
         >
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/15">
             <Smartphone className="h-5 w-5" />
           </div>
           <div className="min-w-0 flex-1">
             <p className="text-[14.5px] font-bold">Connect WhatsApp</p>
-            <p className="mt-0.5 text-[12.5px] text-primary-foreground/85">
+            <p className="mt-0.5 text-[12.5px] text-success-foreground/85">
               I&apos;m ready — I just can&apos;t hear your customers yet.
             </p>
           </div>
@@ -191,9 +191,9 @@ function Tile({ href, icon, children }: { href: string; icon: ReactNode; childre
     <Link href={href} className="block">
       <motion.div
         {...press}
-        className="flex h-full flex-col gap-2 rounded-xl border border-border bg-muted/30 p-3 transition-colors hover:bg-muted/60"
+        className="flex h-full flex-col gap-2 rounded-xl border border-border bg-muted/30 p-3 transition-all hover:-translate-y-0.5 hover:bg-muted/60 hover:shadow-sm"
       >
-        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent text-primary">{icon}</div>
+        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-success/10 text-success">{icon}</div>
         {children}
       </motion.div>
     </Link>

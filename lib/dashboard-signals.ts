@@ -98,6 +98,26 @@ export function buildPresenceLine({
   return "Everything's quiet — I'll let you know the moment someone gets in touch.";
 }
 
+/**
+ * When there's genuinely nothing pressing, her presence line gently
+ * rotates through a few honest, calming variants instead of sitting
+ * static — proof she's actively watching, not idle. Only ever used
+ * for the calm state: a real waiting customer or a real booked job
+ * always overrides this with the specific fact (see buildPresenceLine)
+ * — rotation never gets to obscure something true. The WhatsApp line
+ * only appears when the connection is actually live.
+ */
+export function calmStatusMessages(whatsappConnected: boolean): readonly string[] {
+  const base = [
+    "Everything's quiet — I'll let you know the moment someone gets in touch.",
+    "Inbox checked. Nothing needs you right now.",
+    "Watching for new enquiries.",
+    "Ready for your next customer.",
+    "Everything looks good.",
+  ] as const;
+  return whatsappConnected ? [...base, "WhatsApp connection is steady."] : base;
+}
+
 /** Estimated, not measured — always presented with the word "estimated"
  * attached wherever it's rendered, never as a bare precise figure. */
 export function estimateMinutesSaved(enquiriesToday: number): number {

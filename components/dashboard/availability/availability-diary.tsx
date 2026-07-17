@@ -109,6 +109,10 @@ export function AvailabilityDiary({
   const todayStanding = standingForDate(availability, now);
   const tomorrowStanding = standingForDate(availability, tomorrow);
   const todayFullyBooked = availability.fullyBooked.includes(toDateString(now));
+  // Named, not just "Today"/"Tomorrow" — makes it obvious this is
+  // computed live from the real date, not a fixed label.
+  const todayWeekday = now.toLocaleDateString("en-GB", { weekday: "long" });
+  const tomorrowWeekday = tomorrow.toLocaleDateString("en-GB", { weekday: "long" });
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">
@@ -122,18 +126,18 @@ export function AvailabilityDiary({
       {/* Today leads — the one answer that actually matters right now. */}
       <SettleCard
         delay={0.05}
-        className="rounded-2xl border border-teal-200/60 bg-teal-50/40 p-5 shadow-sm"
+        className="rounded-2xl border border-yellow-200/60 bg-yellow-50/40 p-5 shadow-sm"
       >
-        <p className="text-[11px] font-bold uppercase tracking-widest text-teal-700/70">Today</p>
+        <p className="text-[11px] font-bold uppercase tracking-widest text-yellow-700/70">Today · {todayWeekday}</p>
         <p
           className={cn(
             "mt-1.5 text-[20px] font-extrabold tracking-tight",
-            todayStanding.kind === "open" ? "text-teal-950" : "text-muted-foreground"
+            todayStanding.kind === "open" ? "text-yellow-950" : "text-muted-foreground"
           )}
         >
           {describeStanding(todayStanding)}
         </p>
-        <p className="mt-0.5 text-[12.5px] text-teal-800/60">
+        <p className="mt-0.5 text-[12.5px] text-yellow-800/60">
           {todayStanding.kind === "open" ? "Taking bookings" : "No bookings offered"}
         </p>
       </SettleCard>
@@ -143,7 +147,7 @@ export function AvailabilityDiary({
         delay={0.07}
         className="flex items-center justify-between rounded-xl border border-border bg-muted/20 px-4 py-3"
       >
-        <span className="text-[12.5px] font-medium text-muted-foreground">Tomorrow</span>
+        <span className="text-[12.5px] font-medium text-muted-foreground">Tomorrow · {tomorrowWeekday}</span>
         <span className={cn("text-[13px] font-semibold", tomorrowStanding.kind !== "open" && "text-muted-foreground")}>
           {describeStanding(tomorrowStanding)}
         </span>
@@ -185,13 +189,13 @@ export function AvailabilityDiary({
                 key={key}
                 className={cn(
                   "flex items-center gap-3 rounded-xl px-2 py-2 transition-colors",
-                  isToday && "bg-teal-50/60 ring-1 ring-inset ring-teal-200/50",
+                  isToday && "bg-yellow-50/60 ring-1 ring-inset ring-yellow-200/50",
                   day.closed && !isToday && "opacity-60"
                 )}
               >
                 <span className="flex w-24 shrink-0 items-center gap-1.5 text-[13.5px] font-semibold">
                   {DAY_LABELS[key]}
-                  {isToday && <span className="h-1.5 w-1.5 rounded-full bg-teal-500" aria-hidden />}
+                  {isToday && <span className="h-1.5 w-1.5 rounded-full bg-yellow-500" aria-hidden />}
                 </span>
                 <div className="flex min-w-0 flex-1 items-center justify-end gap-2">
                   <AnimatePresence mode="wait" initial={false}>
@@ -294,14 +298,14 @@ export function AvailabilityDiary({
                   min={toDateString(new Date())}
                   onChange={(e) => setDayOffDate(e.target.value)}
                   aria-label="Date of day off"
-                  className="h-11 flex-1 rounded-xl border border-border bg-background px-3 text-[13.5px] outline-none focus:border-teal-500"
+                  className="h-11 flex-1 rounded-xl border border-border bg-background px-3 text-[13.5px] outline-none focus:border-yellow-500"
                 />
                 <input
                   value={dayOffReason}
                   onChange={(e) => setDayOffReason(e.target.value)}
                   placeholder="Holiday"
                   aria-label="Reason"
-                  className="h-11 flex-1 rounded-xl border border-border bg-background px-3 text-[13.5px] outline-none focus:border-teal-500"
+                  className="h-11 flex-1 rounded-xl border border-border bg-background px-3 text-[13.5px] outline-none focus:border-yellow-500"
                 />
               </div>
               <div className="flex gap-2">
@@ -310,7 +314,7 @@ export function AvailabilityDiary({
                   type="button"
                   onClick={addDayOff}
                   disabled={!dayOffDate}
-                  className="rounded-xl bg-teal-600 px-4 py-2.5 text-[13px] font-semibold text-white disabled:opacity-50"
+                  className="rounded-xl bg-yellow-600 px-4 py-2.5 text-[13px] font-semibold text-white disabled:opacity-50"
                 >
                   Add day off
                 </motion.button>
@@ -333,7 +337,7 @@ export function AvailabilityDiary({
               exit={{ opacity: 0 }}
               type="button"
               onClick={() => setAddingDayOff(true)}
-              className="flex items-center gap-1.5 rounded-xl border border-dashed border-border px-4 py-2.5 text-[13px] font-semibold text-muted-foreground transition-colors hover:border-teal-400 hover:text-teal-700"
+              className="flex items-center gap-1.5 rounded-xl border border-dashed border-border px-4 py-2.5 text-[13px] font-semibold text-muted-foreground transition-colors hover:border-yellow-400 hover:text-yellow-700"
             >
               <Plus className="h-3.5 w-3.5" />
               Add a day off
@@ -354,12 +358,36 @@ export function AvailabilityDiary({
             checked={availability.rules.sameDay}
             onChange={(v) => updateRules({ sameDay: v })}
           />
-          <RuleRow
-            label="Emergency call-outs"
-            description="Accept urgent jobs outside normal hours"
-            checked={availability.rules.emergency}
-            onChange={(v) => updateRules({ emergency: v })}
-          />
+          <div className="py-2.5">
+            <RuleRow
+              label="Emergency call-outs"
+              description="Accept urgent jobs outside normal hours"
+              checked={availability.rules.emergency}
+              onChange={(v) => updateRules({ emergency: v })}
+              noPadding
+            />
+            <AnimatePresence initial={false}>
+              {availability.rules.emergency && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: "auto" }}
+                  exit={{ opacity: 0, height: 0 }}
+                  transition={{ duration: 0.28, ease: EASE }}
+                  className="overflow-hidden"
+                >
+                  <div className="pt-2">
+                    <input
+                      value={availability.rules.emergencyHours}
+                      onChange={(e) => updateRules({ emergencyHours: e.target.value })}
+                      placeholder="When? e.g. 24/7, or weekdays after 6pm"
+                      aria-label="When emergency call-outs are available"
+                      className="w-full rounded-lg border border-border bg-background px-3 py-2 text-[12.5px] outline-none focus:border-yellow-500"
+                    />
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
           <RuleRow
             label="Only emergency jobs at weekends"
             description="Keep Saturday and Sunday for urgent work only"
@@ -378,6 +406,7 @@ export function AvailabilityDiary({
             ]}
             value={availability.rules.minNoticeHours}
             onChange={(v) => updateRules({ minNoticeHours: v })}
+            customUnit="hours"
           />
 
           <ChipRow
@@ -392,6 +421,7 @@ export function AvailabilityDiary({
             ]}
             value={availability.rules.maxJobsPerDay}
             onChange={(v) => updateRules({ maxJobsPerDay: v })}
+            customUnit="jobs"
           />
 
           <ChipRow
@@ -406,6 +436,7 @@ export function AvailabilityDiary({
             ]}
             value={availability.rules.travelBufferMinutes}
             onChange={(v) => updateRules({ travelBufferMinutes: v })}
+            customUnit="minutes"
           />
 
           <ChipRow
@@ -420,6 +451,7 @@ export function AvailabilityDiary({
             ]}
             value={availability.rules.workingRadiusMiles}
             onChange={(v) => updateRules({ workingRadiusMiles: v })}
+            customUnit="miles"
           />
 
           <div className="py-2.5">
@@ -477,7 +509,7 @@ function TimeInput({ value, onChange, label }: { value: string; onChange: (v: st
       value={value}
       onChange={(e) => onChange(e.target.value)}
       aria-label={label}
-      className="h-9 rounded-lg border border-border bg-background px-2 text-[12.5px] font-medium outline-none focus:border-teal-500"
+      className="h-9 rounded-lg border border-border bg-background px-2 text-[12.5px] font-medium outline-none focus:border-yellow-500"
     />
   );
 }
@@ -487,14 +519,16 @@ function RuleRow({
   description,
   checked,
   onChange,
+  noPadding = false,
 }: {
   label: string;
   description: string;
   checked: boolean;
   onChange: (v: boolean) => void;
+  noPadding?: boolean;
 }) {
   return (
-    <div className="flex items-center justify-between px-2 py-2.5">
+    <div className={cn("flex items-center justify-between", !noPadding && "px-2 py-2.5")}>
       <div>
         <p className="text-[13.5px] font-semibold">{label}</p>
         <p className="text-[12px] text-muted-foreground">{description}</p>
@@ -513,31 +547,42 @@ function ChipRow<T extends string | number | null>({
   options,
   value,
   onChange,
+  customUnit,
 }: {
   label: string;
   description: string;
   options: { label: string; value: T }[];
   value: T;
   onChange: (value: T) => void;
+  /** When set, adds a "Custom" chip revealing a number input — for
+   * values a fixed set of chips can't anticipate (Diary V2: "allow
+   * custom values where appropriate"). */
+  customUnit?: string;
 }) {
+  const matchesPreset = options.some((o) => o.value === value);
+  const [showCustom, setShowCustom] = useState(Boolean(customUnit) && !matchesPreset && value !== null);
+
   return (
     <div className="px-2 py-2.5">
       <p className="text-[13.5px] font-semibold">{label}</p>
       <p className="text-[12px] text-muted-foreground">{description}</p>
       <div className="mt-2 flex flex-wrap gap-1.5">
         {options.map((option) => {
-          const on = option.value === value;
+          const on = !showCustom && option.value === value;
           return (
             <motion.button
               key={String(option.value)}
               {...press}
               type="button"
               aria-pressed={on}
-              onClick={() => onChange(option.value)}
+              onClick={() => {
+                setShowCustom(false);
+                onChange(option.value);
+              }}
               className={cn(
                 "rounded-full px-3 py-1.5 text-[12px] transition-all",
                 on
-                  ? "bg-teal-600 font-semibold text-white shadow-sm shadow-teal-600/25"
+                  ? "bg-yellow-600 font-semibold text-white shadow-sm shadow-yellow-600/25"
                   : "border border-border bg-card font-medium text-muted-foreground hover:text-foreground"
               )}
             >
@@ -545,7 +590,50 @@ function ChipRow<T extends string | number | null>({
             </motion.button>
           );
         })}
+        {customUnit && (
+          <motion.button
+            {...press}
+            type="button"
+            aria-pressed={showCustom}
+            onClick={() => setShowCustom(true)}
+            className={cn(
+              "rounded-full px-3 py-1.5 text-[12px] transition-all",
+              showCustom
+                ? "bg-yellow-600 font-semibold text-white shadow-sm shadow-yellow-600/25"
+                : "border border-dashed border-border bg-card font-medium text-muted-foreground hover:text-foreground"
+            )}
+          >
+            Custom
+          </motion.button>
+        )}
       </div>
+      <AnimatePresence initial={false}>
+        {customUnit && showCustom && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.25, ease: EASE }}
+            className="overflow-hidden"
+          >
+            <div className="mt-2 flex items-center gap-2">
+              <input
+                type="number"
+                min={0}
+                value={typeof value === "number" ? value : ""}
+                onChange={(e) => {
+                  const n = e.target.value === "" ? null : Number(e.target.value);
+                  onChange(n as unknown as T);
+                }}
+                placeholder="e.g. 3"
+                aria-label={`Custom ${label}`}
+                className="h-9 w-24 rounded-lg border border-border bg-background px-2.5 text-[12.5px] outline-none focus:border-yellow-500"
+              />
+              <span className="text-[12px] text-muted-foreground">{customUnit}</span>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

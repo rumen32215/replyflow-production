@@ -20,7 +20,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { SettleCard, GentleSwap, EASE, press } from "@/components/shared/motion";
-import { Acknowledgement, ACK, useAcknowledgement } from "@/components/shared/acknowledgement";
+import { Acknowledgement, ACK, randomAck, useAcknowledgement } from "@/components/shared/acknowledgement";
 import { PhonePreview } from "@/components/shared/phone-preview";
 import { Switch } from "@/components/ui/switch";
 import { createClient } from "@/lib/supabase/client";
@@ -179,13 +179,13 @@ export function BusinessMemory({
     faqs,
   ]);
 
-  function learn<T>(apply: () => T, ack: string = ACK.remember) {
-    ackRef.current = ack;
+  function learn<T>(apply: () => T, ack?: string) {
+    ackRef.current = ack ?? randomAck();
     return apply();
   }
 
-  function patchKnowledge(patch: Partial<BusinessKnowledge>, ack: string = ACK.remember) {
-    ackRef.current = ack;
+  function patchKnowledge(patch: Partial<BusinessKnowledge>, ack?: string) {
+    ackRef.current = ack ?? randomAck();
     setKnowledge((k) => ({ ...k, ...patch }));
   }
 
@@ -209,7 +209,7 @@ export function BusinessMemory({
     score.percent >= 100
       ? { label: "Complete", barClass: "bg-success", textClass: "text-success" }
       : score.percent >= 50
-        ? { label: "Growing", barClass: "bg-indigo-600", textClass: "text-indigo-600" }
+        ? { label: "Growing", barClass: "bg-blue-600", textClass: "text-blue-600" }
         : { label: "Learning", barClass: "bg-slate-400", textClass: "text-slate-500" };
 
   // Proactive learning (One Thought Ahead): ReplyFlow notices what it
@@ -264,20 +264,20 @@ export function BusinessMemory({
           <MemoryField
             label="Business name"
             value={businessName}
-            onChange={(v) => learn(() => setBusinessName(v), ACK.gotIt)}
+            onChange={(v) => learn(() => setBusinessName(v))}
             placeholder="e.g. Dales Plumbing"
           />
           <MemoryField
             label="Phone number"
             value={phone}
-            onChange={(v) => learn(() => setPhone(v), ACK.gotIt)}
+            onChange={(v) => learn(() => setPhone(v))}
             placeholder="So customers can reach you directly"
             type="tel"
           />
           <MemoryTextarea
             label="A short introduction"
             value={description}
-            onChange={(v) => learn(() => setDescription(v), ACK.helpful)}
+            onChange={(v) => learn(() => setDescription(v))}
             placeholder="e.g. Family-run plumbing and heating covering North London for 15 years."
           />
         </div>
@@ -304,7 +304,7 @@ export function BusinessMemory({
       id: "declined",
       title: "Jobs we don't take",
       icon: Ban,
-      iconClass: "bg-rose-50 text-rose-600",
+      iconClass: "bg-red-50 text-red-600",
       question: "Are there any jobs you don't take on?",
       known: knowledge.jobsDeclined.length > 0,
       summary: summarise(knowledge.jobsDeclined),
@@ -316,7 +316,7 @@ export function BusinessMemory({
           <ChipEditor
             suggestions={["Gas work", "Commercial jobs", "New builds", "Jobs outside my area"]}
             items={knowledge.jobsDeclined}
-            onChange={(next) => patchKnowledge({ jobsDeclined: next }, ACK.useNextTime)}
+            onChange={(next) => patchKnowledge({ jobsDeclined: next })}
             addPlaceholder="Add a job you don't take"
           />
         </>
@@ -356,7 +356,7 @@ export function BusinessMemory({
         <ChipEditor
           suggestions={[...PERSONALITY_SUGGESTIONS]}
           items={knowledge.personality}
-          onChange={(next) => patchKnowledge({ personality: next }, ACK.helpful)}
+          onChange={(next) => patchKnowledge({ personality: next })}
           addPlaceholder="Add your own"
         />
       ),
@@ -390,7 +390,7 @@ export function BusinessMemory({
         <ChipEditor
           suggestions={[...GUARANTEE_SUGGESTIONS]}
           items={knowledge.guarantees}
-          onChange={(next) => patchKnowledge({ guarantees: next }, ACK.useNextTime)}
+          onChange={(next) => patchKnowledge({ guarantees: next })}
           addPlaceholder="Add a guarantee"
         />
       ),
@@ -434,7 +434,7 @@ export function BusinessMemory({
                   <MemoryField
                     label="How much is the call-out fee?"
                     value={calloutFeeAmount}
-                    onChange={(v) => learn(() => setCalloutFeeAmount(v), ACK.gotIt)}
+                    onChange={(v) => learn(() => setCalloutFeeAmount(v))}
                     placeholder="e.g. £60"
                   />
                 </div>
@@ -445,7 +445,7 @@ export function BusinessMemory({
             <MemoryTextarea
               label="Anything I should say in an emergency?"
               value={knowledge.emergencyNotes}
-              onChange={(v) => patchKnowledge({ emergencyNotes: v }, ACK.useNextTime)}
+              onChange={(v) => patchKnowledge({ emergencyNotes: v })}
               placeholder="e.g. If there's a gas leak, tell them to call 0800 111 999 straight away."
             />
           </div>
@@ -463,7 +463,7 @@ export function BusinessMemory({
         activeFaqs.length > 0
           ? `${activeFaqs.length} answer${activeFaqs.length === 1 ? "" : "s"} ready`
           : null,
-      content: <FaqEditor faqs={faqs} onChange={(next) => learn(() => setFaqs(next), ACK.useNextTime)} />,
+      content: <FaqEditor faqs={faqs} onChange={(next) => learn(() => setFaqs(next))} />,
     },
     {
       id: "access",
@@ -513,7 +513,7 @@ export function BusinessMemory({
                 className={cn(
                   "rounded-full px-3 py-1.5 text-[11.5px] font-semibold transition-all",
                   scenarioId === s.id
-                    ? "bg-indigo-600 text-white shadow-sm shadow-indigo-600/25"
+                    ? "bg-blue-600 text-white shadow-sm shadow-blue-600/25"
                     : "border border-border bg-card text-muted-foreground hover:text-foreground"
                 )}
               >
@@ -560,10 +560,10 @@ export function BusinessMemory({
                   transition={{ duration: 0.25, ease: EASE }}
                   type="button"
                   onClick={() => setOpen(nextLesson.section)}
-                  className="mt-3.5 flex w-full items-center justify-between rounded-xl border border-dashed border-indigo-200 bg-indigo-50/40 px-4 py-3 text-left transition-colors hover:border-indigo-400"
+                  className="mt-3.5 flex w-full items-center justify-between rounded-xl border border-dashed border-blue-200 bg-blue-50/40 px-4 py-3 text-left transition-colors hover:border-blue-400"
                 >
                   <span className="text-[13px] font-medium text-foreground">{nextLesson.prompt}</span>
-                  <span className="ml-3 shrink-0 text-[12.5px] font-semibold text-indigo-600">Teach me</span>
+                  <span className="ml-3 shrink-0 text-[12.5px] font-semibold text-blue-600">Teach me</span>
                 </motion.button>
               ) : (
                 <motion.p
@@ -652,7 +652,7 @@ function KnowledgeCard({
   children: React.ReactNode;
 }) {
   return (
-    <SettleCard delay={0.04 * index} className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
+    <SettleCard delay={0.04 * index} className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm transition-shadow hover:shadow-md">
       <motion.button
         type="button"
         onClick={onToggle}
@@ -826,8 +826,8 @@ function SuggestibleTextarea({
               className={cn(
                 "flex items-center gap-1.5 rounded-full px-4 py-2 text-[12.5px] transition-all",
                 on
-                  ? "bg-indigo-600 font-semibold text-white shadow-sm shadow-indigo-600/25"
-                  : "border border-border bg-card font-medium text-muted-foreground hover:border-indigo-200 hover:text-foreground"
+                  ? "bg-blue-600 font-semibold text-white shadow-sm shadow-blue-600/25"
+                  : "border border-border bg-card font-medium text-muted-foreground hover:border-blue-200 hover:text-foreground"
               )}
             >
               {on && <Check className="h-3 w-3" strokeWidth={3} />}
@@ -890,8 +890,8 @@ function ChipEditor({
                 className={cn(
                   "flex items-center gap-1.5 rounded-full px-4 py-2 text-[12.5px] transition-all",
                   on
-                    ? "bg-indigo-600 font-semibold text-white shadow-sm shadow-indigo-600/25"
-                    : "border border-border bg-card font-medium text-muted-foreground hover:border-indigo-200 hover:text-foreground"
+                    ? "bg-blue-600 font-semibold text-white shadow-sm shadow-blue-600/25"
+                    : "border border-border bg-card font-medium text-muted-foreground hover:border-blue-200 hover:text-foreground"
                 )}
               >
                 {on && <Check className="h-3 w-3" strokeWidth={3} />}
@@ -907,7 +907,7 @@ function ChipEditor({
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.9 }}
                 transition={{ duration: 0.2, ease: EASE }}
-                className="flex items-center gap-1.5 rounded-full bg-indigo-600 px-4 py-2 text-[12.5px] font-semibold text-white shadow-sm shadow-indigo-600/25"
+                className="flex items-center gap-1.5 rounded-full bg-blue-600 px-4 py-2 text-[12.5px] font-semibold text-white shadow-sm shadow-blue-600/25"
               >
                 {item}
                 <button
@@ -974,7 +974,7 @@ function FaqEditor({ faqs, onChange }: { faqs: Faq[]; onChange: (faqs: Faq[]) =>
               {...press}
               type="button"
               onClick={() => onChange([...faqs, { question: q, answer: "" }])}
-              className="flex items-center gap-1.5 rounded-full border border-dashed border-indigo-200 bg-indigo-50/40 px-3.5 py-2 text-[12.5px] font-medium text-indigo-700/80 transition-colors hover:border-indigo-400 hover:text-indigo-700"
+              className="flex items-center gap-1.5 rounded-full border border-dashed border-blue-200 bg-blue-50/40 px-3.5 py-2 text-[12.5px] font-medium text-blue-700/80 transition-colors hover:border-blue-400 hover:text-blue-700"
             >
               <Plus className="h-3 w-3" />
               {q}
@@ -1023,7 +1023,7 @@ function FaqEditor({ faqs, onChange }: { faqs: Faq[]; onChange: (faqs: Faq[]) =>
         {...press}
         type="button"
         onClick={() => onChange([...faqs, { question: "", answer: "" }])}
-        className="flex items-center gap-1.5 rounded-xl border border-dashed border-border px-4 py-2.5 text-[13px] font-semibold text-muted-foreground transition-colors hover:border-indigo-300 hover:text-indigo-600"
+        className="flex items-center gap-1.5 rounded-xl border border-dashed border-border px-4 py-2.5 text-[13px] font-semibold text-muted-foreground transition-colors hover:border-blue-300 hover:text-blue-600"
       >
         <Plus className="h-3.5 w-3.5" />
         Add a question

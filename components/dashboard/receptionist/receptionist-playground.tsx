@@ -2,9 +2,9 @@
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { motion } from "framer-motion";
-import { Check, Headset } from "lucide-react";
+import { Briefcase, Check, Headset, Smile, Zap, type LucideIcon } from "lucide-react";
 import { SettleCard, GentleSwap, press } from "@/components/shared/motion";
-import { Acknowledgement, ACK, useAcknowledgement } from "@/components/shared/acknowledgement";
+import { Acknowledgement, ACK, randomAck, useAcknowledgement } from "@/components/shared/acknowledgement";
 import { PhonePreview } from "@/components/shared/phone-preview";
 import { Textarea } from "@/components/ui/textarea";
 import { createClient } from "@/lib/supabase/client";
@@ -43,10 +43,10 @@ import { cn } from "@/lib/utils";
  * an owner taught previously is parsed back into toggles losslessly.
  */
 
-const TONES: { value: Tone; label: string; description: string }[] = [
-  { value: "friendly", label: "Friendly", description: "Warm and personal" },
-  { value: "professional", label: "Professional", description: "Polished and courteous" },
-  { value: "concise", label: "Concise", description: "Short and to the point" },
+const TONES: { value: Tone; label: string; description: string; icon: LucideIcon; accent: string }[] = [
+  { value: "friendly", label: "Friendly", description: "Warm and personal", icon: Smile, accent: "bg-purple-500 shadow-purple-500/25" },
+  { value: "professional", label: "Professional", description: "Polished and courteous", icon: Briefcase, accent: "bg-blue-600 shadow-blue-600/25" },
+  { value: "concise", label: "Concise", description: "Short and to the point", icon: Zap, accent: "bg-slate-700 shadow-slate-700/25" },
 ];
 
 interface SavedConfig {
@@ -191,7 +191,7 @@ export function ReceptionistPlayground({
                 className={cn(
                   "rounded-full px-3 py-1.5 text-[11.5px] font-semibold transition-all",
                   scenarioId === s.id
-                    ? "bg-orange-500 text-white shadow-sm shadow-orange-500/25"
+                    ? "bg-purple-500 text-white shadow-sm shadow-purple-500/25"
                     : "border border-border bg-card text-muted-foreground hover:text-foreground"
                 )}
               >
@@ -218,6 +218,7 @@ export function ReceptionistPlayground({
             <div className="flex flex-wrap gap-2">
               {TONES.map((t) => {
                 const on = tone === t.value;
+                const Icon = t.icon;
                 return (
                   <motion.button
                     key={t.value}
@@ -229,13 +230,14 @@ export function ReceptionistPlayground({
                     }}
                     aria-pressed={on}
                     className={cn(
-                      "rounded-full px-4 py-2 text-[12.5px] transition-all",
+                      "flex items-center gap-1.5 rounded-full px-4 py-2 text-[12.5px] transition-all",
                       on
-                        ? "bg-orange-500 font-semibold text-white shadow-sm shadow-orange-500/25"
-                        : "border border-border bg-card font-medium text-muted-foreground hover:text-foreground"
+                        ? cn("text-white shadow-sm", t.accent)
+                        : "border border-border bg-card text-muted-foreground hover:text-foreground"
                     )}
                   >
-                    {t.label}
+                    <Icon className="h-3 w-3" />
+                    <span className={on ? "font-semibold" : "font-medium"}>{t.label}</span>
                   </motion.button>
                 );
               })}
@@ -251,7 +253,8 @@ export function ReceptionistPlayground({
                 ackRef.current = ACK.updated;
                 setToneNotes(v);
               }}
-              placeholder="Or describe how I should sound, in your own words..."
+              label="Describe her personality more specifically"
+              placeholder="What should she sound like beyond friendly, professional, or concise?"
               example={'e.g. "Talk like a friendly Yorkshire tradesman — casual, not corporate."'}
             />
           </TeachingTurn>
@@ -265,14 +268,15 @@ export function ReceptionistPlayground({
                 : "What should I always do when someone gets in touch?"
             }
           >
-            <OptionChips options={BEHAVIOUR_OPTIONS} selected={behaviours} onToggle={(id) => toggle(behaviours, setBehaviours, id, ACK.remember)} />
+            <OptionChips options={BEHAVIOUR_OPTIONS} selected={behaviours} onToggle={(id) => toggle(behaviours, setBehaviours, id, randomAck())} />
             <OwnWordsInput
               value={behavioursNotes}
               onChange={(v) => {
-                ackRef.current = ACK.remember;
+                ackRef.current = randomAck();
                 setBehavioursNotes(v);
               }}
-              placeholder="Or tell me anything else I should always do..."
+              label="Add a habit that's not listed above"
+              placeholder="What should she always do that isn't covered by those options?"
               example={'e.g. "Always ask if this has happened before."'}
             />
           </TeachingTurn>
@@ -283,14 +287,15 @@ export function ReceptionistPlayground({
             learned={rules.size > 0 || rulesNotes.length > 0}
             question={rules.size > 0 ? "These are the house rules I never break — anything else?" : "Are there things I should never get wrong?"}
           >
-            <RuleList options={RULE_OPTIONS} selected={rules} onToggle={(id) => toggle(rules, setRules, id, ACK.useNextTime)} />
+            <RuleList options={RULE_OPTIONS} selected={rules} onToggle={(id) => toggle(rules, setRules, id, randomAck())} />
             <OwnWordsInput
               value={rulesNotes}
               onChange={(v) => {
-                ackRef.current = ACK.useNextTime;
+                ackRef.current = randomAck();
                 setRulesNotes(v);
               }}
-              placeholder="Or tell me a house rule in your own words..."
+              label="Add a rule that's not listed above"
+              placeholder="What's a hard rule she should never break?"
               example={'e.g. "Never agree to same-day emergency call-outs after 6pm."'}
             />
           </TeachingTurn>
@@ -302,14 +307,15 @@ export function ReceptionistPlayground({
             learned={escalation.size > 0 || escalationNotes.length > 0}
             question={escalation.size > 0 ? "I'll come straight to you in these situations — anything to add?" : "When should I stop and come get you?"}
           >
-            <OptionChips options={ESCALATION_OPTIONS} selected={escalation} onToggle={(id) => toggle(escalation, setEscalation, id, ACK.gotIt)} accent="amber" />
+            <OptionChips options={ESCALATION_OPTIONS} selected={escalation} onToggle={(id) => toggle(escalation, setEscalation, id, randomAck())} accent="amber" />
             <OwnWordsInput
               value={escalationNotes}
               onChange={(v) => {
-                ackRef.current = ACK.gotIt;
+                ackRef.current = randomAck();
                 setEscalationNotes(v);
               }}
-              placeholder="Or tell me another situation I should hand straight to you..."
+              label="Add a situation that's not listed above"
+              placeholder="When else should she stop and bring you in personally?"
               example={'e.g. "Come get me if someone mentions an insurance claim."'}
             />
           </TeachingTurn>
@@ -322,12 +328,12 @@ export function ReceptionistPlayground({
 type TurnAccent = "warm" | "slate" | "amber";
 
 /** Receptionist's own personality is warm/conversational (Visual
- * Language: each section has its own subtle voice) — orange, not the
+ * Language: each section has its own subtle voice) — purple, not the
  * app's usual blue. Rules get a firmer slate tone; escalation gets
  * amber, the same "hand this to the owner" colour used everywhere
  * else in the product, so its meaning is consistent, not decorative. */
 const TURN_ACCENT: Record<TurnAccent, { avatar: string; bubble: string }> = {
-  warm: { avatar: "bg-orange-100 text-orange-600", bubble: "bg-orange-50/70" },
+  warm: { avatar: "bg-purple-100 text-purple-600", bubble: "bg-purple-50/70" },
   slate: { avatar: "bg-slate-200 text-slate-700", bubble: "bg-slate-100" },
   amber: { avatar: "bg-amber-100 text-amber-700", bubble: "bg-amber-50" },
 };
@@ -399,11 +405,13 @@ function TeachingTurn({
 function OwnWordsInput({
   value,
   onChange,
+  label,
   placeholder,
   example,
 }: {
   value: string;
   onChange: (value: string) => void;
+  label: string;
   placeholder: string;
   example: string;
 }) {
@@ -411,7 +419,7 @@ function OwnWordsInput({
     <div className="space-y-1.5 pt-0.5">
       <div className="flex items-center gap-1.5 text-[11px] font-semibold text-purple-600">
         <span className="h-1.5 w-1.5 rounded-full bg-purple-500" />
-        Or tell me in your own words
+        {label}
       </div>
       <Textarea
         value={value}
@@ -426,7 +434,7 @@ function OwnWordsInput({
 }
 
 const CHIP_ACCENT: Record<TurnAccent, string> = {
-  warm: "bg-orange-500 shadow-orange-500/25",
+  warm: "bg-purple-500 shadow-purple-500/25",
   slate: "bg-slate-600 shadow-slate-600/25",
   amber: "bg-amber-500 shadow-amber-500/25",
 };

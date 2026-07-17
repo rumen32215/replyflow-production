@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
-import { Bell, Lock, UserCircle } from "lucide-react";
+import { Bell, Lock, Sparkles, UserCircle } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { SettleCard } from "@/components/shared/motion";
 import { SettingsPasswordForm } from "@/components/dashboard/settings-password-form";
 import { SettingsNotifications } from "@/components/dashboard/settings-notifications";
+import { SettingsIdentity } from "@/components/dashboard/settings-identity";
 import { SettingsDangerZone } from "@/components/dashboard/settings-danger-zone";
 
 export const metadata: Metadata = { title: "Settings — ReplyFlow" };
@@ -18,7 +19,7 @@ export default async function SettingsPage() {
 
   const { data: business } = await supabase
     .from("businesses")
-    .select("id, business_name, notify_new_enquiry, notify_daily_summary")
+    .select("id, business_name, notify_new_enquiry, notify_daily_summary, logo_url, receptionist_name")
     .eq("owner_id", user.id)
     .maybeSingle();
 if (!business) {
@@ -43,6 +44,21 @@ if (!business) {
           <span className="text-[13.5px] text-muted-foreground">Email</span>
           <span className="text-[13.5px] font-semibold">{user.email}</span>
         </div>
+      </SettleCard>
+
+      <SettleCard delay={0.07} className="rounded-2xl border border-border bg-card p-6">
+        <div className="mb-4 flex items-center gap-2.5">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-teal-50 text-teal-600">
+            <Sparkles className="h-4 w-4" />
+          </div>
+          <h2 className="text-[15px] font-bold">Identity</h2>
+        </div>
+        <SettingsIdentity
+          businessId={business.id}
+          businessName={business.business_name}
+          initialLogoUrl={business.logo_url}
+          initialReceptionistName={business.receptionist_name}
+        />
       </SettleCard>
 
       <SettleCard delay={0.09} className="rounded-2xl border border-border bg-card p-6">

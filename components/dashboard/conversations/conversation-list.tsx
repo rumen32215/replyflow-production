@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { motion } from "framer-motion";
-import { Headset, Sparkles } from "lucide-react";
+import { Headset, Sparkles, GraduationCap } from "lucide-react";
 import { Reveal, press } from "@/components/shared/motion";
 import { groupForStatus, statusLabel, GROUP_ORDER, GROUP_LABELS, type ConversationGroup } from "@/lib/conversations";
 import { minutesSince, formatWaitingTime } from "@/lib/dashboard-signals";
@@ -46,9 +46,11 @@ function whenLabel(iso: string | null): string {
 export function ConversationList({
   conversations,
   topGap = null,
+  learned = [],
 }: {
   conversations: ConversationListItem[];
   topGap?: string | null;
+  learned?: readonly string[];
 }) {
   const pathname = usePathname();
 
@@ -99,6 +101,21 @@ export function ConversationList({
                 Teach your receptionist
               </Link>
             </>
+          )}
+          {learned.length > 0 && (
+            <div className="mt-5 w-full max-w-[280px] rounded-xl border border-border bg-muted/30 p-3.5 text-left">
+              <p className="mb-2 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-widest text-muted-foreground">
+                <GraduationCap className="h-3.5 w-3.5" />
+                What I&apos;ve learned recently
+              </p>
+              <ul className="space-y-1">
+                {learned.map((fact) => (
+                  <li key={fact} className="text-[12.5px] leading-relaxed text-muted-foreground">
+                    I know {fact}.
+                  </li>
+                ))}
+              </ul>
+            </div>
           )}
         </div>
       </div>

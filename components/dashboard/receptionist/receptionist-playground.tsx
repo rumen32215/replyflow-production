@@ -79,6 +79,7 @@ export function ReceptionistPlayground({
   chargesCalloutFee,
   calloutFeeAmount,
   availability,
+  receptionistName,
   initial,
   justHired,
 }: {
@@ -89,6 +90,7 @@ export function ReceptionistPlayground({
   chargesCalloutFee: boolean;
   calloutFeeAmount: string | null;
   availability: Availability;
+  receptionistName: string | null;
   initial: SavedConfig;
   justHired: boolean;
 }) {
@@ -185,20 +187,28 @@ export function ReceptionistPlayground({
     const t = setTimeout(async () => {
       const thisRequest = ++requestId.current;
       startSaving();
-      const { error } = await supabase.from("ai_configurations").upsert(
-        {
-          business_id: businessId,
-          tone,
-          tone_notes: toneNotes,
-          system_prompt: composeOptions(BEHAVIOUR_OPTIONS, behaviours, behavioursNotes),
-          business_rules: composeOptions(RULE_OPTIONS, rules, rulesNotes),
-          escalation_rules: composeOptions(ESCALATION_OPTIONS, escalation, escalationNotes),
-        },
-        { onConflict: "business_id" }
-      );
-      if (thisRequest !== requestId.current) return;
-      if (error) softError();
-      else acknowledge(ackRef.current);
+      try {
+        const { error } = await supabase.from("ai_configurations").upsert(
+          {
+            business_id: businessId,
+            tone,
+            tone_notes: toneNotes,
+            system_prompt: composeOptions(BEHAVIOUR_OPTIONS, behaviours, behavioursNotes),
+            business_rules: composeOptions(RULE_OPTIONS, rules, rulesNotes),
+            escalation_rules: composeOptions(ESCALATION_OPTIONS, escalation, escalationNotes),
+          },
+          { onConflict: "business_id" }
+        );
+        if (thisRequest !== requestId.current) return;
+        if (error) softError();
+        else acknowledge(ackRef.current);
+      } catch {
+        // A thrown exception (network blip, client error) never
+        // reaches this UI as a false "nothing happened" silence — it
+        // gets the same honest, recoverable message as a resolved
+        // Supabase error.
+        if (thisRequest === requestId.current) softError();
+      }
     }, 700);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -240,7 +250,9 @@ export function ReceptionistPlayground({
         </h1>
         <p className="mt-1 text-[14px] leading-relaxed text-muted-foreground">
           {justHired
-            ? "I'm your new receptionist. Teach me how you like things done — I'll show you exactly how I'll speak to your customers."
+            ? receptionistName
+              ? `I'm ${receptionistName}, your new receptionist. Teach me how you like things done — I'll show you exactly how I'll speak to your customers.`
+              : "I'm your new receptionist. Teach me how you like things done — I'll show you exactly how I'll speak to your customers."
             : "Let's make sure I'm ready for today's customers."}
         </p>
       </SettleCard>
@@ -321,8 +333,8 @@ export function ReceptionistPlayground({
                 ackRef.current = ACK.updated;
                 setToneNotes(v);
               }}
-              label="Describe her personality more specifically"
-              placeholder="What should she sound like beyond friendly, professional, or concise?"
+              label="Describe my personality more specifically"
+              placeholder="What should I sound like beyond friendly, professional, or concise?"
               example={'e.g. "Talk like a friendly Yorkshire tradesman — casual, not corporate."'}
             />
           </TeachingTurn>
@@ -350,7 +362,7 @@ export function ReceptionistPlayground({
                 setBehavioursNotes(v);
               }}
               label="Add a habit that's not listed above"
-              placeholder="What should she always do that isn't covered by those options?"
+              placeholder="What should I always do that isn't covered by those options?"
               example={'e.g. "Always ask if this has happened before."'}
             />
           </TeachingCard>
@@ -374,7 +386,7 @@ export function ReceptionistPlayground({
                 setRulesNotes(v);
               }}
               label="Add a rule that's not listed above"
-              placeholder="What's a hard rule she should never break?"
+              placeholder="What's a hard rule I should never break?"
               example={'e.g. "Never agree to same-day emergency call-outs after 6pm."'}
             />
           </TeachingCard>
@@ -405,7 +417,7 @@ export function ReceptionistPlayground({
                 setEscalationNotes(v);
               }}
               label="Add a situation that's not listed above"
-              placeholder="When else should she stop and bring you in personally?"
+              placeholder="When else should I stop and bring you in personally?"
               example={'e.g. "Come get me if someone mentions an insurance claim."'}
             />
           </TeachingCard>

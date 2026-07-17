@@ -38,10 +38,14 @@ export default async function ConversationDetailPage({ params }: { params: { id:
       .select("id, direction, body, message_type, created_at")
       .eq("conversation_id", conversation.id)
       .order("created_at", { ascending: true }),
-    supabase.from("jobs").select("id, job_title, scheduled_for").eq("conversation_id", conversation.id).maybeSingle(),
+    supabase
+      .from("jobs")
+      .select("id, job_title, scheduled_for, status, notes")
+      .eq("conversation_id", conversation.id)
+      .maybeSingle(),
     supabase
       .from("businesses")
-      .select("availability, opening_time, closing_time")
+      .select("business_name, availability, opening_time, closing_time")
       .eq("id", conversation.business_id)
       .maybeSingle(),
   ]);
@@ -94,6 +98,7 @@ export default async function ConversationDetailPage({ params }: { params: { id:
       <ConversationStory
         conversationId={conversation.id}
         businessId={conversation.business_id}
+        businessName={business?.business_name ?? "The team"}
         status={conversation.status}
         customerName={conversation.customer_name}
         customerPhone={conversation.customer_phone}

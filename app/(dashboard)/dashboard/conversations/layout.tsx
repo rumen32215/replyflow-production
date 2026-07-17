@@ -77,7 +77,11 @@ export default async function ConversationsLayout({ children }: { children: Reac
     : null;
 
   return (
-    <ConversationsShell conversations={conversations ?? []} topGap={brain?.gaps[0]?.label ?? null}>
+    <ConversationsShell
+      conversations={conversations ?? []}
+      topGap={brain?.gaps[0]?.label ?? null}
+      learned={brain ? brain.thoughts.confidentAbout.slice(0, 3).map((t) => t.label) : []}
+    >
       {children}
     </ConversationsShell>
   );

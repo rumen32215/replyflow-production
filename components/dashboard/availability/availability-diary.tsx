@@ -6,6 +6,7 @@ import { Plus, X } from "lucide-react";
 import { SettleCard, press, EASE } from "@/components/shared/motion";
 import { Acknowledgement, ACK, useAcknowledgement } from "@/components/shared/acknowledgement";
 import { Switch, SwitchVisual } from "@/components/ui/switch";
+import { CollapsibleRule } from "@/components/dashboard/availability/collapsible-rule";
 import { createClient } from "@/lib/supabase/client";
 import {
   DAY_KEYS,
@@ -40,6 +41,11 @@ export function AvailabilityDiary({
   const [addingDayOff, setAddingDayOff] = useState(false);
   const [dayOffDate, setDayOffDate] = useState("");
   const [dayOffReason, setDayOffReason] = useState("");
+  // One rule open at a time — reduces eight simultaneous controls down
+  // to a name + current value until the owner actually wants to change
+  // one, the fix for Diary reading as a long settings page.
+  const [openRule, setOpenRule] = useState<string | null>(null);
+  const toggleRule = (id: string) => setOpenRule((current) => (current === id ? null : id));
 
   /* Quiet persistence — debounced, never a Save button. */
   const firstRender = useRef(true);
@@ -54,13 +60,17 @@ export function AvailabilityDiary({
     const t = setTimeout(async () => {
       const thisRequest = ++requestId.current;
       startSaving();
-      const { error } = await supabase
-        .from("businesses")
-        .update({ availability })
-        .eq("id", businessId);
-      if (thisRequest !== requestId.current) return;
-      if (error) softError();
-      else acknowledge(ACK.diary);
+      try {
+        const { error } = await supabase
+          .from("businesses")
+          .update({ availability })
+          .eq("id", businessId);
+        if (thisRequest !== requestId.current) return;
+        if (error) softError();
+        else acknowledge(ACK.diary);
+      } catch {
+        if (thisRequest === requestId.current) softError();
+      }
     }, 700);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -118,6 +128,20 @@ export function AvailabilityDiary({
   // Knowledge already have — every rule change below visibly changes
   // what she'd actually say.
   const liveReply = describeBookingReply(availability, now);
+
+  // Short "current value" summaries for each rule's collapsed row —
+  // the narrative descriptions stay put inside, once expanded.
+  const { rules } = availability;
+  const summaries = {
+    sameDay: rules.sameDay ? "On" : "Off",
+    emergency: rules.emergency ? (rules.emergencyHours.trim() ? `On · ${rules.emergencyHours.trim()}` : "On") : "Off",
+    weekendEmergencyOnly: rules.weekendEmergencyOnly ? "On" : "Off",
+    minNotice: rules.minNoticeHours > 0 ? `${rules.minNoticeHours}h notice` : "None needed",
+    maxJobs: rules.maxJobsPerDay !== null ? `${rules.maxJobsPerDay} a day` : "No limit",
+    travel: rules.travelBufferMinutes > 0 ? `${rules.travelBufferMinutes} min` : "None",
+    radius: rules.workingRadiusMiles !== null ? `${rules.workingRadiusMiles} miles` : "No limit",
+    lunchBreak: rules.lunchBreak.enabled ? `${rules.lunchBreak.start}–${rules.lunchBreak.end}` : "Off",
+  };
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">
@@ -367,13 +391,27 @@ export function AvailabilityDiary({
         </div>
 
         <div className="divide-y divide-border">
-          <RuleRow
+          <CollapsibleRule
             label="Same-day bookings"
-            description="I'll offer today's slots to customers while they're free"
-            checked={availability.rules.sameDay}
-            onChange={(v) => updateRules({ sameDay: v })}
-          />
-          <div className="py-2.5">
+            summary={summaries.sameDay}
+            open={openRule === "sameDay"}
+            onToggle={() => toggleRule("sameDay")}
+          >
+            <RuleRow
+              label="Same-day bookings"
+              description="I'll offer today's slots to customers while they're free"
+              checked={availability.rules.sameDay}
+              onChange={(v) => updateRules({ sameDay: v })}
+              noPadding
+            />
+          </CollapsibleRule>
+
+          <CollapsibleRule
+            label="Emergency call-outs"
+            summary={summaries.emergency}
+            open={openRule === "emergency"}
+            onToggle={() => toggleRule("emergency")}
+          >
             <RuleRow
               label="Emergency call-outs"
               description="I'll fit urgent jobs in outside normal hours when it's genuinely needed"
@@ -402,79 +440,126 @@ export function AvailabilityDiary({
                 </motion.div>
               )}
             </AnimatePresence>
-          </div>
-          <RuleRow
+          </CollapsibleRule>
+
+          <CollapsibleRule
             label="Only emergency jobs at weekends"
-            description="I'll protect your weekend — only genuine emergencies get offered Saturday and Sunday"
-            checked={availability.rules.weekendEmergencyOnly}
-            onChange={(v) => updateRules({ weekendEmergencyOnly: v })}
-          />
+            summary={summaries.weekendEmergencyOnly}
+            open={openRule === "weekendEmergencyOnly"}
+            onToggle={() => toggleRule("weekendEmergencyOnly")}
+          >
+            <RuleRow
+              label="Only emergency jobs at weekends"
+              description="I'll protect your weekend — only genuine emergencies get offered Saturday and Sunday"
+              checked={availability.rules.weekendEmergencyOnly}
+              onChange={(v) => updateRules({ weekendEmergencyOnly: v })}
+              noPadding
+            />
+          </CollapsibleRule>
 
-          <ChipRow
+          <CollapsibleRule
             label="How much notice do I need?"
-            description="I'll never book you in with less warning than this, so you're never caught out"
-            options={[
-              { label: "None", value: 0 },
-              { label: "2 hours", value: 2 },
-              { label: "4 hours", value: 4 },
-              { label: "24 hours", value: 24 },
-            ]}
-            value={availability.rules.minNoticeHours}
-            onChange={(v) => updateRules({ minNoticeHours: v })}
-            customUnit="hours"
-          />
+            summary={summaries.minNotice}
+            open={openRule === "minNotice"}
+            onToggle={() => toggleRule("minNotice")}
+          >
+            <ChipRow
+              label="How much notice do I need?"
+              description="I'll never book you in with less warning than this, so you're never caught out"
+              options={[
+                { label: "None", value: 0 },
+                { label: "2 hours", value: 2 },
+                { label: "4 hours", value: 4 },
+                { label: "24 hours", value: 24 },
+              ]}
+              value={availability.rules.minNoticeHours}
+              onChange={(v) => updateRules({ minNoticeHours: v })}
+              customUnit="hours"
+              noPadding
+            />
+          </CollapsibleRule>
 
-          <ChipRow
+          <CollapsibleRule
             label="Most jobs in one day"
-            description="I'll start saying the day's full once we reach this, so you're never overloaded"
-            options={[
-              { label: "No limit", value: null },
-              { label: "2", value: 2 },
-              { label: "4", value: 4 },
-              { label: "6", value: 6 },
-              { label: "8", value: 8 },
-            ]}
-            value={availability.rules.maxJobsPerDay}
-            onChange={(v) => updateRules({ maxJobsPerDay: v })}
-            customUnit="jobs"
-          />
+            summary={summaries.maxJobs}
+            open={openRule === "maxJobs"}
+            onToggle={() => toggleRule("maxJobs")}
+          >
+            <ChipRow
+              label="Most jobs in one day"
+              description="I'll start saying the day's full once we reach this, so you're never overloaded"
+              options={[
+                { label: "No limit", value: null },
+                { label: "2", value: 2 },
+                { label: "4", value: 4 },
+                { label: "6", value: 6 },
+                { label: "8", value: 8 },
+              ]}
+              value={availability.rules.maxJobsPerDay}
+              onChange={(v) => updateRules({ maxJobsPerDay: v })}
+              customUnit="jobs"
+              noPadding
+            />
+          </CollapsibleRule>
 
-          <ChipRow
+          <CollapsibleRule
             label="Travel time between jobs"
-            description="I'll always leave this much time so you're never rushed getting to the next one"
-            options={[
-              { label: "None", value: 0 },
-              { label: "15 min", value: 15 },
-              { label: "30 min", value: 30 },
-              { label: "45 min", value: 45 },
-              { label: "60 min", value: 60 },
-            ]}
-            value={availability.rules.travelBufferMinutes}
-            onChange={(v) => updateRules({ travelBufferMinutes: v })}
-            customUnit="minutes"
-          />
+            summary={summaries.travel}
+            open={openRule === "travel"}
+            onToggle={() => toggleRule("travel")}
+          >
+            <ChipRow
+              label="Travel time between jobs"
+              description="I'll always leave this much time so you're never rushed getting to the next one"
+              options={[
+                { label: "None", value: 0 },
+                { label: "15 min", value: 15 },
+                { label: "30 min", value: 30 },
+                { label: "45 min", value: 45 },
+                { label: "60 min", value: 60 },
+              ]}
+              value={availability.rules.travelBufferMinutes}
+              onChange={(v) => updateRules({ travelBufferMinutes: v })}
+              customUnit="minutes"
+              noPadding
+            />
+          </CollapsibleRule>
 
-          <ChipRow
+          <CollapsibleRule
             label="Working radius"
-            description="I'll only offer jobs within this distance, so you're never driving further than makes sense"
-            options={[
-              { label: "5 miles", value: 5 },
-              { label: "10 miles", value: 10 },
-              { label: "15 miles", value: 15 },
-              { label: "20 miles", value: 20 },
-              { label: "No limit", value: null },
-            ]}
-            value={availability.rules.workingRadiusMiles}
-            onChange={(v) => updateRules({ workingRadiusMiles: v })}
-            customUnit="miles"
-          />
+            summary={summaries.radius}
+            open={openRule === "radius"}
+            onToggle={() => toggleRule("radius")}
+          >
+            <ChipRow
+              label="Working radius"
+              description="I'll only offer jobs within this distance, so you're never driving further than makes sense"
+              options={[
+                { label: "5 miles", value: 5 },
+                { label: "10 miles", value: 10 },
+                { label: "15 miles", value: 15 },
+                { label: "20 miles", value: 20 },
+                { label: "No limit", value: null },
+              ]}
+              value={availability.rules.workingRadiusMiles}
+              onChange={(v) => updateRules({ workingRadiusMiles: v })}
+              customUnit="miles"
+              noPadding
+            />
+          </CollapsibleRule>
 
-          <div className="py-2.5">
+          <CollapsibleRule
+            label="Block out a lunch break"
+            summary={summaries.lunchBreak}
+            open={openRule === "lunchBreak"}
+            onToggle={() => toggleRule("lunchBreak")}
+          >
             <RuleRow
               label="Block out a lunch break"
               description="I'll never book over this window, so you always get a proper break"
               checked={availability.rules.lunchBreak.enabled}
               onChange={(v) => updateRules({ lunchBreak: { ...availability.rules.lunchBreak, enabled: v } })}
+              noPadding
             />
             <AnimatePresence initial={false}>
               {availability.rules.lunchBreak.enabled && (
@@ -501,7 +586,7 @@ export function AvailabilityDiary({
                 </motion.div>
               )}
             </AnimatePresence>
-          </div>
+          </CollapsibleRule>
         </div>
       </SettleCard>
 
@@ -563,6 +648,7 @@ function ChipRow<T extends string | number | null>({
   value,
   onChange,
   customUnit,
+  noPadding = false,
 }: {
   label: string;
   description: string;
@@ -573,12 +659,13 @@ function ChipRow<T extends string | number | null>({
    * values a fixed set of chips can't anticipate (Diary V2: "allow
    * custom values where appropriate"). */
   customUnit?: string;
+  noPadding?: boolean;
 }) {
   const matchesPreset = options.some((o) => o.value === value);
   const [showCustom, setShowCustom] = useState(Boolean(customUnit) && !matchesPreset && value !== null);
 
   return (
-    <div className="px-2 py-2.5">
+    <div className={cn(!noPadding && "px-2 py-2.5")}>
       <p className="text-[13.5px] font-semibold">{label}</p>
       <p className="text-[12px] text-muted-foreground">{description}</p>
       <div className="mt-2 flex flex-wrap gap-1.5">

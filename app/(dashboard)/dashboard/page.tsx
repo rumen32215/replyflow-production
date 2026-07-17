@@ -13,6 +13,7 @@ import {
   type RightNowJob,
 } from "@/components/dashboard/home/home-experience";
 import { FastLane, ConnectWhatsAppBanner } from "@/components/dashboard/home/fast-lane";
+import { WhatsOnMyMind } from "@/components/dashboard/home/whats-on-my-mind";
 import { SettleCard } from "@/components/shared/motion";
 import { minutesSince, buildPresenceLine } from "@/lib/dashboard-signals";
 import { parseAvailability, standingForDate, describeStanding } from "@/lib/availability";
@@ -245,6 +246,7 @@ export default async function HomePage() {
         <ReadyStatus state={{ whatsappConnected }} />
       ) : (
         <>
+          <WhatsOnMyMind thoughts={brain.thoughts} />
           <RightNowCard job={rightNow} allCaughtUp={needsYou.length === 0} />
           <NeedsYou items={needsYou} />
           <UpNext job={upNext} />

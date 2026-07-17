@@ -6,14 +6,14 @@ import { SettleCard, EASE } from "@/components/shared/motion";
 import { cn } from "@/lib/utils";
 
 /**
- * One topic in a teaching interview — her avatar, her question as a
- * received-message bubble, a check once she knows something here, and
- * a one-line summary in her voice while collapsed. Shared by
- * Receptionist and Business Knowledge so "teaching her something" is
- * one interaction model with two sets of content, not two bespoke
- * UIs: she leads with the one thing she doesn't know yet, and once a
- * topic is answered it collapses into a compact, scannable line —
- * tapping it again reopens a short, focused exchange to change it.
+ * One topic in a teaching interview — its avatar, its question as a
+ * received-message bubble, a check once it knows something here, and
+ * a one-line summary in its own voice while collapsed. Shared by
+ * Receptionist and Business Knowledge so "teaching the receptionist
+ * something" is one interaction model with two sets of content, not
+ * two bespoke UIs: it leads with the one thing it doesn't know yet,
+ * and once a topic is answered it collapses into a compact, scannable
+ * line — tapping it again reopens a short, focused exchange to change it.
  */
 export function TeachingCard({
   index = 0,

@@ -13,10 +13,12 @@ import { cn } from "@/lib/utils";
 export function ConversationsShell({
   conversations,
   topGap,
+  learned = [],
   children,
 }: {
   conversations: ConversationListItem[];
   topGap?: string | null;
+  learned?: readonly string[];
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
@@ -30,7 +32,7 @@ export function ConversationsShell({
           isDetailView ? "hidden md:block" : "block"
         )}
       >
-        <ConversationList conversations={conversations} topGap={topGap} />
+        <ConversationList conversations={conversations} topGap={topGap} learned={learned} />
       </div>
 
       <div className={cn("min-w-0 flex-1 flex-col bg-background", isDetailView ? "flex" : "hidden md:flex")}>

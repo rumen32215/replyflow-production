@@ -26,7 +26,7 @@ export default async function ReceptionistPage({
   const { data: business } = await supabase
     .from("businesses")
     .select(
-      "id, business_name, trade, offers_emergency_callouts, charges_callout_fee, callout_fee_amount, greeting_style, availability, opening_time, closing_time"
+      "id, business_name, trade, offers_emergency_callouts, charges_callout_fee, callout_fee_amount, greeting_style, availability, opening_time, closing_time, receptionist_name"
     )
     .eq("owner_id", user.id)
     .maybeSingle();
@@ -50,6 +50,7 @@ export default async function ReceptionistPage({
       chargesCalloutFee={business.charges_callout_fee ?? false}
       calloutFeeAmount={business.callout_fee_amount}
       availability={availability}
+      receptionistName={business.receptionist_name}
       initial={{
         tone,
         toneNotes: config?.tone_notes ?? "",

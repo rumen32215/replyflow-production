@@ -143,29 +143,33 @@ export function BusinessMemory({
     const t = setTimeout(async () => {
       const thisRequest = ++requestId.current;
       startSaving();
-      const cleanedFaqs = faqs.filter((f) => f.question.trim() && f.answer.trim());
-      const [businessResult, faqResult] = await Promise.all([
-        supabase
-          .from("businesses")
-          .update({
-            business_name: businessName.trim() || initial.businessName,
-            phone: phone.trim(),
-            business_description: description.trim() || null,
-            services,
-            service_areas: serviceAreas,
-            offers_emergency_callouts: offersEmergency,
-            charges_callout_fee: chargesCalloutFee,
-            callout_fee_amount: chargesCalloutFee ? calloutFeeAmount.trim() || null : null,
-            business_knowledge: knowledge,
-          })
-          .eq("id", businessId),
-        supabase
-          .from("ai_configurations")
-          .upsert({ business_id: businessId, faqs: cleanedFaqs }, { onConflict: "business_id" }),
-      ]);
-      if (thisRequest !== requestId.current) return;
-      if (businessResult.error || faqResult.error) softError();
-      else acknowledge(ackRef.current);
+      try {
+        const cleanedFaqs = faqs.filter((f) => f.question.trim() && f.answer.trim());
+        const [businessResult, faqResult] = await Promise.all([
+          supabase
+            .from("businesses")
+            .update({
+              business_name: businessName.trim() || initial.businessName,
+              phone: phone.trim(),
+              business_description: description.trim() || null,
+              services,
+              service_areas: serviceAreas,
+              offers_emergency_callouts: offersEmergency,
+              charges_callout_fee: chargesCalloutFee,
+              callout_fee_amount: chargesCalloutFee ? calloutFeeAmount.trim() || null : null,
+              business_knowledge: knowledge,
+            })
+            .eq("id", businessId),
+          supabase
+            .from("ai_configurations")
+            .upsert({ business_id: businessId, faqs: cleanedFaqs }, { onConflict: "business_id" }),
+        ]);
+        if (thisRequest !== requestId.current) return;
+        if (businessResult.error || faqResult.error) softError();
+        else acknowledge(ackRef.current);
+      } catch {
+        if (thisRequest === requestId.current) softError();
+      }
     }, 800);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps

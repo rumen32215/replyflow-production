@@ -49,10 +49,14 @@ export function FastLane({ businessId, waitingCount, diaryLine, initialAvailabil
     const t = setTimeout(async () => {
       const thisRequest = ++requestId.current;
       startSaving();
-      const { error } = await supabase.from("businesses").update({ availability }).eq("id", businessId);
-      if (thisRequest !== requestId.current) return;
-      if (error) softError();
-      else acknowledge(ACK.diary);
+      try {
+        const { error } = await supabase.from("businesses").update({ availability }).eq("id", businessId);
+        if (thisRequest !== requestId.current) return;
+        if (error) softError();
+        else acknowledge(ACK.diary);
+      } catch {
+        if (thisRequest === requestId.current) softError();
+      }
     }, 500);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -110,7 +114,7 @@ export function FastLane({ businessId, waitingCount, diaryLine, initialAvailabil
           <TileLabel label="Diary" detail={diaryLine} />
         </Tile>
         <Tile href="/dashboard/receptionist" icon={<Headset className="h-4 w-4" />}>
-          <TileLabel label="Teach her" detail="Tone, rules, what to say" />
+          <TileLabel label="Teach me" detail="Tone, rules, what to say" />
         </Tile>
       </div>
 
@@ -124,7 +128,7 @@ export function FastLane({ businessId, waitingCount, diaryLine, initialAvailabil
             <BookOpen className="h-4 w-4" />
           </div>
           <div className="min-w-0 flex-1">
-            <p className="text-[13.5px] font-bold text-blue-950">Everything she knows</p>
+            <p className="text-[13.5px] font-bold text-blue-950">Everything I know</p>
             <p className="mt-0.5 truncate text-[11.5px] text-blue-700/70">
               Services, pricing, guarantees, and more
             </p>

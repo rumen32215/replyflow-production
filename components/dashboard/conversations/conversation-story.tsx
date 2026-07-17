@@ -245,19 +245,32 @@ export function ConversationStory({
             </div>
           </Reveal>
         ))}
-        {job && job.status !== "cancelled" && (
+        {job && (
           <Reveal index={story.length}>
             <div className="flex items-center gap-2.5 text-[13px]">
               <span
                 className={cn(
                   "flex h-4 w-4 items-center justify-center rounded-full",
-                  isDraft ? "bg-amber-100 text-amber-700" : "bg-success text-success-foreground"
+                  isDraft
+                    ? "bg-amber-100 text-amber-700"
+                    : job.status === "cancelled"
+                      ? "bg-muted text-muted-foreground"
+                      : "bg-success text-success-foreground"
                 )}
               >
                 <Briefcase className="h-2.5 w-2.5" strokeWidth={3} />
               </span>
-              <span className={cn(isDraft ? "font-semibold text-amber-700" : "text-muted-foreground")}>
-                {isDraft ? `Draft ready for your review — ${job.job_title}` : `Job booked — ${job.job_title}`}
+              <span
+                className={cn(
+                  isDraft ? "font-semibold text-amber-700" : "text-muted-foreground",
+                  job.status === "cancelled" && "line-through"
+                )}
+              >
+                {isDraft
+                  ? `Draft ready for your review — ${job.job_title}`
+                  : job.status === "cancelled"
+                    ? `Draft rejected — ${job.job_title}`
+                    : `Job booked — ${job.job_title}`}
               </span>
             </div>
           </Reveal>
@@ -274,11 +287,20 @@ export function ConversationStory({
           <Phone className="h-3.5 w-3.5" />
           Call customer
         </motion.a>
-        {!job && (
+        {(!job || job.status === "cancelled") && (
           <motion.button
             {...press}
             type="button"
-            onClick={() => setShowJobForm((v) => !v)}
+            onClick={() => {
+              // A rejected draft never blocks a fresh one — reset the
+              // form back to sensible defaults rather than reopening
+              // whatever was last typed into the rejected draft.
+              setJobTitle(`Enquiry from ${customerName || customerPhone}`);
+              setNotes(latestCustomerMessage ?? "");
+              setScheduledDate(suggestedSlotDate ?? "");
+              setEditingDraft(false);
+              setShowJobForm((v) => !v);
+            }}
             aria-pressed={showJobForm}
             className={cn(
               "flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-[12.5px] font-semibold shadow-sm",

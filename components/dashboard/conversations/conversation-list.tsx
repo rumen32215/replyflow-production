@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { motion } from "framer-motion";
-import { Headset, Sparkles, GraduationCap } from "lucide-react";
+import { Headset, Sparkles, GraduationCap, Briefcase } from "lucide-react";
 import { Reveal, press } from "@/components/shared/motion";
 import { groupForStatus, statusLabel, GROUP_ORDER, GROUP_LABELS, type ConversationGroup } from "@/lib/conversations";
 import { minutesSince, formatWaitingTime } from "@/lib/dashboard-signals";
@@ -47,12 +47,15 @@ export function ConversationList({
   conversations,
   topGap = null,
   learned = [],
+  draftConversationIds = [],
 }: {
   conversations: ConversationListItem[];
   topGap?: string | null;
   learned?: readonly string[];
+  draftConversationIds?: readonly string[];
 }) {
   const pathname = usePathname();
+  const draftIds = new Set(draftConversationIds);
 
   if (conversations.length === 0) {
     // Never "No conversations." — celebrate the calm and make quiet
@@ -124,7 +127,12 @@ export function ConversationList({
 
   const groups = GROUP_ORDER.map((group) => ({
     group,
-    items: conversations.filter((c) => groupForStatus(c.status) === group),
+    // A draft awaiting approval is an orthogonal signal, not its own
+    // lifecycle stage — surfaced as a badge and pulled to the top
+    // within its existing group, never a 5th group of its own.
+    items: conversations
+      .filter((c) => groupForStatus(c.status) === group)
+      .sort((a, b) => Number(draftIds.has(b.id)) - Number(draftIds.has(a.id))),
   })).filter((g) => g.items.length > 0);
 
   let revealIndex = 0;
@@ -178,16 +186,24 @@ export function ConversationList({
                           <p className="truncate text-[12.5px] text-muted-foreground">
                             {c.last_message_preview || "New enquiry"}
                           </p>
-                          {/* Status */}
-                          <span
-                            className={cn(
-                              "flex shrink-0 items-center gap-1.5 rounded-full border px-2 py-0.5 text-[10.5px] font-semibold",
-                              style.chip
+                          <div className="flex shrink-0 items-center gap-1.5">
+                            {draftIds.has(c.id) && (
+                              <span className="flex items-center gap-1 rounded-full border border-amber-300 bg-amber-100 px-2 py-0.5 text-[10.5px] font-semibold text-amber-800">
+                                <Briefcase className="h-2.5 w-2.5" strokeWidth={3} />
+                                Draft ready
+                              </span>
                             )}
-                          >
-                            <span className={cn("h-1.5 w-1.5 rounded-full", style.dot)} />
-                            {statusLabel(c.status)}
-                          </span>
+                            {/* Status */}
+                            <span
+                              className={cn(
+                                "flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[10.5px] font-semibold",
+                                style.chip
+                              )}
+                            >
+                              <span className={cn("h-1.5 w-1.5 rounded-full", style.dot)} />
+                              {statusLabel(c.status)}
+                            </span>
+                          </div>
                         </div>
                       </motion.div>
                     </Link>

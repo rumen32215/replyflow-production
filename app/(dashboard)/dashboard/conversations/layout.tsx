@@ -14,15 +14,18 @@ export default async function ConversationsLayout({ children }: { children: Reac
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const { data: business } = await supabase
+  const { data: business, error: businessError } = await supabase
     .from("businesses")
     .select(
       "id, business_description, services, service_areas, business_knowledge, availability, opening_time, closing_time, whatsapp_connected"
     )
     .eq("owner_id", user.id)
     .maybeSingle();
+  // A real query error is not "no business yet" — see the identical
+  // fix and explanation in dashboard/receptionist/page.tsx.
+  if (businessError) throw new Error(`Failed to load business: ${businessError.message}`);
 
-  const [{ data: conversations }, { data: config }] = business
+  const [{ data: conversations }, { data: config }, { data: draftJobs }] = business
     ? await Promise.all([
         supabase
           .from("conversations")
@@ -34,8 +37,16 @@ export default async function ConversationsLayout({ children }: { children: Reac
           .select("faqs, system_prompt, business_rules, escalation_rules")
           .eq("business_id", business.id)
           .maybeSingle(),
+        // Which conversations have a booking waiting on the owner's
+        // decision — an orthogonal signal to conversation status, so
+        // the list can surface it without a 5th status group.
+        supabase.from("jobs").select("conversation_id").eq("business_id", business.id).eq("status", "draft"),
       ])
-    : [{ data: [] }, { data: null }];
+    : [{ data: [] }, { data: null }, { data: [] }];
+
+  const draftConversationIds = (draftJobs ?? [])
+    .map((j) => j.conversation_id)
+    .filter((id): id is string => Boolean(id));
 
   // Oldest waiting conversation — real data, used both for the Brain's
   // `thoughts.watching` and (previously) the standalone topGap fetch
@@ -81,6 +92,7 @@ export default async function ConversationsLayout({ children }: { children: Reac
       conversations={conversations ?? []}
       topGap={brain?.gaps[0]?.label ?? null}
       learned={brain ? brain.thoughts.confidentAbout.slice(0, 3).map((t) => t.label) : []}
+      draftConversationIds={draftConversationIds}
     >
       {children}
     </ConversationsShell>

@@ -126,6 +126,21 @@ export function PreparingReceptionist() {
         style={{ background: "radial-gradient(circle, rgba(34,197,94,0.10), transparent 60%)" }}
       />
 
+      {/* The dashboard's light theme arrives as a deliberate scene
+       * change, not a jarring reload — this fades toward it during
+       * the same beat the "ready" moment already holds for, so the
+       * cut from this dark stage to the light dashboard feels like
+       * one continuous handoff. */}
+      {ready && (
+        <motion.div
+          aria-hidden
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: READY_HOLD_MS / 1000, ease: EASE }}
+          className="pointer-events-none absolute inset-0 z-10 bg-background"
+        />
+      )}
+
       <div className="relative flex h-full flex-col items-center justify-center px-6 text-center">
         <AnimatePresence mode="wait">
           {!ready && !failed && (

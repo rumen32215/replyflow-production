@@ -102,26 +102,26 @@ function timeLabel(iso: string | null): string | null {
   return new Date(iso).toLocaleTimeString("en-GB", { hour: "numeric", minute: "2-digit" });
 }
 
-export function RightNowCard({ job, allCaughtUp }: { job: RightNowJob | null; allCaughtUp: boolean }) {
+/** Internal — used only inside `TodayCard` below, never rendered on
+ * its own (that would put back the extra bordered card this merge is
+ * removing). */
+function RightNowSection({ job, allCaughtUp }: { job: RightNowJob | null; allCaughtUp: boolean }) {
   if (!job) {
     if (!allCaughtUp) return null;
     return (
-      <SettleCard delay={0.05} className="rounded-2xl border border-border bg-card p-5 shadow-sm">
+      <div>
         <p className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground">Right now</p>
         <p className="mt-2 text-[17px] font-bold tracking-tight">You&apos;re all caught up.</p>
         <p className="mt-1 text-[13.5px] leading-relaxed text-muted-foreground">
           Nothing needs you at the moment — I&apos;ll bring anything new straight here.
         </p>
-      </SettleCard>
+      </div>
     );
   }
 
   const time = timeLabel(job.scheduledFor);
   return (
-    <SettleCard
-      delay={0.05}
-      className="relative overflow-hidden rounded-2xl border border-success/25 bg-card p-5 shadow-md"
-    >
+    <div className="relative overflow-hidden">
       <div
         aria-hidden
         className="pointer-events-none absolute inset-0"
@@ -141,7 +141,7 @@ export function RightNowCard({ job, allCaughtUp }: { job: RightNowJob | null; al
           {job.notes}
         </p>
       )}
-    </SettleCard>
+    </div>
   );
 }
 
@@ -186,68 +186,96 @@ export function NeedsYou({ items }: { items: NeedsYouItem[] }) {
   );
 }
 
-/* ---------------------------------- Up Next ---------------------------------- */
+/* ------------------------------------ Today ----------------------------------- */
 
-export function UpNext({ job }: { job: RightNowJob | null }) {
-  if (!job) return null;
-  const date = job.scheduledFor ? new Date(job.scheduledFor) : null;
-  return (
-    <SettleCard delay={0.14}>
-      <h2 className="mb-2.5 text-[15px] font-bold tracking-tight">Up next</h2>
-      <div className="flex items-center gap-3 rounded-2xl border border-border bg-card p-4 shadow-sm">
-        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-success/10 text-success">
-          <CalendarDays className="h-4 w-4" />
-        </div>
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-[14px] font-semibold">{job.jobTitle}</p>
-          <p className="truncate text-[12.5px] text-muted-foreground">
-            {job.customerName}
-            {date && (
-              <>
-                {" · "}
-                {date.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" })}
-                {" · "}
-                {date.toLocaleTimeString("en-GB", { hour: "numeric", minute: "2-digit" })}
-              </>
-            )}
-          </p>
-        </div>
-      </div>
-    </SettleCard>
-  );
-}
-
-/* ------------------------------ Today's Progress ----------------------------- */
-
-export function TodaysProgress({
+/**
+ * Right Now, Up Next, and Today's Progress used to be three
+ * separately-bordered cards stacked on top of each other — all three
+ * are really one concern (today's job schedule), so they now share
+ * one card, divided internally, the same pattern `HomeGreeting` and
+ * `FastLane` already share above. `NeedsYou` (urgent, actionable) and
+ * `WhatsOnMyMind` (passive reflection) stay separate on purpose —
+ * folding either in here would cram unrelated concerns together.
+ * Renders nothing at all if none of the three sections have anything
+ * to say (never an empty card).
+ */
+export function TodayCard({
+  rightNow,
+  allCaughtUp,
+  upNext,
   completed,
   waiting,
   remaining,
 }: {
+  rightNow: RightNowJob | null;
+  allCaughtUp: boolean;
+  upNext: RightNowJob | null;
   completed: number;
   waiting: number;
   remaining: number;
 }) {
-  if (completed === 0 && waiting === 0 && remaining === 0) return null;
-  const rows = [
+  const showRightNow = Boolean(rightNow) || allCaughtUp;
+  const progressRows = [
     { icon: <Check className="h-3.5 w-3.5 text-success" />, label: `${completed} ${completed === 1 ? "job" : "jobs"} completed`, show: completed > 0 },
     { icon: <MessageCircle className="h-3.5 w-3.5 text-amber-500" />, label: `${waiting} waiting for you`, show: waiting > 0 },
     { icon: <CalendarDays className="h-3.5 w-3.5 text-success" />, label: `${remaining} remaining today`, show: remaining > 0 },
   ].filter((r) => r.show);
+  const showProgress = progressRows.length > 0;
+
+  if (!showRightNow && !upNext && !showProgress) return null;
+
+  const upNextDate = upNext?.scheduledFor ? new Date(upNext.scheduledFor) : null;
 
   return (
-    <SettleCard delay={0.18}>
-      <h2 className="mb-2.5 text-[15px] font-bold tracking-tight">Today&apos;s progress</h2>
-      <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
-        <div className="space-y-2.5">
-          {rows.map((row) => (
-            <div key={row.label} className="flex items-center gap-2.5 text-[13.5px]">
-              {row.icon}
-              <span>{row.label}</span>
+    <SettleCard delay={0.06} className="rounded-2xl border border-border bg-card p-5 shadow-sm">
+      {showRightNow && <RightNowSection job={rightNow} allCaughtUp={allCaughtUp} />}
+
+      {upNext && (
+        <>
+          {showRightNow && <div className="my-4 h-px bg-border/70" />}
+          <div>
+            <h2 className="mb-2 text-[11px] font-bold uppercase tracking-widest text-muted-foreground">Up next</h2>
+            <div className="flex items-center gap-3 rounded-xl bg-muted/30 p-3">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-success/10 text-success">
+                <CalendarDays className="h-4 w-4" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-[14px] font-semibold">{upNext.jobTitle}</p>
+                <p className="truncate text-[12.5px] text-muted-foreground">
+                  {upNext.customerName}
+                  {upNextDate && (
+                    <>
+                      {" · "}
+                      {upNextDate.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" })}
+                      {" · "}
+                      {upNextDate.toLocaleTimeString("en-GB", { hour: "numeric", minute: "2-digit" })}
+                    </>
+                  )}
+                </p>
+              </div>
             </div>
-          ))}
-        </div>
-      </div>
+          </div>
+        </>
+      )}
+
+      {showProgress && (
+        <>
+          {(showRightNow || upNext) && <div className="my-4 h-px bg-border/70" />}
+          <div>
+            <h2 className="mb-2 text-[11px] font-bold uppercase tracking-widest text-muted-foreground">
+              Today&apos;s progress
+            </h2>
+            <div className="space-y-2.5">
+              {progressRows.map((row) => (
+                <div key={row.label} className="flex items-center gap-2.5 text-[13.5px]">
+                  {row.icon}
+                  <span>{row.label}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
     </SettleCard>
   );
 }

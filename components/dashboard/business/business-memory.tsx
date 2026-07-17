@@ -309,7 +309,12 @@ export function BusinessMemory({
       title: "Your business",
       icon: User,
       iconClass: "bg-slate-100 text-slate-600",
-      question: promptFor("identity"),
+      // Onboarding already collected the business name — re-asking it
+      // here would feel like repetition. Once it's known, only the
+      // genuinely-unanswered part (the description) gets asked.
+      question: businessName.trim()
+        ? `I know you're called ${businessName.trim()} — how would you describe what you do?`
+        : promptFor("identity"),
       known: Boolean(description.trim()),
       summary: businessName.trim() || null,
       content: (

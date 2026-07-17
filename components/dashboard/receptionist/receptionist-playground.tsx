@@ -138,15 +138,30 @@ export function ReceptionistPlayground({
   const nextTopicId = (brain.gaps.find((g) => g.domain === "receptionist")?.id as TopicId | undefined) ?? null;
   const [open, setOpen] = useState<TopicId | null>(null);
   const prevNextTopicId = useRef<TopicId | null | undefined>(undefined);
+  // Typing the very first character into a topic's own-words field
+  // flips that topic from "not taught" to "taught" mid-keystroke,
+  // which used to auto-collapse the card the owner was actively
+  // typing in — unmounting the field and losing focus/cursor after
+  // one character. While a field is focused, defer the advance;
+  // catch up on blur instead, once the owner has actually finished.
+  const typingRef = useRef(false);
   useEffect(() => {
     if (prevNextTopicId.current === undefined) {
       setOpen(nextTopicId);
-    } else if (nextTopicId !== prevNextTopicId.current) {
+    } else if (nextTopicId !== prevNextTopicId.current && !typingRef.current) {
       setOpen((current) => (current === prevNextTopicId.current ? nextTopicId : current));
     }
     prevNextTopicId.current = nextTopicId;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [nextTopicId]);
+
+  function handleNotesFocus() {
+    typingRef.current = true;
+  }
+  function handleNotesBlur() {
+    typingRef.current = false;
+    setOpen((current) => (nextTopicId && current !== nextTopicId ? nextTopicId : current));
+  }
 
   const scenario = scenarios.find((s) => s.id === scenarioId) ?? scenarios[0]!;
   const { turns, liveReply } = buildPreviewConversation(
@@ -364,6 +379,8 @@ export function ReceptionistPlayground({
               label="Add a habit that's not listed above"
               placeholder="What should I always do that isn't covered by those options?"
               example={'e.g. "Always ask if this has happened before."'}
+              onFocus={handleNotesFocus}
+              onBlur={handleNotesBlur}
             />
           </TeachingCard>
 
@@ -388,6 +405,8 @@ export function ReceptionistPlayground({
               label="Add a rule that's not listed above"
               placeholder="What's a hard rule I should never break?"
               example={'e.g. "Never agree to same-day emergency call-outs after 6pm."'}
+              onFocus={handleNotesFocus}
+              onBlur={handleNotesBlur}
             />
           </TeachingCard>
 
@@ -419,6 +438,8 @@ export function ReceptionistPlayground({
               label="Add a situation that's not listed above"
               placeholder="When else should I stop and bring you in personally?"
               example={'e.g. "Come get me if someone mentions an insurance claim."'}
+              onFocus={handleNotesFocus}
+              onBlur={handleNotesBlur}
             />
           </TeachingCard>
         </div>
@@ -510,12 +531,16 @@ function OwnWordsInput({
   label,
   placeholder,
   example,
+  onFocus,
+  onBlur,
 }: {
   value: string;
   onChange: (value: string) => void;
   label: string;
   placeholder: string;
   example: string;
+  onFocus?: () => void;
+  onBlur?: () => void;
 }) {
   return (
     <div className="space-y-1.5 pt-0.5">
@@ -526,6 +551,8 @@ function OwnWordsInput({
       <Textarea
         value={value}
         onChange={(e) => onChange(e.target.value)}
+        onFocus={onFocus}
+        onBlur={onBlur}
         placeholder={placeholder}
         rows={2}
         className="min-h-[64px] text-[13px]"

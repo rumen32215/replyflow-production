@@ -23,13 +23,18 @@ export default async function ReceptionistPage({
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const { data: business } = await supabase
+  const { data: business, error: businessError } = await supabase
     .from("businesses")
     .select(
       "id, business_name, trade, offers_emergency_callouts, charges_callout_fee, callout_fee_amount, greeting_style, availability, opening_time, closing_time, receptionist_name"
     )
     .eq("owner_id", user.id)
     .maybeSingle();
+  // A real query error (e.g. a stale PostgREST schema cache right
+  // after a migration) is not "onboarding incomplete" — redirecting
+  // to /welcome would silently bounce an existing owner in a loop
+  // back to Front Desk. Surface it instead of guessing.
+  if (businessError) throw new Error(`Failed to load business: ${businessError.message}`);
   if (!business) redirect("/welcome");
 
   const { data: config } = await supabase

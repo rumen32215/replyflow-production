@@ -20,12 +20,16 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
   if (!user) redirect("/login");
 
-  const { data: business } = await supabase
+  const { data: business, error: businessError } = await supabase
     .from("businesses")
     .select("business_name, logo_url, onboarding_completed")
     .eq("owner_id", user.id)
     .maybeSingle();
-
+  // A real query error is not "onboarding incomplete" — this guards
+  // every dashboard page, so conflating the two here would silently
+  // bounce the whole app into the onboarding wizard on any transient
+  // failure. See the identical fix in dashboard/receptionist/page.tsx.
+  if (businessError) throw new Error(`Failed to load business: ${businessError.message}`);
   if (!business?.onboarding_completed) redirect("/welcome");
 
   return (

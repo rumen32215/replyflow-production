@@ -17,15 +17,18 @@ export default async function SettingsPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const { data: business } = await supabase
+  const { data: business, error: businessError } = await supabase
     .from("businesses")
     .select("id, business_name, notify_new_enquiry, notify_daily_summary, logo_url, receptionist_name")
     .eq("owner_id", user.id)
     .maybeSingle();
-if (!business) {
-  redirect("/welcome");
-}
-  
+  // A real query error is not "onboarding incomplete" — see the
+  // identical fix and explanation in dashboard/receptionist/page.tsx.
+  if (businessError) throw new Error(`Failed to load business: ${businessError.message}`);
+  if (!business) {
+    redirect("/welcome");
+  }
+
   return (
     <div className="mx-auto max-w-2xl space-y-6">
       <SettleCard>

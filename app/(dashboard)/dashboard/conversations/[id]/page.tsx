@@ -32,17 +32,22 @@ export default async function ConversationDetailPage({ params }: { params: { id:
 
   if (!conversation) notFound();
 
-  const [{ data: messages }, { data: existingJob }, { data: business }] = await Promise.all([
+  const [{ data: messages }, { data: existingJobs }, { data: business }] = await Promise.all([
     supabase
       .from("messages")
       .select("id, direction, body, message_type, created_at")
       .eq("conversation_id", conversation.id)
       .order("created_at", { ascending: true }),
+    // A rejected draft can be followed by a fresh one on the same
+    // conversation — most-recent-first + limit(1) so this never
+    // breaks once more than one job row exists here (maybeSingle()
+    // errors on ambiguous multiple rows).
     supabase
       .from("jobs")
       .select("id, job_title, scheduled_for, status, notes")
       .eq("conversation_id", conversation.id)
-      .maybeSingle(),
+      .order("created_at", { ascending: false })
+      .limit(1),
     supabase
       .from("businesses")
       .select("business_name, availability, opening_time, closing_time")
@@ -104,7 +109,7 @@ export default async function ConversationDetailPage({ params }: { params: { id:
         customerPhone={conversation.customer_phone}
         messageCount={allMessages.length}
         photoCount={photoCount}
-        existingJob={existingJob ?? null}
+        existingJob={existingJobs?.[0] ?? null}
         latestCustomerMessage={latestCustomerMessage}
         suggestedSlotDate={suggestedSlot ? toDateString(suggestedSlot.date) : null}
         suggestedSlotLabel={suggestedSlot?.label ?? null}

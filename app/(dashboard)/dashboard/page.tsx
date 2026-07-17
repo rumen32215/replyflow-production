@@ -3,10 +3,8 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import {
   HomeGreeting,
-  RightNowCard,
+  TodayCard,
   NeedsYou,
-  UpNext,
-  TodaysProgress,
   ReadyStatus,
   SetupProgress,
   type NeedsYouItem,
@@ -246,11 +244,16 @@ export default async function HomePage() {
         <ReadyStatus state={{ whatsappConnected }} />
       ) : (
         <>
-          <WhatsOnMyMind thoughts={brain.thoughts} />
-          <RightNowCard job={rightNow} allCaughtUp={needsYou.length === 0} />
           <NeedsYou items={needsYou} />
-          <UpNext job={upNext} />
-          <TodaysProgress completed={completedToday} waiting={needsYou.length} remaining={remainingToday} />
+          <TodayCard
+            rightNow={rightNow}
+            allCaughtUp={needsYou.length === 0}
+            upNext={upNext}
+            completed={completedToday}
+            waiting={needsYou.length}
+            remaining={remainingToday}
+          />
+          <WhatsOnMyMind thoughts={brain.thoughts} />
         </>
       )}
     </div>

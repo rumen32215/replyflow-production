@@ -13,6 +13,7 @@ import {
   standingForDate,
   describeStanding,
   toDateString,
+  dayKeyForDate,
   type Availability,
   type DayKey,
 } from "@/lib/availability";
@@ -41,17 +42,22 @@ export function AvailabilityDiary({
 
   /* Quiet persistence — debounced, never a Save button. */
   const firstRender = useRef(true);
+  // Only the most recent save is allowed to update the acknowledgement
+  // UI — see the identical fix and explanation in receptionist-playground.tsx.
+  const requestId = useRef(0);
   useEffect(() => {
     if (firstRender.current) {
       firstRender.current = false;
       return;
     }
     const t = setTimeout(async () => {
+      const thisRequest = ++requestId.current;
       startSaving();
       const { error } = await supabase
         .from("businesses")
         .update({ availability })
         .eq("id", businessId);
+      if (thisRequest !== requestId.current) return;
       if (error) softError();
       else acknowledge(ACK.diary);
     }, 700);
@@ -113,31 +119,38 @@ export function AvailabilityDiary({
         </p>
       </SettleCard>
 
-      {/* Today & tomorrow — the two answers that matter most. */}
-      <SettleCard delay={0.05} className="grid grid-cols-2 gap-3">
-        {[
-          { label: "Today", standing: todayStanding },
-          { label: "Tomorrow", standing: tomorrowStanding },
-        ].map(({ label, standing }) => (
-          <div key={label} className="rounded-2xl border border-border bg-card p-4 shadow-sm">
-            <p className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground">{label}</p>
-            <p
-              className={cn(
-                "mt-1.5 text-[15px] font-bold tracking-tight",
-                standing.kind === "open" ? "text-foreground" : "text-muted-foreground"
-              )}
-            >
-              {describeStanding(standing)}
-            </p>
-            <p className="mt-0.5 text-[12px] text-muted-foreground">
-              {standing.kind === "open" ? "Taking bookings" : "No bookings offered"}
-            </p>
-          </div>
-        ))}
+      {/* Today leads — the one answer that actually matters right now. */}
+      <SettleCard
+        delay={0.05}
+        className="rounded-2xl border border-teal-200/60 bg-teal-50/40 p-5 shadow-sm"
+      >
+        <p className="text-[11px] font-bold uppercase tracking-widest text-teal-700/70">Today</p>
+        <p
+          className={cn(
+            "mt-1.5 text-[20px] font-extrabold tracking-tight",
+            todayStanding.kind === "open" ? "text-teal-950" : "text-muted-foreground"
+          )}
+        >
+          {describeStanding(todayStanding)}
+        </p>
+        <p className="mt-0.5 text-[12.5px] text-teal-800/60">
+          {todayStanding.kind === "open" ? "Taking bookings" : "No bookings offered"}
+        </p>
+      </SettleCard>
+
+      {/* Tomorrow is a glance, not a card of its own. */}
+      <SettleCard
+        delay={0.07}
+        className="flex items-center justify-between rounded-xl border border-border bg-muted/20 px-4 py-3"
+      >
+        <span className="text-[12.5px] font-medium text-muted-foreground">Tomorrow</span>
+        <span className={cn("text-[13px] font-semibold", tomorrowStanding.kind !== "open" && "text-muted-foreground")}>
+          {describeStanding(tomorrowStanding)}
+        </span>
       </SettleCard>
 
       {/* One honest shortcut for a hectic day. */}
-      <SettleCard delay={0.08}>
+      <SettleCard delay={0.09}>
         <motion.button
           {...press}
           type="button"
@@ -166,9 +179,20 @@ export function AvailabilityDiary({
         <div className="space-y-1">
           {DAY_KEYS.map((key) => {
             const day = availability.hours[key];
+            const isToday = key === dayKeyForDate(now);
             return (
-              <div key={key} className="flex items-center gap-3 rounded-xl px-2 py-2">
-                <span className="w-24 shrink-0 text-[13.5px] font-semibold">{DAY_LABELS[key]}</span>
+              <div
+                key={key}
+                className={cn(
+                  "flex items-center gap-3 rounded-xl px-2 py-2 transition-colors",
+                  isToday && "bg-teal-50/60 ring-1 ring-inset ring-teal-200/50",
+                  day.closed && !isToday && "opacity-60"
+                )}
+              >
+                <span className="flex w-24 shrink-0 items-center gap-1.5 text-[13.5px] font-semibold">
+                  {DAY_LABELS[key]}
+                  {isToday && <span className="h-1.5 w-1.5 rounded-full bg-teal-500" aria-hidden />}
+                </span>
                 <div className="flex min-w-0 flex-1 items-center justify-end gap-2">
                   <AnimatePresence mode="wait" initial={false}>
                     {day.closed ? (
@@ -270,14 +294,14 @@ export function AvailabilityDiary({
                   min={toDateString(new Date())}
                   onChange={(e) => setDayOffDate(e.target.value)}
                   aria-label="Date of day off"
-                  className="h-11 flex-1 rounded-xl border border-border bg-background px-3 text-[13.5px] outline-none focus:border-primary"
+                  className="h-11 flex-1 rounded-xl border border-border bg-background px-3 text-[13.5px] outline-none focus:border-teal-500"
                 />
                 <input
                   value={dayOffReason}
                   onChange={(e) => setDayOffReason(e.target.value)}
                   placeholder="Holiday"
                   aria-label="Reason"
-                  className="h-11 flex-1 rounded-xl border border-border bg-background px-3 text-[13.5px] outline-none focus:border-primary"
+                  className="h-11 flex-1 rounded-xl border border-border bg-background px-3 text-[13.5px] outline-none focus:border-teal-500"
                 />
               </div>
               <div className="flex gap-2">
@@ -286,7 +310,7 @@ export function AvailabilityDiary({
                   type="button"
                   onClick={addDayOff}
                   disabled={!dayOffDate}
-                  className="rounded-xl bg-primary px-4 py-2.5 text-[13px] font-semibold text-primary-foreground disabled:opacity-50"
+                  className="rounded-xl bg-teal-600 px-4 py-2.5 text-[13px] font-semibold text-white disabled:opacity-50"
                 >
                   Add day off
                 </motion.button>
@@ -309,7 +333,7 @@ export function AvailabilityDiary({
               exit={{ opacity: 0 }}
               type="button"
               onClick={() => setAddingDayOff(true)}
-              className="flex items-center gap-1.5 rounded-xl border border-dashed border-border px-4 py-2.5 text-[13px] font-semibold text-muted-foreground transition-colors hover:border-primary hover:text-primary"
+              className="flex items-center gap-1.5 rounded-xl border border-dashed border-border px-4 py-2.5 text-[13px] font-semibold text-muted-foreground transition-colors hover:border-teal-400 hover:text-teal-700"
             >
               <Plus className="h-3.5 w-3.5" />
               Add a day off
@@ -318,11 +342,12 @@ export function AvailabilityDiary({
         </AnimatePresence>
       </SettleCard>
 
-      {/* Booking rules. */}
+      {/* Booking rules — what actually protects a tradesperson's time,
+       * not just two toggles. */}
       <SettleCard delay={0.2} className="rounded-2xl border border-border bg-card p-5 shadow-sm">
         <h2 className="text-[15px] font-bold tracking-tight">Booking rules</h2>
-        <p className="mb-4 mt-0.5 text-[12.5px] text-muted-foreground">How I protect your time.</p>
-        <div className="space-y-1">
+        <p className="mb-3 mt-0.5 text-[12.5px] text-muted-foreground">How I protect your time.</p>
+        <div className="divide-y divide-border">
           <RuleRow
             label="Same-day bookings"
             description="Let customers book for today"
@@ -335,6 +360,101 @@ export function AvailabilityDiary({
             checked={availability.rules.emergency}
             onChange={(v) => updateRules({ emergency: v })}
           />
+          <RuleRow
+            label="Only emergency jobs at weekends"
+            description="Keep Saturday and Sunday for urgent work only"
+            checked={availability.rules.weekendEmergencyOnly}
+            onChange={(v) => updateRules({ weekendEmergencyOnly: v })}
+          />
+
+          <ChipRow
+            label="How much notice do I need?"
+            description="I won't offer a slot sooner than this"
+            options={[
+              { label: "None", value: 0 },
+              { label: "2 hours", value: 2 },
+              { label: "4 hours", value: 4 },
+              { label: "24 hours", value: 24 },
+            ]}
+            value={availability.rules.minNoticeHours}
+            onChange={(v) => updateRules({ minNoticeHours: v })}
+          />
+
+          <ChipRow
+            label="Most jobs in one day"
+            description="I'll say the day's full once we reach this"
+            options={[
+              { label: "No limit", value: null },
+              { label: "2", value: 2 },
+              { label: "4", value: 4 },
+              { label: "6", value: 6 },
+              { label: "8", value: 8 },
+            ]}
+            value={availability.rules.maxJobsPerDay}
+            onChange={(v) => updateRules({ maxJobsPerDay: v })}
+          />
+
+          <ChipRow
+            label="Travel buffer between jobs"
+            description="Time I'll always leave to get to the next one"
+            options={[
+              { label: "None", value: 0 },
+              { label: "15 min", value: 15 },
+              { label: "30 min", value: 30 },
+              { label: "45 min", value: 45 },
+              { label: "60 min", value: 60 },
+            ]}
+            value={availability.rules.travelBufferMinutes}
+            onChange={(v) => updateRules({ travelBufferMinutes: v })}
+          />
+
+          <ChipRow
+            label="Working radius"
+            description="How far I'll offer to travel from base"
+            options={[
+              { label: "5 miles", value: 5 },
+              { label: "10 miles", value: 10 },
+              { label: "15 miles", value: 15 },
+              { label: "20 miles", value: 20 },
+              { label: "No limit", value: null },
+            ]}
+            value={availability.rules.workingRadiusMiles}
+            onChange={(v) => updateRules({ workingRadiusMiles: v })}
+          />
+
+          <div className="py-2.5">
+            <RuleRow
+              label="Block out a lunch break"
+              description="I won't offer this window to customers"
+              checked={availability.rules.lunchBreak.enabled}
+              onChange={(v) => updateRules({ lunchBreak: { ...availability.rules.lunchBreak, enabled: v } })}
+            />
+            <AnimatePresence initial={false}>
+              {availability.rules.lunchBreak.enabled && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: "auto" }}
+                  exit={{ opacity: 0, height: 0 }}
+                  transition={{ duration: 0.28, ease: EASE }}
+                  className="overflow-hidden"
+                >
+                  <div className="flex items-center gap-2 pb-1 pt-2">
+                    <TimeInput
+                      value={availability.rules.lunchBreak.start}
+                      onChange={(v) => updateRules({ lunchBreak: { ...availability.rules.lunchBreak, start: v } })}
+                      label="Lunch break start"
+                    />
+                    <span className="text-[12px] text-muted-foreground">to</span>
+                    <TimeInput
+                      value={availability.rules.lunchBreak.end}
+                      onChange={(v) => updateRules({ lunchBreak: { ...availability.rules.lunchBreak, end: v } })}
+                      label="Lunch break end"
+                    />
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
         </div>
       </SettleCard>
 
@@ -357,7 +477,7 @@ function TimeInput({ value, onChange, label }: { value: string; onChange: (v: st
       value={value}
       onChange={(e) => onChange(e.target.value)}
       aria-label={label}
-      className="h-9 rounded-lg border border-border bg-background px-2 text-[12.5px] font-medium outline-none focus:border-primary"
+      className="h-9 rounded-lg border border-border bg-background px-2 text-[12.5px] font-medium outline-none focus:border-teal-500"
     />
   );
 }
@@ -374,12 +494,58 @@ function RuleRow({
   onChange: (v: boolean) => void;
 }) {
   return (
-    <div className="flex items-center justify-between rounded-xl px-2 py-2.5">
+    <div className="flex items-center justify-between px-2 py-2.5">
       <div>
         <p className="text-[13.5px] font-semibold">{label}</p>
         <p className="text-[12px] text-muted-foreground">{description}</p>
       </div>
       <Switch checked={checked} onCheckedChange={onChange} aria-label={label} />
+    </div>
+  );
+}
+
+/** A rule that's a choice, not a toggle — same divided-list rhythm as
+ * the switches above, chips instead of a number input (Diary V2: keep
+ * it conversational, not a form field). */
+function ChipRow<T extends string | number | null>({
+  label,
+  description,
+  options,
+  value,
+  onChange,
+}: {
+  label: string;
+  description: string;
+  options: { label: string; value: T }[];
+  value: T;
+  onChange: (value: T) => void;
+}) {
+  return (
+    <div className="px-2 py-2.5">
+      <p className="text-[13.5px] font-semibold">{label}</p>
+      <p className="text-[12px] text-muted-foreground">{description}</p>
+      <div className="mt-2 flex flex-wrap gap-1.5">
+        {options.map((option) => {
+          const on = option.value === value;
+          return (
+            <motion.button
+              key={String(option.value)}
+              {...press}
+              type="button"
+              aria-pressed={on}
+              onClick={() => onChange(option.value)}
+              className={cn(
+                "rounded-full px-3 py-1.5 text-[12px] transition-all",
+                on
+                  ? "bg-teal-600 font-semibold text-white shadow-sm shadow-teal-600/25"
+                  : "border border-border bg-card font-medium text-muted-foreground hover:text-foreground"
+              )}
+            >
+              {option.label}
+            </motion.button>
+          );
+        })}
+      </div>
     </div>
   );
 }

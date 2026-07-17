@@ -33,6 +33,12 @@ export interface BookingRules {
   emergency: boolean;
   minNoticeHours: number;
   maxJobsPerDay: number | null;
+  /** What actually protects a tradesperson's time beyond same-day and
+   * emergency toggles (Diary V2). */
+  lunchBreak: { enabled: boolean; start: string; end: string };
+  travelBufferMinutes: number;
+  weekendEmergencyOnly: boolean;
+  workingRadiusMiles: number | null;
 }
 
 export interface Availability {
@@ -56,7 +62,16 @@ export function defaultAvailability(opening = "08:00", closing = "17:30"): Avail
     },
     daysOff: [],
     fullyBooked: [],
-    rules: { sameDay: true, emergency: true, minNoticeHours: 2, maxJobsPerDay: null },
+    rules: {
+      sameDay: true,
+      emergency: true,
+      minNoticeHours: 2,
+      maxJobsPerDay: null,
+      lunchBreak: { enabled: false, start: "12:00", end: "13:00" },
+      travelBufferMinutes: 0,
+      weekendEmergencyOnly: false,
+      workingRadiusMiles: null,
+    },
   };
 }
 

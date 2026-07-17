@@ -8,7 +8,6 @@ import {
   UpNext,
   TodaysProgress,
   ReadyStatus,
-  HerProfileLink,
   type NeedsYouItem,
   type RightNowJob,
 } from "@/components/dashboard/home/home-experience";
@@ -197,8 +196,6 @@ export default async function HomePage() {
           <TodaysProgress completed={completedToday} waiting={needsYou.length} remaining={remainingToday} />
         </>
       )}
-
-      <HerProfileLink line="Services, pricing, and everything I use when I reply." />
     </div>
   );
 }

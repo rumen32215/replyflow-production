@@ -2,7 +2,23 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Check, ChevronDown, Headset, Plus, X } from "lucide-react";
+import {
+  AlertTriangle,
+  Ban,
+  Check,
+  ChevronDown,
+  CreditCard,
+  DoorOpen,
+  HelpCircle,
+  MapPin,
+  Plus,
+  ShieldCheck,
+  Sparkles,
+  User,
+  Wrench,
+  X,
+  type LucideIcon,
+} from "lucide-react";
 import { SettleCard, GentleSwap, EASE, press } from "@/components/shared/motion";
 import { Acknowledgement, ACK, useAcknowledgement } from "@/components/shared/acknowledgement";
 import { PhonePreview } from "@/components/shared/phone-preview";
@@ -112,6 +128,9 @@ export function BusinessMemory({
   /* ------------------------- quiet persistence ------------------------- */
   const firstRender = useRef(true);
   const ackRef = useRef<string>(ACK.remember);
+  // Only the most recent save is allowed to update the acknowledgement
+  // UI — see the identical fix and explanation in receptionist-playground.tsx.
+  const requestId = useRef(0);
 
   useEffect(() => {
     if (firstRender.current) {
@@ -119,6 +138,7 @@ export function BusinessMemory({
       return;
     }
     const t = setTimeout(async () => {
+      const thisRequest = ++requestId.current;
       startSaving();
       const cleanedFaqs = faqs.filter((f) => f.question.trim() && f.answer.trim());
       const [businessResult, faqResult] = await Promise.all([
@@ -140,6 +160,7 @@ export function BusinessMemory({
           .from("ai_configurations")
           .upsert({ business_id: businessId, faqs: cleanedFaqs }, { onConflict: "business_id" }),
       ]);
+      if (thisRequest !== requestId.current) return;
       if (businessResult.error || faqResult.error) softError();
       else acknowledge(ackRef.current);
     }, 800);
@@ -182,6 +203,15 @@ export function BusinessMemory({
     [description, services, serviceAreas, knowledge, faqs]
   );
 
+  /** Confidence, not a bare number — colour communicates where she
+   * genuinely stands, not a generic blue bar for every value. */
+  const confidence =
+    score.percent >= 100
+      ? { label: "Complete", barClass: "bg-success", textClass: "text-success" }
+      : score.percent >= 50
+        ? { label: "Growing", barClass: "bg-indigo-600", textClass: "text-indigo-600" }
+        : { label: "Learning", barClass: "bg-slate-400", textClass: "text-slate-500" };
+
   // Proactive learning (One Thought Ahead): ReplyFlow notices what it
   // doesn't know yet and asks — the owner never has to think of it.
   const MISSING_TO_SECTION: Record<string, { section: SectionId; prompt: string }> = {
@@ -207,9 +237,15 @@ export function BusinessMemory({
 
   const activeFaqs = faqs.filter((f) => f.question.trim() && f.answer.trim());
 
+  /** Ten identical headset icons was the problem — each topic gets its
+   * own icon and tint so the eye can tell them apart without reading
+   * a single title (Business Knowledge should feel like a mind with
+   * many things in it, not one form repeated ten times). */
   const sections: {
     id: SectionId;
     title: string;
+    icon: LucideIcon;
+    iconClass: string;
     question: string;
     known: boolean;
     summary: string | null;
@@ -218,6 +254,8 @@ export function BusinessMemory({
     {
       id: "identity",
       title: "Your business",
+      icon: User,
+      iconClass: "bg-slate-100 text-slate-600",
       question: "What should I call your business?",
       known: Boolean(description.trim()),
       summary: businessName.trim() || null,
@@ -248,6 +286,8 @@ export function BusinessMemory({
     {
       id: "services",
       title: "Services",
+      icon: Wrench,
+      iconClass: "bg-blue-50 text-blue-600",
       question: "What kinds of jobs do you usually help people with?",
       known: services.length > 0,
       summary: summarise(services),
@@ -263,6 +303,8 @@ export function BusinessMemory({
     {
       id: "declined",
       title: "Jobs we don't take",
+      icon: Ban,
+      iconClass: "bg-rose-50 text-rose-600",
       question: "Are there any jobs you don't take on?",
       known: knowledge.jobsDeclined.length > 0,
       summary: summarise(knowledge.jobsDeclined),
@@ -283,6 +325,8 @@ export function BusinessMemory({
     {
       id: "areas",
       title: "Areas we cover",
+      icon: MapPin,
+      iconClass: "bg-teal-50 text-teal-600",
       question: "Where do you usually work?",
       known: serviceAreas.length > 0,
       summary: summarise(serviceAreas),
@@ -303,6 +347,8 @@ export function BusinessMemory({
     {
       id: "special",
       title: "What makes you special",
+      icon: Sparkles,
+      iconClass: "bg-violet-50 text-violet-600",
       question: "What makes your business different?",
       known: knowledge.personality.length > 0,
       summary: summarise(knowledge.personality),
@@ -318,6 +364,8 @@ export function BusinessMemory({
     {
       id: "payments",
       title: "Payment methods",
+      icon: CreditCard,
+      iconClass: "bg-emerald-50 text-emerald-600",
       question: "How can customers pay?",
       known: knowledge.paymentMethods.length > 0,
       summary: summarise(knowledge.paymentMethods),
@@ -333,6 +381,8 @@ export function BusinessMemory({
     {
       id: "guarantees",
       title: "Guarantees",
+      icon: ShieldCheck,
+      iconClass: "bg-indigo-50 text-indigo-600",
       question: "What do you promise your customers?",
       known: knowledge.guarantees.length > 0,
       summary: summarise(knowledge.guarantees),
@@ -348,6 +398,8 @@ export function BusinessMemory({
     {
       id: "emergency",
       title: "Emergency jobs",
+      icon: AlertTriangle,
+      iconClass: "bg-orange-50 text-orange-600",
       question: "How should I handle urgent enquiries?",
       known: true,
       summary: offersEmergency
@@ -403,6 +455,8 @@ export function BusinessMemory({
     {
       id: "faqs",
       title: "Common questions",
+      icon: HelpCircle,
+      iconClass: "bg-sky-50 text-sky-600",
       question: "What do customers often ask?",
       known: activeFaqs.length > 0,
       summary:
@@ -414,6 +468,8 @@ export function BusinessMemory({
     {
       id: "access",
       title: "Parking & access",
+      icon: DoorOpen,
+      iconClass: "bg-stone-100 text-stone-600",
       question: "Anything customers should know before you arrive?",
       known: Boolean(knowledge.parkingAccess.trim()),
       summary: knowledge.parkingAccess.trim() ? "Noted" : null,
@@ -455,10 +511,10 @@ export function BusinessMemory({
                 type="button"
                 onClick={() => setScenarioId(s.id)}
                 className={cn(
-                  "rounded-full border px-3 py-1.5 text-[11.5px] font-semibold transition-colors",
+                  "rounded-full px-3 py-1.5 text-[11.5px] font-semibold transition-all",
                   scenarioId === s.id
-                    ? "border-primary bg-accent text-primary"
-                    : "border-border bg-card text-muted-foreground hover:text-foreground"
+                    ? "bg-indigo-600 text-white shadow-sm shadow-indigo-600/25"
+                    : "border border-border bg-card text-muted-foreground hover:text-foreground"
                 )}
               >
                 {s.label}
@@ -482,16 +538,17 @@ export function BusinessMemory({
           <SettleCard delay={0.05} className="rounded-2xl border border-border bg-card p-5 shadow-sm">
             <div className="flex items-baseline justify-between">
               <h2 className="text-[15px] font-bold tracking-tight">How well I understand you</h2>
-              <span className="text-[13px] font-semibold text-primary">{score.percent}%</span>
+              <span className={cn("text-[13px] font-bold", confidence.textClass)}>{confidence.label}</span>
             </div>
             <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-muted">
               <motion.div
-                className="h-full rounded-full bg-primary"
+                className={cn("h-full rounded-full", confidence.barClass)}
                 initial={false}
                 animate={{ width: `${Math.max(score.percent, 4)}%` }}
                 transition={{ duration: 0.6, ease: EASE }}
               />
             </div>
+            <p className="mt-1.5 text-[11px] text-muted-foreground">{score.percent}% of what I could know</p>
             <AnimatePresence mode="wait" initial={false}>
               {nextLesson ? (
                 <motion.button
@@ -503,10 +560,10 @@ export function BusinessMemory({
                   transition={{ duration: 0.25, ease: EASE }}
                   type="button"
                   onClick={() => setOpen(nextLesson.section)}
-                  className="mt-3.5 flex w-full items-center justify-between rounded-xl border border-dashed border-border px-4 py-3 text-left transition-colors hover:border-primary"
+                  className="mt-3.5 flex w-full items-center justify-between rounded-xl border border-dashed border-indigo-200 bg-indigo-50/40 px-4 py-3 text-left transition-colors hover:border-indigo-400"
                 >
                   <span className="text-[13px] font-medium text-foreground">{nextLesson.prompt}</span>
-                  <span className="ml-3 shrink-0 text-[12.5px] font-semibold text-primary">Teach me</span>
+                  <span className="ml-3 shrink-0 text-[12.5px] font-semibold text-indigo-600">Teach me</span>
                 </motion.button>
               ) : (
                 <motion.p
@@ -528,6 +585,8 @@ export function BusinessMemory({
               <KnowledgeCard
                 key={section.id}
                 index={index}
+                icon={section.icon}
+                iconClass={section.iconClass}
                 question={section.question}
                 known={section.known}
                 summary={section.summary}
@@ -573,6 +632,8 @@ export function BusinessMemory({
  */
 function KnowledgeCard({
   index,
+  icon: Icon,
+  iconClass,
   question,
   known,
   summary,
@@ -581,6 +642,8 @@ function KnowledgeCard({
   children,
 }: {
   index: number;
+  icon: LucideIcon;
+  iconClass: string;
   question: string;
   known: boolean;
   summary: string | null;
@@ -597,8 +660,8 @@ function KnowledgeCard({
         aria-expanded={open}
         className="flex w-full items-start gap-2.5 px-4 py-3.5 text-left"
       >
-        <div className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent text-primary">
-          <Headset className="h-[15px] w-[15px]" />
+        <div className={cn("relative flex h-8 w-8 shrink-0 items-center justify-center rounded-full", iconClass)}>
+          <Icon className="h-[15px] w-[15px]" />
           {known && (
             <motion.span
               initial={{ scale: 0 }}
@@ -761,18 +824,13 @@ function SuggestibleTextarea({
               aria-pressed={on}
               onClick={() => toggle(s)}
               className={cn(
-                "flex items-center gap-1.5 rounded-full border px-3.5 py-2 text-[12.5px] font-medium transition-colors",
-                on ? "border-primary bg-accent text-primary" : "border-border bg-card text-muted-foreground hover:text-foreground"
+                "flex items-center gap-1.5 rounded-full px-4 py-2 text-[12.5px] transition-all",
+                on
+                  ? "bg-indigo-600 font-semibold text-white shadow-sm shadow-indigo-600/25"
+                  : "border border-border bg-card font-medium text-muted-foreground hover:border-indigo-200 hover:text-foreground"
               )}
             >
-              <span
-                className={cn(
-                  "flex h-4 w-4 items-center justify-center rounded-full border transition-colors",
-                  on ? "border-primary bg-primary text-primary-foreground" : "border-border"
-                )}
-              >
-                {on && <Check className="h-2.5 w-2.5" strokeWidth={3.5} />}
-              </span>
+              {on && <Check className="h-3 w-3" strokeWidth={3} />}
               {s}
             </motion.button>
           );
@@ -830,20 +888,13 @@ function ChipEditor({
                 aria-pressed={on}
                 onClick={() => toggleSuggestion(s)}
                 className={cn(
-                  "flex items-center gap-1.5 rounded-full border px-3.5 py-2 text-[12.5px] font-medium transition-colors",
+                  "flex items-center gap-1.5 rounded-full px-4 py-2 text-[12.5px] transition-all",
                   on
-                    ? "border-primary bg-accent text-primary"
-                    : "border-border bg-card text-muted-foreground hover:text-foreground"
+                    ? "bg-indigo-600 font-semibold text-white shadow-sm shadow-indigo-600/25"
+                    : "border border-border bg-card font-medium text-muted-foreground hover:border-indigo-200 hover:text-foreground"
                 )}
               >
-                <span
-                  className={cn(
-                    "flex h-4 w-4 items-center justify-center rounded-full border transition-colors",
-                    on ? "border-primary bg-primary text-primary-foreground" : "border-border"
-                  )}
-                >
-                  {on && <Check className="h-2.5 w-2.5" strokeWidth={3.5} />}
-                </span>
+                {on && <Check className="h-3 w-3" strokeWidth={3} />}
                 {s}
               </motion.button>
             );
@@ -856,14 +907,14 @@ function ChipEditor({
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.9 }}
                 transition={{ duration: 0.2, ease: EASE }}
-                className="flex items-center gap-1.5 rounded-full border border-primary bg-accent px-3.5 py-2 text-[12.5px] font-medium text-primary"
+                className="flex items-center gap-1.5 rounded-full bg-indigo-600 px-4 py-2 text-[12.5px] font-semibold text-white shadow-sm shadow-indigo-600/25"
               >
                 {item}
                 <button
                   type="button"
                   aria-label={`Remove ${item}`}
                   onClick={() => onChange(items.filter((i) => i !== item))}
-                  className="text-primary/60 transition-colors hover:text-primary"
+                  className="text-white/70 transition-colors hover:text-white"
                 >
                   <X className="h-3 w-3" strokeWidth={3} />
                 </button>
@@ -923,7 +974,7 @@ function FaqEditor({ faqs, onChange }: { faqs: Faq[]; onChange: (faqs: Faq[]) =>
               {...press}
               type="button"
               onClick={() => onChange([...faqs, { question: q, answer: "" }])}
-              className="flex items-center gap-1.5 rounded-full border border-dashed border-border bg-card px-3.5 py-2 text-[12.5px] font-medium text-muted-foreground transition-colors hover:border-primary hover:text-primary"
+              className="flex items-center gap-1.5 rounded-full border border-dashed border-indigo-200 bg-indigo-50/40 px-3.5 py-2 text-[12.5px] font-medium text-indigo-700/80 transition-colors hover:border-indigo-400 hover:text-indigo-700"
             >
               <Plus className="h-3 w-3" />
               {q}
@@ -972,7 +1023,7 @@ function FaqEditor({ faqs, onChange }: { faqs: Faq[]; onChange: (faqs: Faq[]) =>
         {...press}
         type="button"
         onClick={() => onChange([...faqs, { question: "", answer: "" }])}
-        className="flex items-center gap-1.5 rounded-xl border border-dashed border-border px-4 py-2.5 text-[13px] font-semibold text-muted-foreground transition-colors hover:border-primary hover:text-primary"
+        className="flex items-center gap-1.5 rounded-xl border border-dashed border-border px-4 py-2.5 text-[13px] font-semibold text-muted-foreground transition-colors hover:border-indigo-300 hover:text-indigo-600"
       >
         <Plus className="h-3.5 w-3.5" />
         Add a question

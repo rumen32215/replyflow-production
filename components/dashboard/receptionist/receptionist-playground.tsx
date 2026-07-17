@@ -117,6 +117,14 @@ export function ReceptionistPlayground({
   // simply remembers. First render never writes.
   const firstRender = useRef(true);
   const ackRef = useRef<string>(ACK.remember);
+  // Bug fix: two edits close together (e.g. tapping Tone right after
+  // editing a notes field) can leave two saves in flight at once. If
+  // they resolve out of order, an older, slower request could finish
+  // last and show its own result — sometimes a stale, misleading
+  // "trouble saving" — even though the newest edit actually saved
+  // fine. requestId makes only the most recent save allowed to touch
+  // the acknowledgement UI; anything older is silently ignored.
+  const requestId = useRef(0);
 
   useEffect(() => {
     if (firstRender.current) {
@@ -124,6 +132,7 @@ export function ReceptionistPlayground({
       return;
     }
     const t = setTimeout(async () => {
+      const thisRequest = ++requestId.current;
       startSaving();
       const { error } = await supabase.from("ai_configurations").upsert(
         {
@@ -136,6 +145,7 @@ export function ReceptionistPlayground({
         },
         { onConflict: "business_id" }
       );
+      if (thisRequest !== requestId.current) return;
       if (error) softError();
       else acknowledge(ackRef.current);
     }, 700);
@@ -179,10 +189,10 @@ export function ReceptionistPlayground({
                 type="button"
                 onClick={() => setScenarioId(s.id)}
                 className={cn(
-                  "rounded-full border px-3 py-1.5 text-[11.5px] font-semibold transition-colors",
+                  "rounded-full px-3 py-1.5 text-[11.5px] font-semibold transition-all",
                   scenarioId === s.id
-                    ? "border-primary bg-accent text-primary"
-                    : "border-border bg-card text-muted-foreground hover:text-foreground"
+                    ? "bg-orange-500 text-white shadow-sm shadow-orange-500/25"
+                    : "border border-border bg-card text-muted-foreground hover:text-foreground"
                 )}
               >
                 {s.label}
@@ -219,8 +229,10 @@ export function ReceptionistPlayground({
                     }}
                     aria-pressed={on}
                     className={cn(
-                      "rounded-full border px-3.5 py-2 text-[12.5px] font-medium transition-colors",
-                      on ? "border-primary bg-accent text-primary" : "border-border bg-card text-muted-foreground hover:text-foreground"
+                      "rounded-full px-4 py-2 text-[12.5px] transition-all",
+                      on
+                        ? "bg-orange-500 font-semibold text-white shadow-sm shadow-orange-500/25"
+                        : "border border-border bg-card font-medium text-muted-foreground hover:text-foreground"
                     )}
                   >
                     {t.label}
@@ -228,6 +240,11 @@ export function ReceptionistPlayground({
                 );
               })}
             </div>
+            <p className="text-[11.5px] italic text-muted-foreground">
+              {tone === "professional" && "“Hello, thanks for contacting your business. How can we help today?”"}
+              {tone === "concise" && "“Your business here — what's the issue?”"}
+              {tone === "friendly" && "“Hi there! Thanks for getting in touch. How can I help?”"}
+            </p>
             <OwnWordsInput
               value={toneNotes}
               onChange={(v) => {
@@ -262,10 +279,11 @@ export function ReceptionistPlayground({
 
           <TeachingTurn
             delay={0.15}
+            accent="slate"
             learned={rules.size > 0 || rulesNotes.length > 0}
             question={rules.size > 0 ? "These are the house rules I never break — anything else?" : "Are there things I should never get wrong?"}
           >
-            <OptionChips options={RULE_OPTIONS} selected={rules} onToggle={(id) => toggle(rules, setRules, id, ACK.useNextTime)} />
+            <RuleList options={RULE_OPTIONS} selected={rules} onToggle={(id) => toggle(rules, setRules, id, ACK.useNextTime)} />
             <OwnWordsInput
               value={rulesNotes}
               onChange={(v) => {
@@ -279,10 +297,12 @@ export function ReceptionistPlayground({
 
           <TeachingTurn
             delay={0.2}
+            accent="amber"
+            boxed
             learned={escalation.size > 0 || escalationNotes.length > 0}
             question={escalation.size > 0 ? "I'll come straight to you in these situations — anything to add?" : "When should I stop and come get you?"}
           >
-            <OptionChips options={ESCALATION_OPTIONS} selected={escalation} onToggle={(id) => toggle(escalation, setEscalation, id, ACK.gotIt)} />
+            <OptionChips options={ESCALATION_OPTIONS} selected={escalation} onToggle={(id) => toggle(escalation, setEscalation, id, ACK.gotIt)} accent="amber" />
             <OwnWordsInput
               value={escalationNotes}
               onChange={(v) => {
@@ -299,27 +319,54 @@ export function ReceptionistPlayground({
   );
 }
 
+type TurnAccent = "warm" | "slate" | "amber";
+
+/** Receptionist's own personality is warm/conversational (Visual
+ * Language: each section has its own subtle voice) — orange, not the
+ * app's usual blue. Rules get a firmer slate tone; escalation gets
+ * amber, the same "hand this to the owner" colour used everywhere
+ * else in the product, so its meaning is consistent, not decorative. */
+const TURN_ACCENT: Record<TurnAccent, { avatar: string; bubble: string }> = {
+  warm: { avatar: "bg-orange-100 text-orange-600", bubble: "bg-orange-50/70" },
+  slate: { avatar: "bg-slate-200 text-slate-700", bubble: "bg-slate-100" },
+  amber: { avatar: "bg-amber-100 text-amber-700", bubble: "bg-amber-50" },
+};
+
 /**
  * One turn of her teaching conversation: her avatar, her question (a
  * received-message bubble), and the quick-reply options beneath it —
  * the same chip/pill interactions as before, in a chat container
  * instead of a titled settings card. The small check badge marks a
- * topic she's already learned something about.
+ * topic she's already learned something about. `boxed` gives a turn
+ * its own bordered moment rather than sitting flush with the page —
+ * reserved for escalation, the one topic that's genuinely a different
+ * kind of decision than the others.
  */
 function TeachingTurn({
   question,
   delay,
   learned,
+  accent = "warm",
+  boxed = false,
   children,
 }: {
   question: string;
   delay: number;
   learned: boolean;
+  accent?: TurnAccent;
+  boxed?: boolean;
   children: ReactNode;
 }) {
+  const style = TURN_ACCENT[accent];
   return (
-    <SettleCard delay={delay} className="flex items-start gap-2.5">
-      <div className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent text-primary">
+    <SettleCard
+      delay={delay}
+      className={cn(
+        "flex items-start gap-2.5",
+        boxed && "rounded-2xl border border-amber-200/70 bg-amber-50/30 p-3.5"
+      )}
+    >
+      <div className={cn("relative flex h-8 w-8 shrink-0 items-center justify-center rounded-full", style.avatar)}>
         <Headset className="h-[15px] w-[15px]" />
         {learned && (
           <motion.span
@@ -333,7 +380,7 @@ function TeachingTurn({
         )}
       </div>
       <div className="min-w-0 flex-1 space-y-2.5">
-        <div className="inline-block max-w-full rounded-2xl rounded-tl-sm bg-muted px-4 py-2.5 text-[13.5px] leading-relaxed">
+        <div className={cn("inline-block max-w-full rounded-2xl rounded-tl-sm px-4 py-2.5 text-[13.5px] leading-relaxed", style.bubble)}>
           {question}
         </div>
         {children}
@@ -378,14 +425,22 @@ function OwnWordsInput({
   );
 }
 
+const CHIP_ACCENT: Record<TurnAccent, string> = {
+  warm: "bg-orange-500 shadow-orange-500/25",
+  slate: "bg-slate-600 shadow-slate-600/25",
+  amber: "bg-amber-500 shadow-amber-500/25",
+};
+
 function OptionChips({
   options,
   selected,
   onToggle,
+  accent = "warm",
 }: {
   options: readonly TeachingOption[];
   selected: Set<string>;
   onToggle: (id: string) => void;
+  accent?: TurnAccent;
 }) {
   return (
     <div className="flex flex-wrap gap-2">
@@ -399,16 +454,56 @@ function OptionChips({
             aria-pressed={on}
             onClick={() => onToggle(option.id)}
             className={cn(
-              "flex items-center gap-1.5 rounded-full border px-3.5 py-2 text-[12.5px] font-medium transition-colors",
+              "flex items-center gap-1.5 rounded-full px-4 py-2 text-[12.5px] transition-all",
               on
-                ? "border-primary bg-accent text-primary"
-                : "border-border bg-card text-muted-foreground hover:text-foreground"
+                ? cn("text-white shadow-sm", CHIP_ACCENT[accent])
+                : "border border-border bg-card font-medium text-muted-foreground hover:text-foreground"
+            )}
+          >
+            {on && <Check className="h-3 w-3" strokeWidth={3} />}
+            <span className={on ? "font-semibold" : undefined}>{option.label}</span>
+          </motion.button>
+        );
+      })}
+    </div>
+  );
+}
+
+/**
+ * House rules get a different rhythm on purpose — a checklist, not a
+ * row of chips. Rules are firmer than a casual preference, so tapping
+ * feels like ticking a policy, not picking a vibe.
+ */
+function RuleList({
+  options,
+  selected,
+  onToggle,
+}: {
+  options: readonly TeachingOption[];
+  selected: Set<string>;
+  onToggle: (id: string) => void;
+}) {
+  return (
+    <div className="overflow-hidden rounded-xl border border-slate-200">
+      {options.map((option, i) => {
+        const on = selected.has(option.id);
+        return (
+          <motion.button
+            key={option.id}
+            {...press}
+            type="button"
+            aria-pressed={on}
+            onClick={() => onToggle(option.id)}
+            className={cn(
+              "flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left text-[12.5px] transition-colors",
+              i > 0 && "border-t border-slate-200",
+              on ? "bg-slate-100 font-semibold text-slate-800" : "bg-card text-muted-foreground hover:bg-slate-50"
             )}
           >
             <span
               className={cn(
-                "flex h-4 w-4 items-center justify-center rounded-full border transition-colors",
-                on ? "border-primary bg-primary text-primary-foreground" : "border-border"
+                "flex h-4 w-4 shrink-0 items-center justify-center rounded-full border transition-colors",
+                on ? "border-slate-600 bg-slate-600 text-white" : "border-border"
               )}
             >
               {on && <Check className="h-2.5 w-2.5" strokeWidth={3.5} />}

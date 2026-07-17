@@ -4,7 +4,6 @@ import Link from "next/link";
 import { motion } from "framer-motion";
 import {
   ArrowRight,
-  BookOpen,
   CalendarDays,
   Check,
   Headset,
@@ -258,28 +257,3 @@ export function ReadyStatus({ state }: { state: ReadyStatusState }) {
   );
 }
 
-/* ------------------------------- Her Profile ---------------------------------- */
-
-/** Business ("her profile") dropped off primary nav in V3 — reached
- * from a single quiet link on Front Desk instead of a competing tab. */
-export function HerProfileLink({ line }: { line: string }) {
-  return (
-    <SettleCard delay={0.26}>
-      <Link href="/dashboard/business" className="group block">
-        <motion.div
-          {...press}
-          className="flex items-center gap-3 rounded-2xl border border-border bg-card p-4 shadow-sm transition-shadow group-hover:shadow-md"
-        >
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-accent text-primary">
-            <BookOpen className="h-4 w-4" />
-          </div>
-          <div className="min-w-0 flex-1">
-            <p className="text-[14px] font-semibold">What she knows about your business</p>
-            <p className="truncate text-[12.5px] text-muted-foreground">{line}</p>
-          </div>
-          <ArrowRight className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
-        </motion.div>
-      </Link>
-    </SettleCard>
-  );
-}

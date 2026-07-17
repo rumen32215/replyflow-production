@@ -16,7 +16,8 @@ import { FastLane, ConnectWhatsAppBanner } from "@/components/dashboard/home/fas
 import { SettleCard } from "@/components/shared/motion";
 import { minutesSince, buildPresenceLine } from "@/lib/dashboard-signals";
 import { parseAvailability, standingForDate, describeStanding } from "@/lib/availability";
-import { parseKnowledge, understandingScore } from "@/lib/knowledge";
+import { parseKnowledge } from "@/lib/knowledge";
+import { buildBrain } from "@/lib/intelligence";
 
 export const metadata: Metadata = { title: "Front Desk — ReplyFlow" };
 
@@ -164,30 +165,6 @@ export default async function HomePage() {
   const isNewBusiness = !whatsappConnected || (conversationCount ?? 0) === 0 || (completedEver ?? 0) === 0;
   const showChecklist = isNewBusiness && needsYou.length === 0 && jobsToday.length === 0;
 
-  // How ready is she, overall — Business Knowledge's existing
-  // understanding score, averaged with whether she's actually been
-  // taught how to speak (tone notes, behaviours, rules, escalation).
-  // Purely a progress narrative: it never disables or hides the real
-  // Connect WhatsApp step below, which stays fully usable regardless.
-  const knowledgeScore = understandingScore({
-    businessDescription: business.business_description,
-    services: business.services ?? [],
-    serviceAreas: business.service_areas ?? [],
-    knowledge: parseKnowledge(business.business_knowledge),
-    faqCount: Array.isArray(config?.faqs) ? (config.faqs as unknown[]).length : 0,
-  });
-  const taughtSignals = [
-    Boolean(config?.tone_notes?.trim()),
-    Boolean(config?.system_prompt?.trim()),
-    Boolean(config?.business_rules?.trim()),
-    Boolean(config?.escalation_rules?.trim()),
-  ];
-  const receptionistPercent = Math.round(
-    (taughtSignals.filter(Boolean).length / taughtSignals.length) * 100
-  );
-  const setupPercent = Math.round((knowledgeScore.percent + receptionistPercent) / 2);
-  const showSetupProgress = !whatsappConnected && !showChecklist && setupPercent >= 40;
-
   const availability = parseAvailability(business.availability, business.opening_time, business.closing_time);
   const todayStanding = describeStanding(standingForDate(availability, now));
   const diaryLine =
@@ -209,6 +186,39 @@ export default async function HomePage() {
   // a real fact to state, like someone waiting or a job booked).
   const rotateCalm = !oldestWaiting && jobsToday.length === 0;
 
+  // The one shared reasoning model every screen reads from — replaces
+  // what used to be three independently-computed "how ready is she"
+  // signals (Business Knowledge's own score, an ad hoc receptionist
+  // percent, and a 50/50 average of the two). Front Desk is the one
+  // page with real activity data to hand, so it's the only caller
+  // that populates `activity` — that's what lets `thoughts.watching`/
+  // `thoughts.handled` reflect what's actually happening right now,
+  // not just what's been taught.
+  const brain = buildBrain({
+    knowledge: {
+      businessDescription: business.business_description,
+      services: business.services ?? [],
+      serviceAreas: business.service_areas ?? [],
+      knowledge: parseKnowledge(business.business_knowledge),
+      faqCount: Array.isArray(config?.faqs) ? (config.faqs as unknown[]).length : 0,
+    },
+    receptionist: {
+      behavioursTaught: Boolean(config?.system_prompt?.trim()),
+      rulesTaught: Boolean(config?.business_rules?.trim()),
+      escalationTaught: Boolean(config?.escalation_rules?.trim()),
+    },
+    diary: { rules: availability.rules },
+    activity: {
+      whatsappConnected,
+      waitingCount: needsYou.length,
+      oldestWaitingName: oldestWaiting?.name ?? null,
+      oldestWaitingMinutes: oldestWaiting?.minutes ?? null,
+      completedToday,
+      bookedToday: jobsToday.length,
+    },
+  });
+  const showSetupProgress = !whatsappConnected && !showChecklist && brain.percent >= 40;
+
   return (
     <div className="mx-auto max-w-2xl space-y-6">
       <SettleCard className="rounded-2xl border border-border bg-card p-5 shadow-sm">
@@ -217,7 +227,7 @@ export default async function HomePage() {
           supportLine={presenceLine}
           rotateCalm={rotateCalm}
           whatsappConnected={whatsappConnected}
-          topGap={knowledgeScore.missing[0] ?? null}
+          topGaps={brain.gaps.slice(0, 2).map((g) => g.label)}
         />
         <div className="my-4 h-px bg-border/70" />
         <FastLane
@@ -228,7 +238,7 @@ export default async function HomePage() {
         />
       </SettleCard>
 
-      {showSetupProgress && <SetupProgress percent={setupPercent} />}
+      {showSetupProgress && <SetupProgress percent={brain.percent} />}
       {!whatsappConnected && <ConnectWhatsAppBanner />}
 
       {showChecklist ? (

@@ -142,31 +142,7 @@ export function buildKnowledgeReply(scenarioId: string, f: KnowledgePreviewFacts
   }
 }
 
-/**
- * The Business Understanding score — not a game, simply a gentle
- * signal that a more complete memory means better conversations.
- * Counts the pieces of knowledge that exist, out of what could exist.
- */
-export function understandingScore(input: {
-  businessDescription: string | null;
-  services: string[];
-  serviceAreas: string[];
-  knowledge: BusinessKnowledge;
-  faqCount: number;
-}): { percent: number; missing: string[] } {
-  const checks: { done: boolean; missing: string }[] = [
-    { done: Boolean(input.businessDescription?.trim()), missing: "a short introduction" },
-    { done: input.services.length > 0, missing: "the services you offer" },
-    { done: input.serviceAreas.length > 0, missing: "the areas you cover" },
-    { done: input.knowledge.personality.length > 0, missing: "what makes you special" },
-    { done: input.knowledge.jobsDeclined.length > 0, missing: "jobs you don't take" },
-    { done: input.knowledge.paymentMethods.length > 0, missing: "how customers can pay" },
-    { done: input.knowledge.guarantees.length > 0, missing: "your guarantees" },
-    { done: input.faqCount > 0, missing: "answers to common questions" },
-  ];
-  const done = checks.filter((c) => c.done).length;
-  return {
-    percent: Math.round((done / checks.length) * 100),
-    missing: checks.filter((c) => !c.done).map((c) => c.missing),
-  };
-}
+// The "how well do I understand this business" scoring that used to
+// live here (understandingScore) is now part of the shared reasoning
+// model — see lib/intelligence.ts's buildBrain(), which every caller
+// (Front Desk, Conversations, Business Knowledge) reads from instead.

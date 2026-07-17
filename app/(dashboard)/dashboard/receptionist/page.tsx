@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { ReceptionistPlayground } from "@/components/dashboard/receptionist/receptionist-playground";
 import type { Tone } from "@/lib/receptionist";
+import { parseAvailability } from "@/lib/availability";
 
 export const metadata: Metadata = { title: "Receptionist — ReplyFlow" };
 
@@ -24,7 +25,9 @@ export default async function ReceptionistPage({
 
   const { data: business } = await supabase
     .from("businesses")
-    .select("id, business_name, trade, offers_emergency_callouts, charges_callout_fee, callout_fee_amount, greeting_style")
+    .select(
+      "id, business_name, trade, offers_emergency_callouts, charges_callout_fee, callout_fee_amount, greeting_style, availability, opening_time, closing_time"
+    )
     .eq("owner_id", user.id)
     .maybeSingle();
   if (!business) redirect("/welcome");
@@ -36,6 +39,7 @@ export default async function ReceptionistPage({
     .maybeSingle();
 
   const tone = (config?.tone ?? business.greeting_style ?? "friendly") as Tone;
+  const availability = parseAvailability(business.availability, business.opening_time, business.closing_time);
 
   return (
     <ReceptionistPlayground
@@ -45,6 +49,7 @@ export default async function ReceptionistPage({
       offersEmergency={business.offers_emergency_callouts ?? true}
       chargesCalloutFee={business.charges_callout_fee ?? false}
       calloutFeeAmount={business.callout_fee_amount}
+      availability={availability}
       initial={{
         tone,
         toneNotes: config?.tone_notes ?? "",

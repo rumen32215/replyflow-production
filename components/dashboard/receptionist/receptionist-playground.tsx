@@ -7,6 +7,7 @@ import { SettleCard, GentleSwap, press } from "@/components/shared/motion";
 import { Acknowledgement, ACK, randomAck, useAcknowledgement } from "@/components/shared/acknowledgement";
 import { PhonePreview } from "@/components/shared/phone-preview";
 import { TeachingCard } from "@/components/shared/teaching-card";
+import { buildBrain } from "@/lib/intelligence";
 import { Textarea } from "@/components/ui/textarea";
 import { createClient } from "@/lib/supabase/client";
 import {
@@ -21,6 +22,7 @@ import {
   type Tone,
   type TeachingOption,
 } from "@/lib/receptionist";
+import type { Availability } from "@/lib/availability";
 import { greetingForNow } from "@/components/dashboard/home/home-experience";
 import { cn } from "@/lib/utils";
 
@@ -45,7 +47,6 @@ import { cn } from "@/lib/utils";
  */
 
 type TopicId = "behaviours" | "rules" | "escalation";
-const TOPIC_ORDER: readonly TopicId[] = ["behaviours", "rules", "escalation"];
 
 /** One-line collapsed summary in her voice — labels she's already
  * ticked, plus any free-text notes, never the raw persisted string. */
@@ -77,6 +78,7 @@ export function ReceptionistPlayground({
   offersEmergency,
   chargesCalloutFee,
   calloutFeeAmount,
+  availability,
   initial,
   justHired,
 }: {
@@ -86,6 +88,7 @@ export function ReceptionistPlayground({
   offersEmergency: boolean;
   chargesCalloutFee: boolean;
   calloutFeeAmount: string | null;
+  availability: Availability;
   initial: SavedConfig;
   justHired: boolean;
 }) {
@@ -118,13 +121,19 @@ export function ReceptionistPlayground({
   // taught, the default view becomes a compact, browsable summary
   // (all three collapsed, tap any to reopen). Tone stays permanently
   // visible above these: it always has a value, so it's never part of
-  // the "what don't I know yet" queue.
-  const topicsLearned: Record<TopicId, boolean> = {
-    behaviours: behaviours.size > 0 || behavioursNotes.length > 0,
-    rules: rules.size > 0 || rulesNotes.length > 0,
-    escalation: escalation.size > 0 || escalationNotes.length > 0,
-  };
-  const nextTopicId = TOPIC_ORDER.find((id) => !topicsLearned[id]) ?? null;
+  // the "what don't I know yet" queue. Driven by the same shared Brain
+  // (lib/intelligence.ts) Business Knowledge and Front Desk read from
+  // — this used to be a wholly separate, locally-computed concept.
+  const brain = buildBrain({
+    receptionist: {
+      behavioursTaught: behaviours.size > 0 || behavioursNotes.length > 0,
+      rulesTaught: rules.size > 0 || rulesNotes.length > 0,
+      escalationTaught: escalation.size > 0 || escalationNotes.length > 0,
+    },
+  });
+  const receptionistTopics = brain.topics.filter((t) => t.domain === "receptionist");
+  const topicDone = (id: TopicId): boolean => receptionistTopics.find((t) => t.id === id)?.done ?? false;
+  const nextTopicId = (brain.gaps.find((g) => g.domain === "receptionist")?.id as TopicId | undefined) ?? null;
   const [open, setOpen] = useState<TopicId | null>(null);
   const prevNextTopicId = useRef<TopicId | null | undefined>(undefined);
   useEffect(() => {
@@ -149,7 +158,8 @@ export function ReceptionistPlayground({
       chargesCalloutFee,
       calloutFeeAmount,
     },
-    scenario
+    scenario,
+    { availability }
   );
   const status = deriveScenarioStatus(scenario, { escalation });
 
@@ -193,6 +203,23 @@ export function ReceptionistPlayground({
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tone, toneNotes, behaviours, behavioursNotes, rules, rulesNotes, escalation, escalationNotes]);
+
+  // A real, rare celebration — not another reassurance on every edit.
+  // ackRef is read lazily by the debounced save above when its timeout
+  // fires, so setting it here (synchronously, in the same render pass
+  // as the edit that crossed the threshold) reliably overrides that
+  // save's routine acknowledgement for this one milestone moment.
+  const receptionistPercent = brain.percentFor("receptionist");
+  const celebratedPercentRef = useRef(receptionistPercent);
+  useEffect(() => {
+    const prev = celebratedPercentRef.current;
+    if (prev < 100 && receptionistPercent >= 100) {
+      ackRef.current = "I know exactly how you like things run.";
+    } else if (prev < 50 && receptionistPercent >= 50) {
+      ackRef.current = "Getting there — I'm learning how you like things run.";
+    }
+    celebratedPercentRef.current = receptionistPercent;
+  }, [receptionistPercent]);
 
   function toggle(set: Set<string>, apply: (s: Set<string>) => void, id: string, ack: string) {
     const next = new Set(set);
@@ -310,7 +337,7 @@ export function ReceptionistPlayground({
                 ? "Here's what I do when someone gets in touch — anything to add?"
                 : "What should I always do when someone gets in touch?"
             }
-            known={topicsLearned.behaviours}
+            known={topicDone("behaviours")}
             summary={summariseTopic(behaviours, behavioursNotes, BEHAVIOUR_OPTIONS)}
             open={open === "behaviours"}
             onToggle={() => setOpen(open === "behaviours" ? null : "behaviours")}
@@ -334,7 +361,7 @@ export function ReceptionistPlayground({
             avatarClass="bg-slate-200 text-slate-700"
             bubbleClass="bg-slate-100"
             question={rules.size > 0 ? "These are the house rules I never break — anything else?" : "Are there things I should never get wrong?"}
-            known={topicsLearned.rules}
+            known={topicDone("rules")}
             summary={summariseTopic(rules, rulesNotes, RULE_OPTIONS)}
             open={open === "rules"}
             onToggle={() => setOpen(open === "rules" ? null : "rules")}
@@ -359,7 +386,7 @@ export function ReceptionistPlayground({
             bubbleClass="bg-amber-50"
             className="border-amber-200/70"
             question={escalation.size > 0 ? "I'll come straight to you in these situations — anything to add?" : "When should I stop and come get you?"}
-            known={topicsLearned.escalation}
+            known={topicDone("escalation")}
             summary={summariseTopic(escalation, escalationNotes, ESCALATION_OPTIONS)}
             open={open === "escalation"}
             onToggle={() => setOpen(open === "escalation" ? null : "escalation")}

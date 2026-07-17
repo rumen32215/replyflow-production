@@ -15,6 +15,7 @@
  */
 
 import { normalizeTrade, type TradeOrGeneral } from "@/lib/trades";
+import { nextAvailableSlot, type Availability } from "@/lib/availability";
 
 export type Tone = "professional" | "friendly" | "concise";
 
@@ -240,20 +241,44 @@ function toneOpener(tone: Tone, mood: "sorry" | "glad"): string {
   }
 }
 
-/**
- * Builds the settled turns plus the live reply for a scenario.
- * Every taught behaviour visibly changes the words — the owner sees
- * exactly how their teaching becomes conversation.
- */
-export function buildPreviewConversation(k: PreviewKnowledge, scenario: PreviewScenario) {
-  const turns = [
-    { from: "receptionist" as const, text: greetingFor(k.tone, k.businessName) },
-    { from: "customer" as const, text: scenario.customerMessage },
-  ];
+/** What the customer would plausibly say back once she's asked for
+ * something — generic and kind-independent (not per-trade text) so it
+ * never needs hand-writing dozens of extra scenario-specific strings;
+ * it's scripted demo content on the customer's side, exactly like
+ * `scenario.customerMessage` already is. */
+function customerFollowUp(askedFor: "photos" | "postcode" | "address" | null): string {
+  switch (askedFor) {
+    case "photos":
+      return "Sure, sending a couple over now \u{1F4F7}";
+    case "postcode":
+      return "Sure — it's on its way now";
+    case "address":
+      return "Sure, here's my address now";
+    default:
+      return "Thanks, appreciate it";
+  }
+}
 
+/**
+ * Builds the full settled exchange plus the live closing reply for a
+ * scenario — she replies, the customer follows up, and she closes
+ * with a real outcome, not just a single reply in isolation. Every
+ * taught behaviour visibly changes the words — the owner sees exactly
+ * how their teaching becomes conversation, now followed through to an
+ * outcome. `context.availability`, when supplied, grounds a standard
+ * enquiry's closing line in the real diary (nextAvailableSlot)
+ * instead of a generic promise — still 100% deterministic, never a
+ * guessed time slot.
+ */
+export function buildPreviewConversation(
+  k: PreviewKnowledge,
+  scenario: PreviewScenario,
+  context?: { availability: Availability; now?: Date }
+) {
   const has = (id: string) => k.behaviours.has(id);
   const rule = (id: string) => k.rules.has(id);
   const parts: string[] = [];
+  let askedFor: "photos" | "postcode" | "address" | null = null;
 
   if (scenario.kind === "emergency") {
     if (k.escalation.has("flooding")) {
@@ -261,8 +286,13 @@ export function buildPreviewConversation(k: PreviewKnowledge, scenario: PreviewS
     } else {
       parts.push("I'm really sorry — that sounds urgent.");
       if (k.offersEmergency || has("mention-emergency")) parts.push("We do offer emergency call-outs, so someone can get to you quickly.");
-      if (has("ask-postcode")) parts.push("Could I take your postcode so we can get on our way?");
-      else parts.push("Could I take your address?");
+      if (has("ask-postcode")) {
+        parts.push("Could I take your postcode so we can get on our way?");
+        askedFor = "postcode";
+      } else {
+        parts.push("Could I take your address?");
+        askedFor = "address";
+      }
     }
   } else if (scenario.kind === "price") {
     if (rule("no-exact-prices")) {
@@ -279,25 +309,34 @@ export function buildPreviewConversation(k: PreviewKnowledge, scenario: PreviewS
     }
     if (has("ask-photos") || rule("always-ask-photos")) {
       parts.push("If you can send a couple of photos, that'll help us give you a much better idea.");
+      askedFor = "photos";
     }
   } else if (scenario.kind === "quote") {
     parts.push(toneOpener(k.tone, "glad"));
     if (has("ask-photos") || rule("always-ask-photos")) {
       parts.push("Could you send me a few photos of the job first? That way the quote will be accurate.");
+      askedFor = "photos";
     } else if (has("ask-problem")) {
       parts.push("Could you tell me a little about the job?");
     }
-    if (has("ask-postcode")) parts.push("And could I grab your postcode?");
+    if (has("ask-postcode")) {
+      parts.push("And could I grab your postcode?");
+      askedFor = askedFor ?? "postcode";
+    }
     if (rule("no-exact-prices")) parts.push("The team will confirm the final price after a quick look.");
   } else {
     // A standard new enquiry.
     parts.push(toneOpener(k.tone, "sorry"));
     if (has("ask-photos") || rule("always-ask-photos")) {
       parts.push("Could you send me a few photos first so I can understand the job?");
+      askedFor = "photos";
     } else if (has("ask-problem")) {
       parts.push("Could you tell me a bit more about what's happening?");
     }
-    if (has("ask-postcode")) parts.push("Could I also take your postcode?");
+    if (has("ask-postcode")) {
+      parts.push("Could I also take your postcode?");
+      askedFor = askedFor ?? "postcode";
+    }
     if (has("mention-emergency") && k.offersEmergency) {
       parts.push("If it's urgent, we do offer emergency call-outs.");
     }
@@ -318,5 +357,35 @@ export function buildPreviewConversation(k: PreviewKnowledge, scenario: PreviewS
     reply = sentences.slice(0, 2).join(" ").trim();
   }
 
-  return { turns, liveReply: reply };
+  // The outcome — what happens next, not just what she said first.
+  // Still a fixed decision tree keyed on scenario.kind + what's been
+  // taught, same as the reply above; the standard-enquiry close is
+  // the only branch grounded in real data (the diary), everything
+  // else stays a plain, honest promise rather than inventing a time.
+  let outcome: string;
+  if (scenario.kind === "emergency") {
+    outcome = k.escalation.has("flooding")
+      ? "The owner has this now — they'll call you back directly."
+      : "The team will be with you as soon as they can.";
+  } else if (scenario.kind === "quote") {
+    outcome = "I'll get a full quote over to you shortly.";
+  } else if (scenario.kind === "price") {
+    outcome = rule("no-exact-prices")
+      ? "The team will confirm the price once they've seen the job."
+      : "I'll get you a proper price shortly.";
+  } else {
+    const slot = context?.availability ? nextAvailableSlot(context.availability, context.now ?? new Date()) : null;
+    outcome = slot
+      ? `Based on the diary, I can pencil you in for ${slot.label} — I'll get this confirmed with you.`
+      : "I'll get this booked in and confirm the details with you.";
+  }
+
+  const turns = [
+    { from: "receptionist" as const, text: greetingFor(k.tone, k.businessName) },
+    { from: "customer" as const, text: scenario.customerMessage },
+    { from: "receptionist" as const, text: reply },
+    { from: "customer" as const, text: customerFollowUp(askedFor) },
+  ];
+
+  return { turns, liveReply: outcome };
 }

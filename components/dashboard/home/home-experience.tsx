@@ -49,15 +49,15 @@ export function HomeGreeting({
   supportLine,
   rotateCalm = false,
   whatsappConnected = false,
-  topGap = null,
+  topGaps = [],
 }: {
   name: string;
   supportLine: string;
   rotateCalm?: boolean;
   whatsappConnected?: boolean;
-  topGap?: string | null;
+  topGaps?: readonly string[];
 }) {
-  const messages = calmStatusMessages(whatsappConnected, topGap);
+  const messages = calmStatusMessages(whatsappConnected, topGaps);
   const [calmIndex, setCalmIndex] = useState(0);
 
   useEffect(() => {

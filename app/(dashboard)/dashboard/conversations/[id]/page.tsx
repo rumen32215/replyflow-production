@@ -5,6 +5,7 @@ import { ChevronLeft } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { ConversationStory } from "@/components/dashboard/conversations/conversation-story";
 import { statusLabel, groupForStatus } from "@/lib/conversations";
+import { parseAvailability, nextAvailableSlot, toDateString } from "@/lib/availability";
 import { cn } from "@/lib/utils";
 
 export const metadata: Metadata = { title: "Conversation — ReplyFlow" };
@@ -25,21 +26,40 @@ export default async function ConversationDetailPage({ params }: { params: { id:
   // RLS (0003) scopes this to the signed-in owner's business.
   const { data: conversation } = await supabase
     .from("conversations")
-    .select("id, customer_name, customer_phone, status")
+    .select("id, business_id, customer_name, customer_phone, status")
     .eq("id", params.id)
     .maybeSingle();
 
   if (!conversation) notFound();
 
-  const { data: messages } = await supabase
-    .from("messages")
-    .select("id, direction, body, message_type, created_at")
-    .eq("conversation_id", conversation.id)
-    .order("created_at", { ascending: true });
+  const [{ data: messages }, { data: existingJob }, { data: business }] = await Promise.all([
+    supabase
+      .from("messages")
+      .select("id, direction, body, message_type, created_at")
+      .eq("conversation_id", conversation.id)
+      .order("created_at", { ascending: true }),
+    supabase.from("jobs").select("id, job_title, scheduled_for").eq("conversation_id", conversation.id).maybeSingle(),
+    supabase
+      .from("businesses")
+      .select("availability, opening_time, closing_time")
+      .eq("id", conversation.business_id)
+      .maybeSingle(),
+  ]);
 
   const allMessages = messages ?? [];
   const photoCount = allMessages.filter((m) => m.message_type !== "text").length;
   const group = groupForStatus(conversation.status);
+  const latestCustomerMessage = [...allMessages].reverse().find((m) => m.direction === "inbound")?.body ?? null;
+
+  // A real, honest suggestion — the same diary rules the Diary page's
+  // own preview line uses, never a fabricated understanding of this
+  // specific conversation's content. Scoped to a day, never a time.
+  const suggestedSlot = business
+    ? nextAvailableSlot(
+        parseAvailability(business.availability, business.opening_time, business.closing_time),
+        new Date()
+      )
+    : null;
 
   return (
     <div className="flex h-full flex-col">
@@ -73,10 +93,16 @@ export default async function ConversationDetailPage({ params }: { params: { id:
 
       <ConversationStory
         conversationId={conversation.id}
+        businessId={conversation.business_id}
         status={conversation.status}
+        customerName={conversation.customer_name}
         customerPhone={conversation.customer_phone}
         messageCount={allMessages.length}
         photoCount={photoCount}
+        existingJob={existingJob ?? null}
+        latestCustomerMessage={latestCustomerMessage}
+        suggestedSlotDate={suggestedSlot ? toDateString(suggestedSlot.date) : null}
+        suggestedSlotLabel={suggestedSlot?.label ?? null}
       />
 
       <div className="flex-1 space-y-3 overflow-y-auto p-5 md:p-6">

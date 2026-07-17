@@ -26,7 +26,6 @@ import { Switch } from "@/components/ui/switch";
 import { createClient } from "@/lib/supabase/client";
 import {
   parseKnowledge,
-  understandingScore,
   buildKnowledgeReply,
   PERSONALITY_SUGGESTIONS,
   PAYMENT_SUGGESTIONS,
@@ -35,6 +34,7 @@ import {
   KNOWLEDGE_PREVIEW_SCENARIOS,
   type BusinessKnowledge,
 } from "@/lib/knowledge";
+import { buildBrain, confidenceLabelFor } from "@/lib/intelligence";
 import { servicesForTrade, accessSuggestionsForTrade } from "@/lib/trades";
 import { cn } from "@/lib/utils";
 
@@ -194,40 +194,51 @@ export function BusinessMemory({
 
   /* --------------------- understanding + suggestions ------------------- */
 
-  const score = useMemo(
+  // The shared Brain (lib/intelligence.ts) — this page only feeds its
+  // own knowledge domain, so its confidence badge and next-lesson
+  // sequencing stay scoped to what this page teaches, exactly like
+  // before. Receptionist/diary domains are simply omitted here; they
+  // read as "not yet known" internally but this page never surfaces
+  // that, since it only ever reads brain.gaps/percentFor("knowledge").
+  const brain = useMemo(
     () =>
-      understandingScore({
-        businessDescription: description,
-        services,
-        serviceAreas,
-        knowledge,
-        faqCount: faqs.filter((f) => f.question.trim() && f.answer.trim()).length,
+      buildBrain({
+        knowledge: {
+          businessDescription: description,
+          services,
+          serviceAreas,
+          knowledge,
+          faqCount: faqs.filter((f) => f.question.trim() && f.answer.trim()).length,
+        },
       }),
     [description, services, serviceAreas, knowledge, faqs]
   );
 
+  const knowledgePercent = brain.percentFor("knowledge");
   /** Confidence, not a bare number — colour communicates where she
    * genuinely stands, not a generic blue bar for every value. */
+  const confidenceBucket = confidenceLabelFor(knowledgePercent);
   const confidence =
-    score.percent >= 100
+    confidenceBucket === "Complete"
       ? { label: "Complete", barClass: "bg-success", textClass: "text-success" }
-      : score.percent >= 50
+      : confidenceBucket === "Growing"
         ? { label: "Growing", barClass: "bg-blue-600", textClass: "text-blue-600" }
         : { label: "Learning", barClass: "bg-slate-400", textClass: "text-slate-500" };
 
   // Proactive learning (One Thought Ahead): ReplyFlow notices what it
   // doesn't know yet and asks — the owner never has to think of it.
-  const MISSING_TO_SECTION: Record<string, { section: SectionId; prompt: string }> = {
-    "a short introduction": { section: "identity", prompt: "Would you like to tell me a little about the business?" },
-    "the services you offer": { section: "services", prompt: "What kinds of jobs do you usually help people with?" },
-    "the areas you cover": { section: "areas", prompt: "Where do you usually work?" },
-    "what makes you special": { section: "special", prompt: "What makes your business special?" },
-    "jobs you don't take": { section: "declined", prompt: "Are there any jobs you don't take on?" },
-    "how customers can pay": { section: "payments", prompt: "Customers often ask how they can pay. Shall we cover that?" },
-    "your guarantees": { section: "guarantees", prompt: "Do you offer any guarantees I should mention?" },
-    "answers to common questions": { section: "faqs", prompt: "Customers often ask the same questions. Would you like to teach me the answers?" },
-  };
-  const nextLesson = score.missing.map((m) => MISSING_TO_SECTION[m]).find(Boolean) ?? null;
+  // Topic ids match this page's SectionId exactly (declared together
+  // in lib/intelligence.ts's TOPIC_DEFINITIONS), so no separate lookup
+  // map is needed anymore — the fragile string-keyed MISSING_TO_SECTION
+  // this used to be is gone.
+  const knowledgeGaps = brain.gaps.filter((g) => g.domain === "knowledge");
+  const nextLesson = knowledgeGaps[0]
+    ? { section: knowledgeGaps[0].id as SectionId, prompt: knowledgeGaps[0].prompt }
+    : null;
+  // The more conversational, in-context phrasing lives once in
+  // lib/intelligence.ts's TOPIC_DEFINITIONS — sections below just read
+  // it, instead of duplicating a second copy of each question here.
+  const promptFor = (id: string): string => brain.topics.find((t) => t.id === id)?.prompt ?? "";
 
   // She leads the interview rather than waiting to be asked: the very
   // first thing she doesn't know yet opens on its own. Once it's
@@ -247,6 +258,22 @@ export function BusinessMemory({
     prevNextSectionId.current = newNext;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [nextLesson?.section]);
+
+  // A real, rare celebration — not another reassurance on every edit.
+  // ackRef is read lazily by the debounced save above when its timeout
+  // fires, so setting it here (synchronously, in the same render pass
+  // as the edit that crossed the threshold) reliably overrides that
+  // save's routine acknowledgement for this one milestone moment.
+  const celebratedPercentRef = useRef(knowledgePercent);
+  useEffect(() => {
+    const prev = celebratedPercentRef.current;
+    if (prev < 100 && knowledgePercent >= 100) {
+      ackRef.current = "I know everything I need about your business.";
+    } else if (prev < 50 && knowledgePercent >= 50) {
+      ackRef.current = "Halfway there — I'm really getting to know your business.";
+    }
+    celebratedPercentRef.current = knowledgePercent;
+  }, [knowledgePercent]);
 
   /* ------------------------------ sections ------------------------------ */
 
@@ -278,7 +305,7 @@ export function BusinessMemory({
       title: "Your business",
       icon: User,
       iconClass: "bg-slate-100 text-slate-600",
-      question: "What should I call your business?",
+      question: promptFor("identity"),
       known: Boolean(description.trim()),
       summary: businessName.trim() || null,
       content: (
@@ -310,7 +337,7 @@ export function BusinessMemory({
       title: "Services",
       icon: Wrench,
       iconClass: "bg-blue-50 text-blue-600",
-      question: "What kinds of jobs do you usually help people with?",
+      question: promptFor("services"),
       known: services.length > 0,
       summary: summarise(services),
       content: (
@@ -327,7 +354,7 @@ export function BusinessMemory({
       title: "Jobs we don't take",
       icon: Ban,
       iconClass: "bg-red-50 text-red-600",
-      question: "Are there any jobs you don't take on?",
+      question: promptFor("declined"),
       known: knowledge.jobsDeclined.length > 0,
       summary: summarise(knowledge.jobsDeclined),
       content: (
@@ -349,7 +376,7 @@ export function BusinessMemory({
       title: "Areas we cover",
       icon: MapPin,
       iconClass: "bg-teal-50 text-teal-600",
-      question: "Where do you usually work?",
+      question: promptFor("areas"),
       known: serviceAreas.length > 0,
       summary: summarise(serviceAreas),
       content: (
@@ -371,7 +398,7 @@ export function BusinessMemory({
       title: "What makes you special",
       icon: Sparkles,
       iconClass: "bg-violet-50 text-violet-600",
-      question: "What makes your business different?",
+      question: promptFor("special"),
       known: knowledge.personality.length > 0,
       summary: summarise(knowledge.personality),
       content: (
@@ -388,7 +415,7 @@ export function BusinessMemory({
       title: "Payment methods",
       icon: CreditCard,
       iconClass: "bg-emerald-50 text-emerald-600",
-      question: "How can customers pay?",
+      question: promptFor("payments"),
       known: knowledge.paymentMethods.length > 0,
       summary: summarise(knowledge.paymentMethods),
       content: (
@@ -405,7 +432,7 @@ export function BusinessMemory({
       title: "Guarantees",
       icon: ShieldCheck,
       iconClass: "bg-indigo-50 text-indigo-600",
-      question: "What do you promise your customers?",
+      question: promptFor("guarantees"),
       known: knowledge.guarantees.length > 0,
       summary: summarise(knowledge.guarantees),
       content: (
@@ -422,7 +449,7 @@ export function BusinessMemory({
       title: "Emergency jobs",
       icon: AlertTriangle,
       iconClass: "bg-orange-50 text-orange-600",
-      question: "How should I handle urgent enquiries?",
+      question: "When someone messages urgently, how should I handle it?",
       known: true,
       summary: offersEmergency
         ? chargesCalloutFee && calloutFeeAmount.trim()
@@ -479,7 +506,7 @@ export function BusinessMemory({
       title: "Common questions",
       icon: HelpCircle,
       iconClass: "bg-sky-50 text-sky-600",
-      question: "What do customers often ask?",
+      question: promptFor("faqs"),
       known: activeFaqs.length > 0,
       summary:
         activeFaqs.length > 0
@@ -492,7 +519,7 @@ export function BusinessMemory({
       title: "Parking & access",
       icon: DoorOpen,
       iconClass: "bg-stone-100 text-stone-600",
-      question: "Anything customers should know before you arrive?",
+      question: "Before your team arrives, is there anything customers should know?",
       known: Boolean(knowledge.parkingAccess.trim()),
       summary: knowledge.parkingAccess.trim() ? "Noted" : null,
       content: (
@@ -566,11 +593,11 @@ export function BusinessMemory({
               <motion.div
                 className={cn("h-full rounded-full", confidence.barClass)}
                 initial={false}
-                animate={{ width: `${Math.max(score.percent, 4)}%` }}
+                animate={{ width: `${Math.max(knowledgePercent, 4)}%` }}
                 transition={{ duration: 0.6, ease: EASE }}
               />
             </div>
-            <p className="mt-1.5 text-[11px] text-muted-foreground">{score.percent}% of what I could know</p>
+            <p className="mt-1.5 text-[11px] text-muted-foreground">{knowledgePercent}% of what I could know</p>
             <AnimatePresence mode="wait" initial={false}>
               {nextLesson ? (
                 <motion.button

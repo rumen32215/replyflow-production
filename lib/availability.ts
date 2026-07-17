@@ -171,3 +171,42 @@ export function describeBookingReply(availability: Availability, now: Date): str
 
   return parts.join(" ");
 }
+
+/** Whether the owner has actually engaged with the diary's booking
+ * rules at all, vs. sitting on the untouched defaults — the one
+ * signal the shared intelligence model (lib/intelligence.ts) needs
+ * from this file. A plain deep-compare against defaultAvailability's
+ * rules, not a stored "touched" flag (none exists on the schema). */
+export function hasCustomizedBookingRules(rules: BookingRules): boolean {
+  const base = defaultAvailability().rules;
+  return JSON.stringify(rules) !== JSON.stringify(base);
+}
+
+/**
+ * The first real day she could offer, forward-searching up to two
+ * weeks using the same rules standingForDate already applies (day
+ * off, fully booked, closed, minimum notice) — deliberately scoped to
+ * diary rules only. It cannot see real per-day job load (maxJobsPerDay
+ * needs a live count from the jobs table, a Supabase concern this pure
+ * function has no access to), so callers should present this as "a
+ * suggested day based on the diary," never a guaranteed slot, and
+ * never narrow it to a time — no time-slot granularity exists anywhere
+ * in the app (ReplyFlow never guesses).
+ */
+export function nextAvailableSlot(availability: Availability, from: Date): { date: Date; label: string } | null {
+  const earliest = new Date(from);
+  earliest.setHours(earliest.getHours() + availability.rules.minNoticeHours);
+
+  for (let i = 0; i < 14; i++) {
+    const candidate = new Date(earliest);
+    candidate.setDate(candidate.getDate() + i);
+    candidate.setHours(0, 0, 0, 0);
+    if (standingForDate(availability, candidate).kind !== "open") continue;
+    const isToday = toDateString(candidate) === toDateString(from);
+    const label = isToday
+      ? "later today"
+      : candidate.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "short" });
+    return { date: candidate, label };
+  }
+  return null;
+}

@@ -10,12 +10,18 @@ import { cn } from "@/lib/utils";
  * genuinely stands, not a generic blue bar for every value. Extracted
  * from Business Knowledge's original inline block so growth reads
  * identically wherever it's shown, not reinvented per page.
+ *
+ * "Growing" (the middle tier) uses the `learning` token — Design
+ * System: purple means learning/growth — the same token `StatusPill`
+ * and `Insight` use for the same idea. "Learning" (the earliest,
+ * just-starting tier) stays neutral on purpose: nothing to celebrate
+ * yet, so it shouldn't compete for attention.
  */
 
 const CONFIDENCE_STYLE: Record<"Learning" | "Growing" | "Complete", { bar: string; text: string }> = {
   Complete: { bar: "bg-success", text: "text-success" },
-  Growing: { bar: "bg-blue-600", text: "text-blue-600" },
-  Learning: { bar: "bg-slate-400", text: "text-slate-500" },
+  Growing: { bar: "bg-learning", text: "text-learning" },
+  Learning: { bar: "bg-muted-foreground/40", text: "text-muted-foreground" },
 };
 
 export function ConfidenceBar({

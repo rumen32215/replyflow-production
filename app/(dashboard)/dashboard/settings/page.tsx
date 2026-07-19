@@ -33,12 +33,12 @@ export default async function SettingsPage() {
     <div className="mx-auto max-w-2xl space-y-6">
       <SettleCard>
         <h1 className="text-[26px] font-extrabold tracking-tight">Settings</h1>
-        <p className="mt-1 text-sm text-muted-foreground">Account, security, and notification preferences.</p>
+        <p className="mt-1 text-sm text-muted-foreground">Your account, your receptionist, and how I keep you posted.</p>
       </SettleCard>
 
       <SettleCard delay={0.05} className="rounded-2xl border border-border bg-card p-6">
         <div className="mb-4 flex items-center gap-2.5">
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-teal-50 text-teal-600">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
             <UserCircle className="h-4 w-4" />
           </div>
           <h2 className="text-[15px] font-bold">Account</h2>
@@ -51,7 +51,7 @@ export default async function SettingsPage() {
 
       <SettleCard delay={0.07} className="rounded-2xl border border-border bg-card p-6">
         <div className="mb-4 flex items-center gap-2.5">
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-teal-50 text-teal-600">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
             <Sparkles className="h-4 w-4" />
           </div>
           <h2 className="text-[15px] font-bold">Identity</h2>
@@ -66,7 +66,7 @@ export default async function SettingsPage() {
 
       <SettleCard delay={0.09} className="rounded-2xl border border-border bg-card p-6">
         <div className="mb-1 flex items-center gap-2.5">
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-teal-50 text-teal-600">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
             <Lock className="h-4 w-4" />
           </div>
           <h2 className="text-[15px] font-bold">Password</h2>
@@ -77,7 +77,7 @@ export default async function SettingsPage() {
 
       <SettleCard delay={0.13} className="rounded-2xl border border-border bg-card p-6">
         <div className="mb-1 flex items-center gap-2.5">
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-teal-50 text-teal-600">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
             <Bell className="h-4 w-4" />
           </div>
           <h2 className="text-[15px] font-bold">Notifications</h2>

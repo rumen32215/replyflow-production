@@ -11,11 +11,16 @@ export function LoadingCard() {
   );
 }
 
-/** Full-page centered spinner — used while auth/session state resolves. */
-export function PageSpinner() {
+/**
+ * Full-page centered spinner — used while auth/session state resolves.
+ * Design System: loading should reassure, never just spin — pass
+ * `message` to say what's actually happening ("Getting things ready...").
+ */
+export function PageSpinner({ message }: { message?: string }) {
   return (
-    <div className="flex min-h-[50vh] items-center justify-center">
+    <div className="flex min-h-[50vh] flex-col items-center justify-center gap-3">
       <div className="h-6 w-6 animate-spin rounded-full border-2 border-border border-t-primary" />
+      {message && <p className="text-[13px] text-muted-foreground">{message}</p>}
     </div>
   );
 }

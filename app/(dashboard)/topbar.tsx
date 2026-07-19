@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Settings } from "lucide-react";
+import { Radar, Settings, Users } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { SignOutButton } from "@/app/(dashboard)/sign-out-button";
 import { Logo } from "@/components/shared/logo";
@@ -23,6 +23,25 @@ export function Topbar({
       </div>
       <div className="hidden md:block" />
       <div className="flex items-center gap-2 md:gap-3">
+        {/* Sprint 5: Mission Control reached from here, same pattern as
+         * Settings — not a sixth primary tab (Dashboard Map decision),
+         * just a way in while it's new. */}
+        <Link
+          href="/dashboard/mission-control"
+          aria-label="Mission Control"
+          className="flex h-9 w-9 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+        >
+          <Radar className="h-[17px] w-[17px]" />
+        </Link>
+        {/* Sprint 7: same reachability pattern as Mission Control above —
+         * not a seventh primary tab, just a way in while it's new. */}
+        <Link
+          href="/dashboard/customers"
+          aria-label="Customers"
+          className="flex h-9 w-9 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+        >
+          <Users className="h-[17px] w-[17px]" />
+        </Link>
         <Link
           href="/dashboard/settings"
           aria-label="Settings"

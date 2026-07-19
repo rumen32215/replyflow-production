@@ -110,7 +110,7 @@ export function buildPresenceLine({
 export function calmStatusMessages(whatsappConnected: boolean, topGaps: readonly string[] = []): readonly string[] {
   const base = [
     "Everything's quiet — I'll let you know the moment someone gets in touch.",
-    "Inbox checked. Nothing needs you right now.",
+    "I've checked the inbox — nothing needs you right now.",
     "Watching for new enquiries.",
     "Ready for your next customer.",
     "Everything looks good.",
@@ -137,4 +137,62 @@ export function formatDuration(totalMinutes: number): string {
   const hours = Math.floor(totalMinutes / 60);
   const remainder = totalMinutes % 60;
   return remainder === 0 ? `${hours} hour${hours === 1 ? "" : "s"}` : `${hours} hour${hours === 1 ? "" : "s"} ${remainder} minute${remainder === 1 ? "" : "s"}`;
+}
+
+/**
+ * Sprint 6: "Today's Priority" selection (`selectTodaysPriority`,
+ * `TodaysPriority`, `TodaysPriorityInput`) moved to
+ * lib/brain/reasoning.ts — it's priority-selection reasoning, in
+ * scope for the Shared Brain migration. Import it from "@/lib/brain"
+ * instead. `buildDailySummaryBullets` below stays here: it only
+ * formats already-computed facts into bullet copy for one card, which
+ * isn't reasoning.
+ */
+
+/**
+ * The AI Summary's up-to-four bullets — every line maps to a real
+ * fetched fact. Never padded: an entirely quiet day with no
+ * recommendation returns an empty array, and the section simply
+ * doesn't render (Design System: nothing appears just because there's
+ * room for it).
+ */
+export interface DailySummaryInput {
+  waitingCount: number;
+  completedToday: number;
+  bookedToday: number;
+  /** The Brain's single top-ranked gap, already phrased as a label
+   * (e.g. "your house rules") — never a fabricated recommendation. */
+  topGapLabel: string | null;
+}
+
+export function buildDailySummaryBullets({
+  waitingCount,
+  completedToday,
+  bookedToday,
+  topGapLabel,
+}: DailySummaryInput): string[] {
+  const bullets: string[] = [];
+
+  if (completedToday > 0) {
+    bullets.push(`${completedToday} ${completedToday === 1 ? "job" : "jobs"} completed today.`);
+  }
+  if (bookedToday > 0) {
+    bullets.push(`${bookedToday} ${bookedToday === 1 ? "job" : "jobs"} booked in for today.`);
+  }
+  if (waitingCount > 0) {
+    bullets.push(`${waitingCount} ${waitingCount === 1 ? "person" : "people"} waiting for a reply.`);
+  }
+  if (topGapLabel) {
+    bullets.push(`I'd recommend teaching me ${topGapLabel} next.`);
+  }
+
+  // A reassurance line only earns its place alongside another real
+  // fact — on its own it would be the only content on a card that
+  // otherwise has nothing to say, which is exactly the filler the
+  // spec forbids.
+  if (bullets.length > 0 && waitingCount === 0) {
+    bullets.push("Nobody is waiting on a reply right now.");
+  }
+
+  return bullets.slice(0, 4);
 }

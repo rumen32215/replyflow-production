@@ -15,6 +15,14 @@
   Background     #F8FAFC
   Border         #E5E7EB
   Grey           #64748B
+
+  Emotional Colour System (Design System Vol. III, Part II) — every
+  meaningful colour in the product should trace back to one of these,
+  never a one-off shade picked per component:
+  Learning / Growth (purple)  #A855F7
+  Attention, not urgent (amber) #F59E0B
+  (Intelligence/recommendations reuse Primary Blue; Confidence/complete
+  reuse Success Green; Immediate action reuses Destructive Red.)
 */
 
 @layer base {
@@ -30,6 +38,12 @@
 
     --success: 142 71% 45%;         /* #22C55E */
     --success-foreground: 0 0% 100%;
+
+    --learning: 271 91% 65%;        /* #A855F7 — learning, growth, brain activity */
+    --learning-foreground: 0 0% 100%;
+
+    --attention: 38 92% 50%;        /* #F59E0B — needs awareness, not urgent */
+    --attention-foreground: 0 0% 100%;
 
     --secondary: 210 40% 96%;
     --secondary-foreground: 222 47% 11%;

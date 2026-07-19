@@ -2,33 +2,36 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import {
-  HomeGreeting,
-  TodayCard,
-  NeedsYou,
+  GreetingCard,
+  TodaysPriorityCard,
+  AISummaryCard,
+  UrgentItems,
+  TodaysDiary,
   ReadyStatus,
   SetupProgress,
-  type NeedsYouItem,
+  type UrgentItem,
   type RightNowJob,
 } from "@/components/dashboard/home/home-experience";
-import { FastLane, ConnectWhatsAppBanner } from "@/components/dashboard/home/fast-lane";
-import { WhatsOnMyMind } from "@/components/dashboard/home/whats-on-my-mind";
-import { SettleCard } from "@/components/shared/motion";
-import { minutesSince, buildPresenceLine } from "@/lib/dashboard-signals";
-import { parseAvailability, standingForDate, describeStanding } from "@/lib/availability";
+import { QuickActions, ConnectWhatsAppBanner } from "@/components/dashboard/home/quick-actions";
+import { Recommendations } from "@/components/dashboard/home/recommendations";
+import { BusinessHealth } from "@/components/dashboard/home/business-health";
+import { RecentLearning } from "@/components/dashboard/home/whats-on-my-mind";
+import { minutesSince, buildPresenceLine, buildDailySummaryBullets } from "@/lib/dashboard-signals";
+import { parseAvailability } from "@/lib/availability";
 import { parseKnowledge } from "@/lib/knowledge";
-import { buildBrain } from "@/lib/intelligence";
+import { getBrainContext, selectTodaysPriority } from "@/lib/brain";
 
 export const metadata: Metadata = { title: "Front Desk — ReplyFlow" };
 
 /**
- * Front Desk (ReplyFlow V3) — the moment the app is opened, she's
- * there: one honest line about right now, and a fast lane so nothing
- * routine or urgent ever waits on a conversation with her. The page
- * still grows with the business (Dashboard States V1): a brand-new
- * business sees the getting-started checklist; a working business
- * sees Right Now / Needs You / Up Next / Today's Progress beneath the
- * fast lane. Cards with nothing useful to say simply don't render —
- * never empty widgets.
+ * Front Desk (Sprint 3 rebuild) — the canonical hierarchy from Feature
+ * 01: Greeting -> Today's Priority -> AI Summary -> Urgent Items ->
+ * Today's Diary -> Recommendations -> Business Health -> Recent
+ * Learning -> Quick Actions. A brand-new business sees the
+ * getting-started state instead of the steady-state sections — it
+ * meets its next step, never an empty dashboard. Every section reads
+ * from data already fetched here; nothing is invented, and any
+ * section with nothing true to say simply doesn't render.
  */
 export default async function HomePage() {
   const supabase = createClient();
@@ -103,7 +106,7 @@ export default async function HomePage() {
       .maybeSingle(),
   ]);
 
-  const needsYou: NeedsYouItem[] = (waitingConversations ?? [])
+  const needsYou: UrgentItem[] = (waitingConversations ?? [])
     .filter((c) => c.last_message_at)
     .map((c) => ({
       conversationId: c.id,
@@ -165,13 +168,6 @@ export default async function HomePage() {
   const showChecklist = isNewBusiness && needsYou.length === 0 && jobsToday.length === 0;
 
   const availability = parseAvailability(business.availability, business.opening_time, business.closing_time);
-  const todayStanding = describeStanding(standingForDate(availability, now));
-  const diaryLine =
-    todayStanding === "Closed" || todayStanding === "Fully booked"
-      ? todayStanding === "Closed"
-        ? "Closed today — enjoy the day off."
-        : "Fully booked today."
-      : `Open ${todayStanding} today.`;
 
   const oldestWaiting = needsYou[0] ?? null;
   const presenceLine = buildPresenceLine({
@@ -192,8 +188,12 @@ export default async function HomePage() {
   // page with real activity data to hand, so it's the only caller
   // that populates `activity` — that's what lets `thoughts.watching`/
   // `thoughts.handled` reflect what's actually happening right now,
-  // not just what's been taught.
-  const brain = buildBrain({
+  // not just what's been taught. Sprint 6: now reached through the
+  // Shared Brain contract (lib/brain) instead of calling buildBrain()
+  // directly — same reasoning, same result shape, one public entry
+  // point shared with Mission Control.
+  const brain = getBrainContext({
+    businessId,
     knowledge: {
       businessDescription: business.business_description,
       services: business.services ?? [],
@@ -218,10 +218,43 @@ export default async function HomePage() {
   });
   const showSetupProgress = !whatsappConnected && !showChecklist && brain.percent >= 40;
 
+  // Section 2 — exactly one priority, chosen by a fixed, honest
+  // precedence over the same real facts above (see selectTodaysPriority).
+  const currentJobForPriority = rightNow?.isCurrent
+    ? { title: rightNow.jobTitle, customerName: rightNow.customerName }
+    : null;
+  const nextJobForPriority =
+    rightNow && !rightNow.isCurrent
+      ? { title: rightNow.jobTitle, customerName: rightNow.customerName, scheduledFor: rightNow.scheduledFor }
+      : upNext
+        ? { title: upNext.jobTitle, customerName: upNext.customerName, scheduledFor: upNext.scheduledFor }
+        : null;
+  const todaysPriority = selectTodaysPriority({
+    waitingCustomer: oldestWaiting
+      ? { name: oldestWaiting.name, minutes: oldestWaiting.minutes, conversationId: oldestWaiting.conversationId }
+      : null,
+    waitingCount: needsYou.length,
+    currentJob: currentJobForPriority,
+    nextJob: nextJobForPriority,
+    jobsBookedToday: jobsToday.length,
+  });
+
+  // Section 3 — up to four real facts, never filler.
+  const summaryBullets = buildDailySummaryBullets({
+    waitingCount: needsYou.length,
+    completedToday,
+    bookedToday: jobsToday.length,
+    topGapLabel: brain.gaps[0]?.label ?? null,
+  });
+
   return (
-    <div className="mx-auto max-w-2xl space-y-7">
-      <SettleCard className="rounded-2xl border border-border bg-card p-6 shadow-sm">
-        <HomeGreeting
+    <div className="mx-auto max-w-[1280px] space-y-6">
+      {/* Sprint 7.6: Greeting and Today's Priority are the "arrival" beat —
+       * the first five seconds — so they sit closer together than the
+       * informational cards that follow, instead of every section
+       * competing for the same uniform gap. */}
+      <div className="space-y-3">
+        <GreetingCard
           name={business.business_name}
           logoUrl={business.logo_url}
           supportLine={presenceLine}
@@ -229,24 +262,22 @@ export default async function HomePage() {
           whatsappConnected={whatsappConnected}
           topGaps={brain.gaps.slice(0, 2).map((g) => g.label)}
         />
-        <div className="my-4 h-px bg-border/70" />
-        <FastLane
-          businessId={businessId}
-          waitingCount={needsYou.length}
-          diaryLine={diaryLine}
-          initialAvailability={availability}
-        />
-      </SettleCard>
 
-      {showSetupProgress && <SetupProgress percent={brain.percent} />}
-      {!whatsappConnected && <ConnectWhatsAppBanner />}
+        {showSetupProgress && <SetupProgress percent={brain.percent} />}
+        {!whatsappConnected && <ConnectWhatsAppBanner />}
 
-      {showChecklist ? (
-        <ReadyStatus state={{ whatsappConnected }} />
-      ) : (
-        <>
-          <NeedsYou items={needsYou} />
-          <TodayCard
+        {showChecklist ? (
+          <ReadyStatus state={{ whatsappConnected }} />
+        ) : (
+          <TodaysPriorityCard priority={todaysPriority} />
+        )}
+      </div>
+
+      {!showChecklist && (
+        <div className="space-y-6">
+          <AISummaryCard bullets={summaryBullets} />
+          <UrgentItems items={needsYou} />
+          <TodaysDiary
             rightNow={rightNow}
             allCaughtUp={needsYou.length === 0}
             upNext={upNext}
@@ -254,9 +285,16 @@ export default async function HomePage() {
             waiting={needsYou.length}
             remaining={remainingToday}
           />
-          <WhatsOnMyMind observations={brain.observations} />
-        </>
+          <Recommendations gaps={brain.gaps} />
+          <BusinessHealth jobsToday={jobsToday.length} completedToday={completedToday} waitingCount={needsYou.length} />
+          <RecentLearning observations={brain.observations} />
+        </div>
       )}
+
+      {/* A deliberate extra beat of air before the closing action zone. */}
+      <div className="pt-2">
+        <QuickActions businessId={businessId} initialAvailability={availability} />
+      </div>
     </div>
   );
 }

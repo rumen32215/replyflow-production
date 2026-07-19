@@ -85,11 +85,7 @@ export function SettingsPasswordForm() {
         )}
       </div>
 
-      <Button
-        type="submit"
-        disabled={submitting}
-        className="w-auto bg-teal-600 px-6 text-white hover:bg-teal-700"
-      >
+      <Button type="submit" variant="primary" disabled={submitting} className="w-auto px-6">
         {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
         Update password
       </Button>

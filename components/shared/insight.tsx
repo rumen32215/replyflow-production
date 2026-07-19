@@ -15,7 +15,10 @@ import { cn } from "@/lib/utils";
  * not per-page tips that happen to share a colour.
  */
 
-const TONE_ICON: Record<Observation["tone"], LucideIcon> = {
+// Exported so other Brain-voice layouts (e.g. Front Desk's Recent
+// Learning timeline) reuse the exact same icon/colour vocabulary
+// instead of redeclaring it — one mind, rendered consistently.
+export const TONE_ICON: Record<Observation["tone"], LucideIcon> = {
   watching: Eye,
   worry: AlertTriangle,
   learning: GraduationCap,
@@ -23,10 +26,14 @@ const TONE_ICON: Record<Observation["tone"], LucideIcon> = {
   confident: Sparkles,
 };
 
-const TONE_STYLE: Record<Observation["tone"], string> = {
-  watching: "bg-amber-100 text-amber-700",
-  worry: "bg-amber-100 text-amber-700",
-  learning: "bg-muted text-muted-foreground",
+// Same two tokens `StatusPill` and `ConfidenceBar` read — `learning`
+// (purple) means growth/brain-activity everywhere, `attention` (amber)
+// means "worth noticing, not urgent" everywhere. "handled" fades into
+// the background on purpose (Front Desk rule: completed work fades).
+export const TONE_STYLE: Record<Observation["tone"], string> = {
+  watching: "bg-attention/10 text-attention",
+  worry: "bg-attention/10 text-attention",
+  learning: "bg-learning/10 text-learning",
   handled: "bg-muted text-muted-foreground",
   confident: "bg-success/10 text-success",
 };

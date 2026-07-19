@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Camera } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Acknowledgement, useAcknowledgement } from "@/components/shared/acknowledgement";
@@ -24,6 +25,7 @@ export function SettingsIdentity({
   initialReceptionistName: string | null;
 }) {
   const supabase = createClient();
+  const router = useRouter();
   const { message, isError, isSaving, startSaving, acknowledge, softError } = useAcknowledgement();
   const [logoUrl, setLogoUrl] = useState(initialLogoUrl);
   const [receptionistName, setReceptionistName] = useState(initialReceptionistName ?? "");
@@ -71,7 +73,11 @@ export function SettingsIdentity({
   }
 
   /* Quiet persistence for the receptionist name — same debounced,
-   * never-a-Save-button pattern as everywhere else. */
+   * never-a-Save-button pattern as everywhere else. router.refresh()
+   * (Sprint 7.5) re-runs the dashboard layout's Server Component fetch
+   * so the sidebar/bottom-nav label picks up the new name immediately
+   * — before this, it only updated after a full reload, since that
+   * layout fetches receptionist_name once, server-side. */
   const firstRender = useRef(true);
   const requestId = useRef(0);
   useEffect(() => {
@@ -88,8 +94,12 @@ export function SettingsIdentity({
           .update({ receptionist_name: receptionistName.trim() || null })
           .eq("id", businessId);
         if (thisRequest !== requestId.current) return;
-        if (error) softError();
-        else acknowledge(receptionistName.trim() ? `Got it — I'll go by ${receptionistName.trim()}.` : "Got it.");
+        if (error) {
+          softError();
+        } else {
+          acknowledge(receptionistName.trim() ? `Got it — I'll go by ${receptionistName.trim()}.` : "Got it.");
+          router.refresh();
+        }
       } catch {
         if (thisRequest === requestId.current) softError();
       }
@@ -131,12 +141,12 @@ export function SettingsIdentity({
       </div>
 
       <label className="block">
-        <span className="mb-1.5 block text-[13.5px] font-semibold">What should I call myself?</span>
+        <span className="mb-1.5 block text-[13.5px] font-semibold">What would you like to call me?</span>
         <input
           value={receptionistName}
           onChange={(e) => setReceptionistName(e.target.value)}
           placeholder="Optional — e.g. Sarah, Office, Assistant"
-          className="w-full rounded-xl border border-border bg-background px-3.5 py-2.5 text-[13.5px] outline-none transition-colors placeholder:text-muted-foreground/60 focus:border-teal-500"
+          className="w-full rounded-xl border border-border bg-background px-3.5 py-2.5 text-[13.5px] outline-none transition-colors placeholder:text-muted-foreground/60 focus:border-primary"
         />
         <p className="mt-1.5 text-[12px] text-muted-foreground">
           Leave this blank and I&apos;ll just go by &quot;your receptionist.&quot;

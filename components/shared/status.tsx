@@ -6,18 +6,20 @@ import { cn } from "@/lib/utils";
  * only ever communicates one of these meanings — never decoration.
  * Reuses the app's existing tokens wherever one already fits
  * (success/primary/destructive/muted); "waiting-owner" reuses the
- * amber already used elsewhere for exactly this idea (Home's Needs
- * You card); "learning" is the one genuinely new hue, reserved for
- * free-form teaching moments.
+ * `attention` token (Design System: amber = needs awareness, not
+ * urgent); "learning" reuses the `learning` token (Design System:
+ * purple = learning, growth, brain activity) — the same two tokens
+ * `Insight` and `ConfidenceBar` read, so a colour means the same
+ * thing everywhere it appears, not just within this file.
  */
 export type StatusTone = "success" | "active" | "waiting-owner" | "urgent" | "learning" | "waiting";
 
 const TONE_STYLES: Record<StatusTone, { pill: string; dot: string }> = {
   success: { pill: "bg-success/10 text-success", dot: "bg-success" },
   active: { pill: "bg-primary/10 text-primary", dot: "bg-primary" },
-  "waiting-owner": { pill: "bg-amber-500/10 text-amber-600", dot: "bg-amber-500" },
+  "waiting-owner": { pill: "bg-attention/10 text-attention", dot: "bg-attention" },
   urgent: { pill: "bg-destructive/10 text-destructive", dot: "bg-destructive" },
-  learning: { pill: "bg-purple-500/10 text-purple-600", dot: "bg-purple-500" },
+  learning: { pill: "bg-learning/10 text-learning", dot: "bg-learning" },
   waiting: { pill: "bg-muted text-muted-foreground", dot: "bg-muted-foreground/50" },
 };
 

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { ArrowRight, CalendarDays, Check, Headset, MapPin, MessageCircle, Sparkles } from "lucide-react";
+import { ArrowRight, CalendarDays, Check, Headset, MapPin, MessageCircle } from "lucide-react";
 import { SettleCard, ScrollReveal, GentleSwap, Reveal, press, EASE } from "@/components/shared/motion";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { formatWaitingTime, calmStatusMessages } from "@/lib/dashboard-signals";
@@ -35,6 +35,13 @@ export function greetingForNow(): string {
  * not nested inside it — the two used to share one panel, but the
  * spec is explicit that Greeting and Priority are separate sections.
  */
+/** Set once, client-side only, the first time the setup journey is
+ * ever seen complete — so "Amazing, you're live" is a genuine one-time
+ * moment rather than repeating on every visit. No server/database
+ * memory involved; a returning "have I already told them this" flag
+ * is exactly what localStorage is for. */
+const JOURNEY_CELEBRATED_KEY = "replyflow:office-ready-celebrated";
+
 export function GreetingCard({
   name,
   logoUrl = null,
@@ -42,6 +49,7 @@ export function GreetingCard({
   rotateCalm = false,
   whatsappConnected = false,
   topGaps = [],
+  justBecameReady = false,
 }: {
   name: string;
   logoUrl?: string | null;
@@ -49,9 +57,14 @@ export function GreetingCard({
   rotateCalm?: boolean;
   whatsappConnected?: boolean;
   topGaps?: readonly string[];
+  /** True whenever the setup journey (Business Profile, Receptionist,
+   * WhatsApp) is fully done — the component itself decides, via
+   * localStorage, whether that's genuinely the first time. */
+  justBecameReady?: boolean;
 }) {
   const messages = calmStatusMessages(whatsappConnected, topGaps);
   const [calmIndex, setCalmIndex] = useState(0);
+  const [showCelebration, setShowCelebration] = useState(false);
 
   useEffect(() => {
     if (!rotateCalm) return;
@@ -60,7 +73,21 @@ export function GreetingCard({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rotateCalm]);
 
-  const line = rotateCalm ? messages[calmIndex % messages.length] : supportLine;
+  useEffect(() => {
+    if (!justBecameReady || typeof window === "undefined") return;
+    if (window.localStorage.getItem(JOURNEY_CELEBRATED_KEY)) return;
+    window.localStorage.setItem(JOURNEY_CELEBRATED_KEY, "1");
+    setShowCelebration(true);
+    const t = setTimeout(() => setShowCelebration(false), 8000);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [justBecameReady]);
+
+  const line = showCelebration
+    ? "Amazing — you're live. I'm now watching for customers."
+    : rotateCalm
+      ? messages[calmIndex % messages.length]
+      : supportLine;
 
   return (
     <SettleCard className="relative max-h-[220px] overflow-hidden rounded-2xl border border-border bg-card p-6 shadow-sm">
@@ -90,7 +117,7 @@ export function GreetingCard({
           <h1 className="mt-0.5 text-[22px] font-extrabold tracking-tight md:text-[24px]" suppressHydrationWarning>
             {greetingForNow()}, {name}.
           </h1>
-          <GentleSwap swapKey={rotateCalm ? calmIndex : -1} className="mt-1">
+          <GentleSwap swapKey={showCelebration ? "celebrate" : rotateCalm ? calmIndex : -1} className="mt-1">
             <p className="text-[14px] leading-relaxed text-muted-foreground">{line}</p>
           </GentleSwap>
         </div>
@@ -381,77 +408,99 @@ export function TodaysDiary({
   );
 }
 
-/* ------------------------ State 1: before the first enquiry ------------------- */
+/* -------------------------------- Setup journey -------------------------------- */
 
-export interface ReadyStatusState {
-  whatsappConnected: boolean;
+export interface JourneyStep {
+  id: string;
+  label: string;
+  done: boolean;
+  href: string;
 }
 
 /**
- * What she's doing right now for a brand-new business — replaces the
- * old milestone checklist. She never reads as a setup wizard waiting
- * on steps; she always has one true, live thing to say (Front Desk
- * V3 / One Thought Ahead: never a blank screen waiting for progress).
- */
-export function ReadyStatus({ state }: { state: ReadyStatusState }) {
-  const line = state.whatsappConnected
-    ? "No enquiries yet. I'll let you know the moment someone gets in touch."
-    : "I'm ready to go. Once WhatsApp is connected, I'll start watching for messages.";
-
-  return (
-    <SettleCard delay={0.05} className="rounded-2xl border border-border bg-card p-6 shadow-sm">
-      <div className="flex items-center gap-3.5">
-        <div className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-success/10 text-success">
-          <Sparkles className="h-4 w-4" />
-          {state.whatsappConnected && (
-            <motion.span
-              aria-hidden
-              className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full bg-success ring-2 ring-card"
-              animate={{ opacity: [1, 0.45, 1] }}
-              transition={{ duration: 2.2, repeat: Infinity, ease: "easeInOut" }}
-            />
-          )}
-        </div>
-        <p className="text-[14px] font-semibold leading-snug">{line}</p>
-      </div>
-    </SettleCard>
-  );
-}
-
-/* ----------------------------- Setup progress --------------------------------- */
-
-/**
- * The final stretch before going live — appears once the essentials
- * (Business Knowledge, teaching her how to speak) are substantially
- * done, so the owner feels themselves approaching a real milestone
- * rather than an open-ended checklist. This is a progress narrative
- * only: it never disables or hides the real Connect WhatsApp step,
- * which stays fully usable throughout (nothing here is a gate).
+ * Sprint 8.8 — replaces ReadyStatus and SetupProgress (and the ad hoc
+ * "isNewBusiness" flags that used to decide between them). Before this
+ * sprint, Front Desk treated setup as something to quietly mention in
+ * passing; this makes it the actual first thing the owner is asked to
+ * do, in the same place they'll come back to every day afterwards.
  *
- * Design System: "Growth should be visible. Not through percentages.
- * Through behaviour." — the bar shows progress visually; the heading
- * carries the meaning. No numeric badge sits beside it.
+ * Deliberately generic — this component doesn't know what a "step" is
+ * beyond a label, a done flag, and where it leads; the specific three
+ * steps (and what counts as "done" for each) are decided once, from
+ * real Shared Brain signals, in app/(dashboard)/dashboard/page.tsx.
+ * Merges what used to be the Greeting Card and Today's Priority into
+ * one arrival moment on purpose: during setup, the "priority" IS
+ * getting set up, so there's nothing for a separate priority card to
+ * say that this doesn't already cover.
  */
-export function SetupProgress({ percent }: { percent: number }) {
-  const ready = percent >= 100;
+export function SetupJourney({ name, steps }: { name: string; steps: readonly JourneyStep[] }) {
+  const doneCount = steps.filter((s) => s.done).length;
+  const nextStep = steps.find((s) => !s.done) ?? null;
+
   return (
-    <SettleCard delay={0.04} className="rounded-2xl border border-success/25 bg-success/5 p-6 shadow-sm">
-      <h2 className="text-[15px] font-bold tracking-tight">
-        {ready ? "I'm ready to go live" : "Almost ready"}
-      </h2>
-      <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-muted">
-        <motion.div
-          className="h-full rounded-full bg-success"
-          initial={false}
-          animate={{ width: `${Math.max(percent, 4)}%` }}
-          transition={{ duration: 0.6, ease: EASE }}
-        />
+    <SettleCard className="relative overflow-hidden rounded-2xl border border-border bg-card p-6 shadow-sm sm:p-8">
+      {/* Same almost-invisible Aurora wash as the Greeting Card (Sprint
+       * 7.7) — this card is standing in for arrival, so it earns it. */}
+      <div className="aurora-layer" aria-hidden="true">
+        <div className="aurora-blob aurora-blob-primary" />
+        <div className="aurora-blob aurora-blob-success" />
       </div>
-      <p className="mt-3 text-[13px] leading-relaxed text-muted-foreground">
-        {ready
-          ? "You've taught me everything I need. Connect WhatsApp below and I'll start looking after real customers."
-          : "Finish teaching me your business and how to talk to customers, and I'll be ready to connect WhatsApp and go live."}
-      </p>
+      <div className="relative">
+        <p className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground/70" suppressHydrationWarning>
+          {new Date().toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" })}
+        </p>
+        <h1 className="mt-0.5 text-[22px] font-extrabold tracking-tight md:text-[24px]" suppressHydrationWarning>
+          {greetingForNow()}, {name}.
+        </h1>
+        <p className="mt-1 text-[14px] leading-relaxed text-muted-foreground">Let&apos;s get your office ready.</p>
+
+        <div className="mt-5 space-y-1">
+          {steps.map((step) => {
+            const isNext = nextStep?.id === step.id;
+            return (
+              <Link
+                key={step.id}
+                href={step.href}
+                className={cn(
+                  "-mx-2.5 flex items-center gap-2.5 rounded-xl px-2.5 py-2 transition-colors hover:bg-muted/50",
+                  isNext && "bg-primary/5"
+                )}
+              >
+                <span
+                  className={cn(
+                    "flex h-5 w-5 shrink-0 items-center justify-center rounded-full",
+                    step.done ? "bg-success text-success-foreground" : "border border-border"
+                  )}
+                >
+                  {step.done && <Check className="h-3 w-3" strokeWidth={3} />}
+                </span>
+                <span className={cn("text-[14px]", step.done ? "text-muted-foreground" : "font-semibold text-foreground")}>
+                  {step.label}
+                </span>
+              </Link>
+            );
+          })}
+        </div>
+
+        <p className="mt-4 text-[12px] text-muted-foreground">
+          {doneCount} of {steps.length} steps done
+        </p>
+
+        {nextStep && (
+          <Link
+            href={nextStep.href}
+            className="mt-4 inline-block rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+          >
+            <motion.span
+              {...press}
+              className="flex min-h-[48px] items-center gap-2 rounded-xl bg-primary px-5 text-[14px] font-semibold text-primary-foreground shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md"
+            >
+              Continue to {nextStep.label}
+              <ArrowRight className="h-4 w-4" />
+            </motion.span>
+          </Link>
+        )}
+      </div>
     </SettleCard>
   );
 }

@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Check, Plus, X } from "lucide-react";
+import { Check, ChevronDown, Plus, X } from "lucide-react";
 import { SettleCard, EASE, press } from "@/components/shared/motion";
 import { Acknowledgement, ACK, randomAck, useAcknowledgement } from "@/components/shared/acknowledgement";
 import { ConfidenceBar } from "@/components/shared/confidence-bar";
@@ -21,33 +21,33 @@ import { servicesForTrade, accessSuggestionsForTrade } from "@/lib/trades";
 import { cn } from "@/lib/utils";
 
 /**
- * Business Profile (Sprint 8.7 rewrite).
+ * Business Profile (Sprint 8.7 rewrite, Sprint 8.8 progressive
+ * disclosure).
  *
  * Sprint 8.6 grouped the old chat-interview layout into three
  * categories and it was still, in the product review's own words,
  * "psychologically perceived as a questionnaire" — an avatar asking a
  * question in a speech bubble, one topic auto-expanding after another,
- * is the AI-chatbot metaphor, however calm its styling. This page
- * drops that metaphor entirely.
+ * is the AI-chatbot metaphor, however calm its styling. Sprint 8.7
+ * dropped that metaphor entirely for a plain, always-visible profile
+ * document — the same mental model WhatsApp Business itself uses for
+ * its own "Business Profile" screen.
  *
- * The new model: a business profile document, the same mental model
- * WhatsApp Business itself uses for its own "Business Profile" screen
- * (a plain, always-visible list of fields you fill in, not a chat).
- * Sections are grouped the way an owner actually thinks about
- * introducing their business to someone new — who we are, what we do,
- * how we work, good to know — every field visible at once, nothing
- * auto-advancing, nothing framed as a question from an AI character.
- * All existing data, fields, suggestions, and save behaviour are
- * unchanged; only how they're organised and presented is different.
+ * Sprint 8.8 brings back *progressive* disclosure, deliberately —
+ * without bringing back the chatbot framing that came with it before.
+ * Exactly one of the four groups is open at a time; a group that's
+ * genuinely done collapses into a compact, checked summary row and
+ * the next incomplete group opens on its own — the difference from
+ * 8.6 is that nothing here is dressed up as a question from an AI
+ * character asking to be taught. It's the same document, one section
+ * at a time, the same way filling in a paper form naturally draws the
+ * eye to the next blank line. Any group can still be reopened by
+ * tapping it — nothing is ever locked.
  *
- * The WhatsApp phone-preview + scenario tabs are gone from this page —
- * a live "watch it reply" demo belongs to Receptionist, where tone and
- * communication are actually being taught (Sprint 8.7 product
- * decision). Business Knowledge isn't teaching a reply style; it's a
- * profile, so the right column now shows a profile card instead — the
- * same "how this looks to someone else" idea WhatsApp Business's own
- * profile preview uses, built from these exact answers, not a second
- * fake conversation.
+ * The WhatsApp phone-preview + scenario tabs stay gone from this page
+ * (Sprint 8.7 decision) — that demo belongs to Receptionist. The
+ * profile summary card on the right keeps updating live as fields
+ * change, exactly as before.
  */
 
 export interface Faq {
@@ -439,6 +439,54 @@ export function BusinessMemory({
     return knownById.get(id) ?? false;
   };
 
+  const groupDone = (group: SectionGroup): boolean =>
+    fields.filter((f) => f.group === group).every((f) => fieldKnown(f.id));
+
+  /** A one-line, honest highlight of what's already been added — never
+   * a fabricated summary, just the same values shown in the fields
+   * themselves, joined. Shown once a group collapses. */
+  const groupSummary = (group: SectionGroup): string | null => {
+    if (group === "identity") return businessName.trim() || null;
+    if (group === "scope") return services.length > 0 ? services.slice(0, 3).join(", ") : null;
+    if (group === "commercial") return knowledge.paymentMethods.length > 0 ? knowledge.paymentMethods.join(", ") : null;
+    if (activeFaqs.length > 0) return `${activeFaqs.length} ${activeFaqs.length === 1 ? "answer" : "answers"} ready`;
+    return null;
+  };
+
+  // Sprint 8.8 — exactly one group open at a time; a group that
+  // becomes fully done collapses and the next incomplete one opens on
+  // its own, the same auto-advance pattern Sprint 8.6 used per-topic,
+  // now at group level. Manually opening a different group is always
+  // respected. Arriving from a Recommendations link (?topic=) opens
+  // that field's own group first, instead of wherever auto-advance
+  // would otherwise land.
+  const initialGroup = initialTopic ? fields.find((f) => f.id === initialTopic)?.group ?? null : null;
+  const firstIncompleteGroup = GROUP_ORDER.find((g) => !groupDone(g)) ?? null;
+  const [openGroup, setOpenGroup] = useState<SectionGroup | null>(initialGroup ?? firstIncompleteGroup);
+  const prevFirstIncomplete = useRef<SectionGroup | null | undefined>(undefined);
+  useEffect(() => {
+    if (prevFirstIncomplete.current === undefined) {
+      prevFirstIncomplete.current = firstIncompleteGroup;
+      return;
+    }
+    if (firstIncompleteGroup !== prevFirstIncomplete.current) {
+      const justCompleted = prevFirstIncomplete.current;
+      setOpenGroup((current) => (current === justCompleted ? firstIncompleteGroup : current));
+      if (justCompleted) {
+        ackRef.current =
+          justCompleted === "identity"
+            ? "Perfect. I can now introduce your business."
+            : justCompleted === "scope"
+              ? "Got it. I know what you do and where."
+              : justCompleted === "commercial"
+                ? "Noted. I know how you like to be paid."
+                : "Thanks. That's everything I need for now.";
+      }
+    }
+    prevFirstIncomplete.current = firstIncompleteGroup;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [firstIncompleteGroup]);
+
   /* ------------------------------ layout ------------------------------- */
 
   return (
@@ -452,19 +500,57 @@ export function BusinessMemory({
       </SettleCard>
 
       <div className="flex flex-col gap-6 lg:grid lg:grid-cols-[1fr_340px] lg:items-start">
-        <div className="min-w-0 space-y-4 lg:order-1">
+        <div className="min-w-0 space-y-3 lg:order-1">
           {GROUP_ORDER.map((group) => {
             const groupFields = fields.filter((f) => f.group === group);
             if (groupFields.length === 0) return null;
             const doneCount = groupFields.filter((f) => fieldKnown(f.id)).length;
+            const done = doneCount === groupFields.length;
+            const isOpen = openGroup === group;
+            const summary = groupSummary(group);
+
+            if (!isOpen) {
+              return (
+                <SettleCard key={group} className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
+                  <motion.button
+                    type="button"
+                    onClick={() => setOpenGroup(group)}
+                    whileTap={{ scale: 0.99 }}
+                    className="flex w-full items-center gap-3 px-5 py-4 text-left"
+                  >
+                    <span
+                      className={cn(
+                        "flex h-6 w-6 shrink-0 items-center justify-center rounded-full",
+                        done ? "bg-success text-success-foreground" : "border border-border text-muted-foreground"
+                      )}
+                    >
+                      {done ? <Check className="h-3.5 w-3.5" strokeWidth={3} /> : null}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[14px] font-semibold">{GROUP_LABEL[group]}</p>
+                      <p className="truncate text-[12px] text-muted-foreground">
+                        {summary ?? `${doneCount} of ${groupFields.length} added`}
+                      </p>
+                    </div>
+                    <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
+                  </motion.button>
+                </SettleCard>
+              );
+            }
+
             return (
               <SettleCard key={group} className="rounded-2xl border border-border bg-card p-5 shadow-sm">
-                <div className="mb-4 flex items-baseline justify-between">
+                <button
+                  type="button"
+                  onClick={() => setOpenGroup(null)}
+                  className="mb-4 flex w-full items-baseline justify-between text-left"
+                >
                   <h2 className="text-[15px] font-bold tracking-tight">{GROUP_LABEL[group]}</h2>
-                  <span className="text-[11.5px] text-muted-foreground">
+                  <span className="flex items-center gap-1.5 text-[11.5px] text-muted-foreground">
                     {doneCount} of {groupFields.length} added
+                    <ChevronDown className="h-3.5 w-3.5 rotate-180" />
                   </span>
-                </div>
+                </button>
                 <div className="divide-y divide-border/70">
                   {groupFields.map((field) => (
                     <div
@@ -863,7 +949,7 @@ function FaqEditor({ faqs, onChange }: { faqs: Faq[]; onChange: (faqs: Faq[]) =>
   return (
     <div className="space-y-3">
       <p className="text-[12.5px] leading-relaxed text-muted-foreground">
-        Add an answer once and I&apos;ll give it consistently, every time.
+        Add an answer once and I&apos;ll use it whenever a customer asks.
       </p>
 
       {/* Suggested before asking the owner to write their own. */}

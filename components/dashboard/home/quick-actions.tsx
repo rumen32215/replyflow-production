@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { ArrowRight, BookOpen, CalendarClock, Headset, MessagesSquare, Smartphone } from "lucide-react";
+import { BookOpen, CalendarClock, Headset, MessagesSquare } from "lucide-react";
 import { press, ScrollReveal } from "@/components/shared/motion";
 import { Acknowledgement, ACK, useAcknowledgement } from "@/components/shared/acknowledgement";
 import { SwitchVisual } from "@/components/ui/switch";
@@ -145,35 +145,8 @@ function QuickActionButton({ href, icon, children }: { href: string; icon: React
   );
 }
 
-/**
- * A different kind of action from the routine Quick Actions — connecting
- * WhatsApp is a one-time, load-bearing step (she can't do her job at
- * all without it), not a daily habit. It earns its own prominent
- * banner rather than sharing the grid.
- */
-export function ConnectWhatsAppBanner() {
-  return (
-    <ScrollReveal>
-      <Link
-        href="/dashboard/whatsapp"
-        className="group block rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-      >
-        <motion.div
-          {...press}
-          className="flex items-center gap-3.5 rounded-2xl bg-success p-4 text-success-foreground shadow-md transition-all hover:-translate-y-0.5 hover:shadow-lg"
-        >
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/15">
-            <Smartphone className="h-5 w-5" />
-          </div>
-          <div className="min-w-0 flex-1">
-            <p className="text-[14.5px] font-bold">Connect WhatsApp</p>
-            <p className="mt-0.5 text-[12.5px] text-success-foreground/85">
-              I&apos;m ready — I just can&apos;t hear your customers yet.
-            </p>
-          </div>
-          <ArrowRight className="h-4 w-4 shrink-0 transition-transform group-hover:translate-x-0.5" />
-        </motion.div>
-      </Link>
-    </ScrollReveal>
-  );
-}
+// ConnectWhatsAppBanner was removed in Sprint 8.8 — connecting
+// WhatsApp is now the third step of Front Desk's own setup journey
+// (see SetupJourney in home-experience.tsx), so a second, separate
+// "connect WhatsApp" banner here would just repeat the same call to
+// action the journey card already owns.

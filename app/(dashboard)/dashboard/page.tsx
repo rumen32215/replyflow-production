@@ -7,12 +7,12 @@ import {
   AISummaryCard,
   UrgentItems,
   TodaysDiary,
-  ReadyStatus,
-  SetupProgress,
+  SetupJourney,
+  type JourneyStep,
   type UrgentItem,
   type RightNowJob,
 } from "@/components/dashboard/home/home-experience";
-import { QuickActions, ConnectWhatsAppBanner } from "@/components/dashboard/home/quick-actions";
+import { QuickActions } from "@/components/dashboard/home/quick-actions";
 import { Recommendations } from "@/components/dashboard/home/recommendations";
 import { BusinessHealth } from "@/components/dashboard/home/business-health";
 import { RecentLearning } from "@/components/dashboard/home/whats-on-my-mind";
@@ -161,17 +161,13 @@ export default async function HomePage() {
   ).length;
 
   const whatsappConnected = business.whatsapp_connected ?? false;
-
-  // State 1 (Dashboard States V1): a brand-new business never meets an
-  // empty dashboard — it meets its next step.
-  const isNewBusiness = !whatsappConnected || (conversationCount ?? 0) === 0 || (completedEver ?? 0) === 0;
-  const showChecklist = isNewBusiness && needsYou.length === 0 && jobsToday.length === 0;
+  const noActivityYet = (conversationCount ?? 0) === 0 && (completedEver ?? 0) === 0;
 
   const availability = parseAvailability(business.availability, business.opening_time, business.closing_time);
 
   const oldestWaiting = needsYou[0] ?? null;
   const presenceLine = buildPresenceLine({
-    isNewBusiness: showChecklist,
+    isNewBusiness: noActivityYet,
     waitingCount: needsYou.length,
     waitingCustomer: oldestWaiting ? { name: oldestWaiting.name, minutes: oldestWaiting.minutes } : null,
     jobsBookedToday: jobsToday.length,
@@ -216,7 +212,20 @@ export default async function HomePage() {
       bookedToday: jobsToday.length,
     },
   });
-  const showSetupProgress = !whatsappConnected && !showChecklist && brain.percent >= 40;
+  // Sprint 8.8 — the setup journey. Three real, already-computed
+  // signals (never a fabricated "readiness score"): Business Profile
+  // and Receptionist are each "done" the same way the rest of the
+  // product already defines complete (100% of that Shared Brain
+  // domain); WhatsApp is done the same way it's always been checked.
+  // Business Profile before Receptionist before WhatsApp is a
+  // suggested reading order, not an enforced gate — every step link
+  // works regardless of order, and completion is entirely signal-driven.
+  const journeySteps: JourneyStep[] = [
+    { id: "business", label: "Business Profile", done: brain.percentFor("knowledge") >= 100, href: "/dashboard/business" },
+    { id: "receptionist", label: "Receptionist", done: brain.percentFor("receptionist") >= 100, href: "/dashboard/receptionist" },
+    { id: "whatsapp", label: "Connect WhatsApp", done: whatsappConnected, href: "/dashboard/whatsapp" },
+  ];
+  const journeyComplete = journeySteps.every((s) => s.done);
 
   // Section 2 — exactly one priority, chosen by a fixed, honest
   // precedence over the same real facts above (see selectTodaysPriority).
@@ -249,31 +258,29 @@ export default async function HomePage() {
 
   return (
     <div className="mx-auto max-w-[1280px] space-y-6">
-      {/* Sprint 7.6: Greeting and Today's Priority are the "arrival" beat —
-       * the first five seconds — so they sit closer together than the
-       * informational cards that follow, instead of every section
-       * competing for the same uniform gap. */}
-      <div className="space-y-3">
-        <GreetingCard
-          name={business.business_name}
-          logoUrl={business.logo_url}
-          supportLine={presenceLine}
-          rotateCalm={rotateCalm}
-          whatsappConnected={whatsappConnected}
-          topGaps={brain.gaps.slice(0, 2).map((g) => g.label)}
-        />
-
-        {showSetupProgress && <SetupProgress percent={brain.percent} />}
-        {!whatsappConnected && <ConnectWhatsAppBanner />}
-
-        {showChecklist ? (
-          <ReadyStatus state={{ whatsappConnected }} />
-        ) : (
+      {/* Sprint 8.8 — Front Desk is now a guide, not a static dashboard:
+       * until the three setup steps are all real, it shows the journey
+       * instead of pretending there's a normal operational day to
+       * summarise. Sprint 7.6's "Greeting and Priority sit close
+       * together" arrival beat still holds once the journey is done. */}
+      {journeyComplete ? (
+        <div className="space-y-3">
+          <GreetingCard
+            name={business.business_name}
+            logoUrl={business.logo_url}
+            supportLine={presenceLine}
+            rotateCalm={rotateCalm}
+            whatsappConnected={whatsappConnected}
+            topGaps={brain.gaps.slice(0, 2).map((g) => g.label)}
+            justBecameReady
+          />
           <TodaysPriorityCard priority={todaysPriority} />
-        )}
-      </div>
+        </div>
+      ) : (
+        <SetupJourney name={business.business_name} steps={journeySteps} />
+      )}
 
-      {!showChecklist && (
+      {journeyComplete && (
         <div className="space-y-6">
           <AISummaryCard bullets={summaryBullets} />
           <UrgentItems items={needsYou} />

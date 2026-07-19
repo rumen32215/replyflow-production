@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { ArrowRight } from "lucide-react";
 import { SettleCard, Reveal } from "@/components/shared/motion";
 import { TONE_ICON, TONE_STYLE } from "@/components/shared/insight";
 import type { Observation } from "@/lib/intelligence";
@@ -67,6 +68,15 @@ export function RecentLearning({ observations }: { observations: readonly Observ
           );
         })}
       </div>
+      {/* Sprint 8: Feature 11's own Front Desk Integration note — this
+       * timeline is a snapshot; Everything I Know is the full picture. */}
+      <Link
+        href="/dashboard/everything-i-know"
+        className="mt-4 flex items-center gap-1.5 text-[12.5px] font-semibold text-primary transition-colors hover:text-primary/80"
+      >
+        See everything I know
+        <ArrowRight className="h-3.5 w-3.5" />
+      </Link>
     </SettleCard>
   );
 }

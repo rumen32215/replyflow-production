@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Radar, Settings, Users } from "lucide-react";
+import { Brain, Radar, Settings, Users } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { SignOutButton } from "@/app/(dashboard)/sign-out-button";
 import { Logo } from "@/components/shared/logo";
@@ -41,6 +41,16 @@ export function Topbar({
           className="flex h-9 w-9 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
         >
           <Users className="h-[17px] w-[17px]" />
+        </Link>
+        {/* Sprint 8: same reachability pattern as Mission Control and
+         * Customers above — not a fifth primary tab, just a way in
+         * while it's new. */}
+        <Link
+          href="/dashboard/everything-i-know"
+          aria-label="Everything I Know"
+          className="flex h-9 w-9 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+        >
+          <Brain className="h-[17px] w-[17px]" />
         </Link>
         <Link
           href="/dashboard/settings"

@@ -2,37 +2,18 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import {
-  AlertTriangle,
-  Ban,
-  Check,
-  CreditCard,
-  DoorOpen,
-  HelpCircle,
-  MapPin,
-  Plus,
-  ShieldCheck,
-  Sparkles,
-  User,
-  Wrench,
-  X,
-  type LucideIcon,
-} from "lucide-react";
-import { SettleCard, GentleSwap, EASE, press } from "@/components/shared/motion";
+import { Check, Plus, X } from "lucide-react";
+import { SettleCard, EASE, press } from "@/components/shared/motion";
 import { Acknowledgement, ACK, randomAck, useAcknowledgement } from "@/components/shared/acknowledgement";
-import { PhonePreview } from "@/components/shared/phone-preview";
-import { TeachingCard } from "@/components/shared/teaching-card";
 import { ConfidenceBar } from "@/components/shared/confidence-bar";
 import { Switch } from "@/components/ui/switch";
 import { createClient } from "@/lib/supabase/client";
 import {
   parseKnowledge,
-  buildKnowledgeReply,
   PERSONALITY_SUGGESTIONS,
   PAYMENT_SUGGESTIONS,
   GUARANTEE_SUGGESTIONS,
   FAQ_SUGGESTIONS,
-  KNOWLEDGE_PREVIEW_SCENARIOS,
   type BusinessKnowledge,
 } from "@/lib/knowledge";
 import { buildBrain } from "@/lib/intelligence";
@@ -40,22 +21,33 @@ import { servicesForTrade, accessSuggestionsForTrade } from "@/lib/trades";
 import { cn } from "@/lib/utils";
 
 /**
- * Business knowledge — the living profile (Business Knowledge V2).
+ * Business Profile (Sprint 8.7 rewrite).
  *
- * She's not presenting settings; she's asking questions because she
- * wants to understand the business better. Every section is one of
- * her conversation turns (her avatar, her question, a check once she
- * knows it) — chips and suggestions do almost all the work, typing is
- * reserved for the handful of things that genuinely need it. The live
- * WhatsApp preview stays on screen throughout: every answer visibly
- * changes how she'd actually reply to a real customer question about
- * the business, the same "teach it, watch it, trust it" loop as the
- * Receptionist page.
+ * Sprint 8.6 grouped the old chat-interview layout into three
+ * categories and it was still, in the product review's own words,
+ * "psychologically perceived as a questionnaire" — an avatar asking a
+ * question in a speech bubble, one topic auto-expanding after another,
+ * is the AI-chatbot metaphor, however calm its styling. This page
+ * drops that metaphor entirely.
  *
- * Persistence is quiet: one debounced write, no Save button — she
- * shows "Learning..." while the save is in flight, then acknowledges.
- * FAQs live in ai_configurations.faqs (their original home) so the
- * conversation engine keeps reading them unchanged.
+ * The new model: a business profile document, the same mental model
+ * WhatsApp Business itself uses for its own "Business Profile" screen
+ * (a plain, always-visible list of fields you fill in, not a chat).
+ * Sections are grouped the way an owner actually thinks about
+ * introducing their business to someone new — who we are, what we do,
+ * how we work, good to know — every field visible at once, nothing
+ * auto-advancing, nothing framed as a question from an AI character.
+ * All existing data, fields, suggestions, and save behaviour are
+ * unchanged; only how they're organised and presented is different.
+ *
+ * The WhatsApp phone-preview + scenario tabs are gone from this page —
+ * a live "watch it reply" demo belongs to Receptionist, where tone and
+ * communication are actually being taught (Sprint 8.7 product
+ * decision). Business Knowledge isn't teaching a reply style; it's a
+ * profile, so the right column now shows a profile card instead — the
+ * same "how this looks to someone else" idea WhatsApp Business's own
+ * profile preview uses, built from these exact answers, not a second
+ * fake conversation.
  */
 
 export interface Faq {
@@ -88,22 +80,14 @@ type SectionId =
   | "faqs"
   | "access";
 
-/**
- * Sprint 8.6: ten identically-styled rows in one flat list read as a
- * form with ten fields, however conversational each one is individually
- * ("would a busy tradesperson understand this in five seconds?" — not
- * as one long list). Grouping under three plain-language headings lets
- * the eye chunk the page into "about the business / money / good to
- * know" instead of counting ten rows — same teaching mechanism, same
- * data, just organised the way a person would actually think about it.
- */
-type SectionGroup = "about" | "money" | "goodToKnow";
+type SectionGroup = "identity" | "scope" | "commercial" | "goodToKnow";
 const GROUP_LABEL: Record<SectionGroup, string> = {
-  about: "About your business",
-  money: "Money & guarantees",
+  identity: "Who we are",
+  scope: "What we do",
+  commercial: "How we work",
   goodToKnow: "Good to know",
 };
-const GROUP_ORDER: SectionGroup[] = ["about", "money", "goodToKnow"];
+const GROUP_ORDER: SectionGroup[] = ["identity", "scope", "commercial", "goodToKnow"];
 
 export function BusinessMemory({
   businessId,
@@ -114,10 +98,9 @@ export function BusinessMemory({
   businessId: string;
   trade: string | null;
   initial: BusinessMemoryInitial;
-  /** Sprint 8.6: set when arriving from a Recommendations "Teach me"
-   * link (?topic=) so that exact topic opens, instead of whichever one
-   * this page's own auto-advance would otherwise pick. Already
-   * validated against real SectionIds by the Server Component page. */
+  /** Set when arriving from a Front Desk recommendation (?topic=) —
+   * scrolls to and briefly highlights that field instead of opening a
+   * section, since nothing here collapses any more. */
   initialTopic?: string | null;
 }) {
   const supabase = createClient();
@@ -135,22 +118,6 @@ export function BusinessMemory({
   const [calloutFeeAmount, setCalloutFeeAmount] = useState(initial.calloutFeeAmount);
   const [knowledge, setKnowledge] = useState<BusinessKnowledge>(initial.knowledge);
   const [faqs, setFaqs] = useState<Faq[]>(initial.faqs);
-  const [open, setOpen] = useState<SectionId | null>((initialTopic as SectionId | null) ?? null);
-  const [scenarioId, setScenarioId] = useState<string>(KNOWLEDGE_PREVIEW_SCENARIOS[0]?.id ?? "payment");
-
-  /* The live proof — every answer below is a fact this reply is built
-   * from, so watching it change is the whole point. */
-  const scenario = KNOWLEDGE_PREVIEW_SCENARIOS.find((s) => s.id === scenarioId) ?? KNOWLEDGE_PREVIEW_SCENARIOS[0]!;
-  const liveReply = buildKnowledgeReply(scenarioId, {
-    paymentMethods: knowledge.paymentMethods,
-    chargesCalloutFee,
-    calloutFeeAmount,
-    guarantees: knowledge.guarantees,
-    serviceAreas,
-    offersEmergency,
-    emergencyNotes: knowledge.emergencyNotes,
-    parkingAccess: knowledge.parkingAccess,
-  });
 
   /* ------------------------- quiet persistence ------------------------- */
   const firstRender = useRef(true);
@@ -220,14 +187,13 @@ export function BusinessMemory({
     setKnowledge((k) => ({ ...k, ...patch }));
   }
 
-  /* --------------------- understanding + suggestions ------------------- */
+  /* --------------------------- profile completeness --------------------- */
 
   // The shared Brain (lib/intelligence.ts) — this page only feeds its
-  // own knowledge domain, so its confidence badge and next-lesson
-  // sequencing stay scoped to what this page teaches, exactly like
-  // before. Receptionist/diary domains are simply omitted here; they
-  // read as "not yet known" internally but this page never surfaces
-  // that, since it only ever reads brain.gaps/percentFor("knowledge").
+  // own knowledge domain, so its completeness bar stays scoped to what
+  // this page covers. Used only for the overall percentage and each
+  // field's own done/not-done state; there's no auto-advance queue any
+  // more, so gaps/nextTopic aren't read here.
   const brain = useMemo(
     () =>
       buildBrain({
@@ -241,102 +207,49 @@ export function BusinessMemory({
       }),
     [description, services, serviceAreas, knowledge, faqs]
   );
-
-  const knowledgePercent = brain.percentFor("knowledge");
-
-  // Proactive learning (One Thought Ahead): ReplyFlow notices what it
-  // doesn't know yet and asks — the owner never has to think of it.
-  // Topic ids match this page's SectionId exactly (declared together
-  // in lib/intelligence.ts's TOPIC_DEFINITIONS), so no separate lookup
-  // map is needed anymore — the fragile string-keyed MISSING_TO_SECTION
-  // this used to be is gone.
-  const knowledgeGaps = brain.gaps.filter((g) => g.domain === "knowledge");
-  const nextLesson = knowledgeGaps[0]
-    ? { section: knowledgeGaps[0].id as SectionId, prompt: knowledgeGaps[0].prompt }
-    : null;
-  // The more conversational, in-context phrasing lives once in
-  // lib/intelligence.ts's TOPIC_DEFINITIONS — sections below just read
-  // it, instead of duplicating a second copy of each question here.
-  const promptFor = (id: string): string => brain.topics.find((t) => t.id === id)?.prompt ?? "";
-
-  // She leads the interview rather than waiting to be asked: the very
-  // first thing she doesn't know yet opens on its own. Once it's
-  // answered (this lesson is no longer the "next" gap), she
-  // automatically advances to the next one — the same "ask, listen,
-  // ask the next thing" rhythm as a real interview, not ten panels
-  // sitting open at once. If the owner has manually opened a
-  // different section, that choice is left alone. Sprint 8.6: if a
-  // specific topic was requested (arrived via a Recommendations link),
-  // that one opens first instead — the auto-advance only overrides on
-  // later renders, once that topic's own gap status changes.
-  const prevNextSectionId = useRef<SectionId | null | undefined>(undefined);
-  useEffect(() => {
-    const newNext = nextLesson?.section ?? null;
-    if (prevNextSectionId.current === undefined) {
-      if (!initialTopic) setOpen(newNext);
-    } else if (newNext !== prevNextSectionId.current) {
-      setOpen((current) => (current === prevNextSectionId.current ? newNext : current));
-    }
-    prevNextSectionId.current = newNext;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [nextLesson?.section]);
+  const knownById = new Map(brain.topics.filter((t) => t.domain === "knowledge").map((t) => [t.id, t.done]));
+  const profilePercent = brain.percentFor("knowledge");
 
   // A real, rare celebration — not another reassurance on every edit.
-  // ackRef is read lazily by the debounced save above when its timeout
-  // fires, so setting it here (synchronously, in the same render pass
-  // as the edit that crossed the threshold) reliably overrides that
-  // save's routine acknowledgement for this one milestone moment.
-  const celebratedPercentRef = useRef(knowledgePercent);
+  const celebratedPercentRef = useRef(profilePercent);
   useEffect(() => {
     const prev = celebratedPercentRef.current;
-    if (prev < 100 && knowledgePercent >= 100) {
-      ackRef.current = "I know everything I need about your business.";
-    } else if (prev < 50 && knowledgePercent >= 50) {
-      ackRef.current = "Halfway there — I'm really getting to know your business.";
+    if (prev < 100 && profilePercent >= 100) {
+      ackRef.current = "Your business profile is complete.";
+    } else if (prev < 50 && profilePercent >= 50) {
+      ackRef.current = "Halfway there — your profile is filling out nicely.";
     }
-    celebratedPercentRef.current = knowledgePercent;
-  }, [knowledgePercent]);
+    celebratedPercentRef.current = profilePercent;
+  }, [profilePercent]);
 
-  /* ------------------------------ sections ------------------------------ */
+  /* ---------------------- scroll to a requested field -------------------- */
+  const fieldRefs = useRef<Partial<Record<SectionId, HTMLDivElement | null>>>({});
+  const [highlighted, setHighlighted] = useState<SectionId | null>(null);
+  useEffect(() => {
+    if (!initialTopic) return;
+    const el = fieldRefs.current[initialTopic as SectionId];
+    if (!el) return;
+    el.scrollIntoView({ behavior: "smooth", block: "center" });
+    setHighlighted(initialTopic as SectionId);
+    const t = setTimeout(() => setHighlighted(null), 2200);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-  const summarise = (items: string[]) =>
-    items.length === 0
-      ? null
-      : items.length <= 2
-        ? items.join(", ")
-        : `${items.slice(0, 2).join(", ")} + ${items.length - 2} more`;
+  /* ------------------------------ fields --------------------------------- */
 
   const activeFaqs = faqs.filter((f) => f.question.trim() && f.answer.trim());
 
-  /** Ten identical headset icons was the problem — each topic gets its
-   * own icon and tint so the eye can tell them apart without reading
-   * a single title (Business Knowledge should feel like a mind with
-   * many things in it, not one form repeated ten times). */
-  const sections: {
+  const fields: {
     id: SectionId;
     group: SectionGroup;
     title: string;
-    icon: LucideIcon;
-    iconClass: string;
-    question: string;
-    known: boolean;
-    summary: string | null;
     content: React.ReactNode;
   }[] = [
     {
       id: "identity",
-      group: "about",
-      title: "Your business",
-      icon: User,
-      iconClass: "bg-slate-100 text-slate-600",
-      // Onboarding already collected the business name — re-asking it
-      // here would feel like repetition. Once it's known, only the
-      // genuinely-unanswered part (the description) gets asked.
-      question: businessName.trim()
-        ? `I know you're called ${businessName.trim()} — how would you describe what you do?`
-        : promptFor("identity"),
-      known: Boolean(description.trim()),
-      summary: businessName.trim() || null,
+      group: "identity",
+      title: "Business details",
       content: (
         <div className="space-y-3">
           <MemoryField
@@ -353,7 +266,7 @@ export function BusinessMemory({
             type="tel"
           />
           <MemoryTextarea
-            label="A short introduction"
+            label="About your business"
             value={description}
             onChange={(v) => learn(() => setDescription(v))}
             placeholder="e.g. Family-run plumbing and heating covering North London for 15 years."
@@ -362,14 +275,22 @@ export function BusinessMemory({
       ),
     },
     {
+      id: "special",
+      group: "identity",
+      title: "What makes you different",
+      content: (
+        <ChipEditor
+          suggestions={[...PERSONALITY_SUGGESTIONS]}
+          items={knowledge.personality}
+          onChange={(next) => patchKnowledge({ personality: next })}
+          addPlaceholder="Add your own"
+        />
+      ),
+    },
+    {
       id: "services",
-      group: "about",
-      title: "Services",
-      icon: Wrench,
-      iconClass: "bg-blue-50 text-blue-600",
-      question: promptFor("services"),
-      known: services.length > 0,
-      summary: summarise(services),
+      group: "scope",
+      title: "Services you offer",
       content: (
         <ChipEditor
           suggestions={[...serviceSuggestions]}
@@ -380,37 +301,9 @@ export function BusinessMemory({
       ),
     },
     {
-      id: "declined",
-      group: "goodToKnow",
-      title: "Jobs we don't take",
-      icon: Ban,
-      iconClass: "bg-red-50 text-red-600",
-      question: promptFor("declined"),
-      known: knowledge.jobsDeclined.length > 0,
-      summary: summarise(knowledge.jobsDeclined),
-      content: (
-        <>
-          <p className="mb-3 text-[12.5px] leading-relaxed text-muted-foreground">
-            I&apos;ll politely let customers know, so you never get booked for the wrong work.
-          </p>
-          <ChipEditor
-            suggestions={["Gas work", "Commercial jobs", "New builds", "Jobs outside my area"]}
-            items={knowledge.jobsDeclined}
-            onChange={(next) => patchKnowledge({ jobsDeclined: next })}
-            addPlaceholder="Add a job you don't take"
-          />
-        </>
-      ),
-    },
-    {
       id: "areas",
-      group: "about",
-      title: "Areas we cover",
-      icon: MapPin,
-      iconClass: "bg-teal-50 text-teal-600",
-      question: promptFor("areas"),
-      known: serviceAreas.length > 0,
-      summary: summarise(serviceAreas),
+      group: "scope",
+      title: "Areas you cover",
       content: (
         <>
           <p className="mb-3 text-[12.5px] leading-relaxed text-muted-foreground">
@@ -426,32 +319,27 @@ export function BusinessMemory({
       ),
     },
     {
-      id: "special",
-      group: "about",
-      title: "What makes you special",
-      icon: Sparkles,
-      iconClass: "bg-violet-50 text-violet-600",
-      question: promptFor("special"),
-      known: knowledge.personality.length > 0,
-      summary: summarise(knowledge.personality),
+      id: "declined",
+      group: "scope",
+      title: "Jobs you don't take",
       content: (
-        <ChipEditor
-          suggestions={[...PERSONALITY_SUGGESTIONS]}
-          items={knowledge.personality}
-          onChange={(next) => patchKnowledge({ personality: next })}
-          addPlaceholder="Add your own"
-        />
+        <>
+          <p className="mb-3 text-[12.5px] leading-relaxed text-muted-foreground">
+            I&apos;ll politely let customers know, so you never get booked for the wrong work.
+          </p>
+          <ChipEditor
+            suggestions={["Gas work", "Commercial jobs", "New builds", "Jobs outside my area"]}
+            items={knowledge.jobsDeclined}
+            onChange={(next) => patchKnowledge({ jobsDeclined: next })}
+            addPlaceholder="Add a job you don't take"
+          />
+        </>
       ),
     },
     {
       id: "payments",
-      group: "money",
-      title: "Payment methods",
-      icon: CreditCard,
-      iconClass: "bg-emerald-50 text-emerald-600",
-      question: promptFor("payments"),
-      known: knowledge.paymentMethods.length > 0,
-      summary: summarise(knowledge.paymentMethods),
+      group: "commercial",
+      title: "Ways to pay",
       content: (
         <ChipEditor
           suggestions={[...PAYMENT_SUGGESTIONS]}
@@ -463,13 +351,8 @@ export function BusinessMemory({
     },
     {
       id: "guarantees",
-      group: "money",
+      group: "commercial",
       title: "Guarantees",
-      icon: ShieldCheck,
-      iconClass: "bg-indigo-50 text-indigo-600",
-      question: promptFor("guarantees"),
-      known: knowledge.guarantees.length > 0,
-      summary: summarise(knowledge.guarantees),
       content: (
         <ChipEditor
           suggestions={[...GUARANTEE_SUGGESTIONS]}
@@ -481,17 +364,8 @@ export function BusinessMemory({
     },
     {
       id: "emergency",
-      group: "money",
-      title: "Emergency jobs",
-      icon: AlertTriangle,
-      iconClass: "bg-orange-50 text-orange-600",
-      question: "When someone messages urgently, how should I handle it?",
-      known: true,
-      summary: offersEmergency
-        ? chargesCalloutFee && calloutFeeAmount.trim()
-          ? `Emergency call-outs · ${calloutFeeAmount.trim()} call-out fee`
-          : "Emergency call-outs available"
-        : "No emergency call-outs",
+      group: "commercial",
+      title: "Emergency call-outs",
       content: (
         <div className="space-y-1">
           <ToggleRow
@@ -528,7 +402,7 @@ export function BusinessMemory({
           </AnimatePresence>
           <div className="pt-2">
             <MemoryTextarea
-              label="Anything I should say in an emergency?"
+              label="Anything to say in an emergency?"
               value={knowledge.emergencyNotes}
               onChange={(v) => patchKnowledge({ emergencyNotes: v })}
               placeholder="e.g. If there's a gas leak, tell them to call 0800 111 999 straight away."
@@ -538,28 +412,9 @@ export function BusinessMemory({
       ),
     },
     {
-      id: "faqs",
-      group: "goodToKnow",
-      title: "Common questions",
-      icon: HelpCircle,
-      iconClass: "bg-sky-50 text-sky-600",
-      question: promptFor("faqs"),
-      known: activeFaqs.length > 0,
-      summary:
-        activeFaqs.length > 0
-          ? `${activeFaqs.length} answer${activeFaqs.length === 1 ? "" : "s"} ready`
-          : null,
-      content: <FaqEditor faqs={faqs} onChange={(next) => learn(() => setFaqs(next))} />,
-    },
-    {
       id: "access",
       group: "goodToKnow",
       title: "Parking & access",
-      icon: DoorOpen,
-      iconClass: "bg-stone-100 text-stone-600",
-      question: "Before your team arrives, is there anything customers should know?",
-      known: Boolean(knowledge.parkingAccess.trim()),
-      summary: knowledge.parkingAccess.trim() ? "Noted" : null,
       content: (
         <SuggestibleTextarea
           label="Parking, access, or preparation"
@@ -570,112 +425,102 @@ export function BusinessMemory({
         />
       ),
     },
+    {
+      id: "faqs",
+      group: "goodToKnow",
+      title: "Questions customers often ask",
+      content: <FaqEditor faqs={faqs} onChange={(next) => learn(() => setFaqs(next))} />,
+    },
   ];
 
-  /* ------------------------------- layout ------------------------------- */
+  const fieldKnown = (id: SectionId): boolean => {
+    if (id === "identity") return Boolean(description.trim());
+    if (id === "emergency") return true;
+    return knownById.get(id) ?? false;
+  };
+
+  /* ------------------------------ layout ------------------------------- */
 
   return (
     <div className="mx-auto max-w-5xl">
       <SettleCard className="mb-6">
-        <h1 className="text-[24px] font-extrabold tracking-tight md:text-[26px]">
-          What I know about your business
-        </h1>
+        <h1 className="text-[24px] font-extrabold tracking-tight md:text-[26px]">Business Profile</h1>
         <p className="mt-1 text-[14px] leading-relaxed text-muted-foreground">
-          I&apos;m asking because it helps me understand the business better — there&apos;s no finish
-          line, add to it whenever something changes.
+          This is what I&apos;ll use to introduce your business and answer your customers accurately. Update
+          it any time — there&apos;s no finish line.
         </p>
       </SettleCard>
 
-      <div className="flex flex-col gap-6 lg:grid lg:grid-cols-[1fr_360px] lg:items-start">
-        {/* The live phone — the hero, same as the Receptionist page.
-         * First on mobile, sticky in the right column on desktop. */}
-        <div className="lg:order-2 lg:sticky lg:top-2 lg:self-start">
-          <div className="mb-2.5 flex flex-wrap items-center gap-1.5">
-            {KNOWLEDGE_PREVIEW_SCENARIOS.map((s) => (
-              <motion.button
-                key={s.id}
-                {...press}
-                type="button"
-                onClick={() => setScenarioId(s.id)}
-                className={cn(
-                  "rounded-full px-3 py-1.5 text-[11.5px] font-semibold transition-all",
-                  scenarioId === s.id
-                    ? "bg-blue-600 text-white shadow-sm shadow-blue-600/25"
-                    : "border border-border bg-card text-muted-foreground hover:text-foreground"
-                )}
-              >
-                {s.label}
-              </motion.button>
-            ))}
-          </div>
-
-          <GentleSwap swapKey={scenarioId}>
-            <PhonePreview
-              businessName={businessName || initial.businessName}
-              turns={[{ from: "customer", text: scenario.customerMessage }]}
-              liveReply={liveReply}
-            />
-          </GentleSwap>
-
-          <p className="mt-3 text-[11.5px] text-muted-foreground">This is exactly how I&apos;ll reply.</p>
+      <div className="flex flex-col gap-6 lg:grid lg:grid-cols-[1fr_340px] lg:items-start">
+        <div className="min-w-0 space-y-4 lg:order-1">
+          {GROUP_ORDER.map((group) => {
+            const groupFields = fields.filter((f) => f.group === group);
+            if (groupFields.length === 0) return null;
+            const doneCount = groupFields.filter((f) => fieldKnown(f.id)).length;
+            return (
+              <SettleCard key={group} className="rounded-2xl border border-border bg-card p-5 shadow-sm">
+                <div className="mb-4 flex items-baseline justify-between">
+                  <h2 className="text-[15px] font-bold tracking-tight">{GROUP_LABEL[group]}</h2>
+                  <span className="text-[11.5px] text-muted-foreground">
+                    {doneCount} of {groupFields.length} added
+                  </span>
+                </div>
+                <div className="divide-y divide-border/70">
+                  {groupFields.map((field) => (
+                    <div
+                      key={field.id}
+                      ref={(el) => {
+                        fieldRefs.current[field.id] = el;
+                      }}
+                      className={cn(
+                        "rounded-lg py-4 transition-colors first:pt-0 last:pb-0",
+                        highlighted === field.id && "-mx-3 bg-primary/5 px-3 ring-1 ring-primary/25"
+                      )}
+                    >
+                      <div className="mb-2.5 flex items-center gap-1.5">
+                        <h3 className="text-[13.5px] font-semibold">{field.title}</h3>
+                        {fieldKnown(field.id) && <Check className="h-3.5 w-3.5 text-success" strokeWidth={3} />}
+                      </div>
+                      {field.content}
+                    </div>
+                  ))}
+                </div>
+              </SettleCard>
+            );
+          })}
         </div>
 
-        <div className="min-w-0 space-y-4 lg:order-1">
-          {/* Business understanding — not a game, a gentle signal. No
-           * repeated "Teach me" nudge here any more (Sprint 8.6): the
-           * next unanswered topic already opens itself below, so a
-           * second button restating the same question was pure
-           * repetition, not help. */}
+        {/* The profile as it stands — how this looks to someone new,
+         * built from these exact answers. No conversation preview
+         * here: that belongs to Receptionist, where tone and reply
+         * style are actually being shaped (Sprint 8.7). */}
+        <div className="lg:order-2 lg:sticky lg:top-2 lg:self-start">
           <SettleCard delay={0.05} className="rounded-2xl border border-border bg-card p-5 shadow-sm">
-            <ConfidenceBar title="How well I understand you" percent={knowledgePercent} />
+            <ConfidenceBar title="Profile completeness" percent={profilePercent} caption={`${profilePercent}% complete`} />
             <AnimatePresence mode="wait" initial={false}>
-              {!nextLesson && (
+              {profilePercent >= 100 && (
                 <motion.p
                   key="complete"
                   initial={{ opacity: 0, y: 4 }}
                   animate={{ opacity: 1, y: 0 }}
                   className="mt-3.5 text-[13px] text-muted-foreground"
                 >
-                  I know your business well. Keep adding anything new — I&apos;ll use it straight away.
+                  Your profile is complete. Keep it updated whenever something changes.
                 </motion.p>
               )}
             </AnimatePresence>
           </SettleCard>
 
-          {/* Her questions — grouped the way an owner would actually
-           * think about their business (Sprint 8.6), not ten identical
-           * rows in a row. One conversation turn per topic within each
-           * group, revealed like papers laid on a desk. */}
-          <div className="space-y-5">
-            {GROUP_ORDER.map((group) => {
-              const groupSections = sections.filter((s) => s.group === group);
-              if (groupSections.length === 0) return null;
-              return (
-                <div key={group}>
-                  <h2 className="mb-2.5 px-1 text-[11px] font-bold uppercase tracking-widest text-muted-foreground">
-                    {GROUP_LABEL[group]}
-                  </h2>
-                  <div className="space-y-3">
-                    {groupSections.map((section, index) => (
-                      <TeachingCard
-                        key={section.id}
-                        index={index}
-                        icon={section.icon}
-                        avatarClass={section.iconClass}
-                        question={section.question}
-                        known={section.known}
-                        summary={section.summary}
-                        open={open === section.id}
-                        onToggle={() => setOpen(open === section.id ? null : section.id)}
-                      >
-                        {section.content}
-                      </TeachingCard>
-                    ))}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+          <p className="mb-2 mt-5 px-1 text-[11px] font-bold uppercase tracking-widest text-muted-foreground">
+            Business profile
+          </p>
+          <BusinessProfileCard
+            businessName={businessName || initial.businessName}
+            description={description}
+            services={services}
+            serviceAreas={serviceAreas}
+            offersEmergency={offersEmergency}
+          />
         </div>
       </div>
 
@@ -700,6 +545,69 @@ export function BusinessMemory({
 }
 
 /* ------------------------------ pieces ------------------------------ */
+
+/**
+ * How this profile looks to someone new — a calm summary card, not a
+ * conversation. The same "here's what it produces" reassurance the old
+ * phone preview gave, without a second fake WhatsApp thread on top of
+ * Receptionist's real one.
+ */
+function BusinessProfileCard({
+  businessName,
+  description,
+  services,
+  serviceAreas,
+  offersEmergency,
+}: {
+  businessName: string;
+  description: string;
+  services: string[];
+  serviceAreas: string[];
+  offersEmergency: boolean;
+}) {
+  return (
+    <div className="rounded-2xl border border-border bg-card p-5 shadow-sm">
+      <div className="flex items-center gap-3">
+        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-accent text-[15px] font-bold text-primary">
+          {(businessName || "?").slice(0, 1).toUpperCase()}
+        </div>
+        <div className="min-w-0">
+          <p className="truncate text-[15px] font-bold">{businessName || "Your business"}</p>
+          {offersEmergency && <p className="text-[11.5px] text-success">Emergency call-outs available</p>}
+        </div>
+      </div>
+      <p className="mt-3 text-[13px] leading-relaxed text-muted-foreground">
+        {description || "No description yet — add one so I can introduce your business properly."}
+      </p>
+      {services.length > 0 && (
+        <div className="mt-3.5">
+          <p className="mb-1.5 text-[11px] font-bold uppercase tracking-widest text-muted-foreground">Services</p>
+          <div className="flex flex-wrap gap-1.5">
+            {services.map((s) => (
+              <span key={s} className="rounded-full bg-muted px-2.5 py-1 text-[11.5px] font-medium text-foreground">
+                {s}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+      {serviceAreas.length > 0 && (
+        <div className="mt-3.5">
+          <p className="mb-1.5 text-[11px] font-bold uppercase tracking-widest text-muted-foreground">
+            Areas covered
+          </p>
+          <div className="flex flex-wrap gap-1.5">
+            {serviceAreas.map((a) => (
+              <span key={a} className="rounded-full bg-muted px-2.5 py-1 text-[11.5px] font-medium text-foreground">
+                {a}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 function ToggleRow({
   label,
@@ -955,7 +863,7 @@ function FaqEditor({ faqs, onChange }: { faqs: Faq[]; onChange: (faqs: Faq[]) =>
   return (
     <div className="space-y-3">
       <p className="text-[12.5px] leading-relaxed text-muted-foreground">
-        Teach me an answer once and I&apos;ll give it consistently, every time.
+        Add an answer once and I&apos;ll give it consistently, every time.
       </p>
 
       {/* Suggested before asking the owner to write their own. */}

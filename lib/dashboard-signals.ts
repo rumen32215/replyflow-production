@@ -122,7 +122,7 @@ export function calmStatusMessages(whatsappConnected: boolean, topGaps: readonly
   // so it's earned, never invented, and shows up rarely (it's just
   // one more stop in the same rotation, not a separate alert).
   if (topGaps.length === 0) return withWhatsapp;
-  if (topGaps.length === 1) return [...withWhatsapp, `I still don't know ${topGaps[0]} — want to teach me?`];
+  if (topGaps.length === 1) return [...withWhatsapp, `I still don't know ${topGaps[0]} — want to add that?`];
   return [...withWhatsapp, `Two things I'd still like to learn today: ${topGaps[0]}, and ${topGaps[1]}.`];
 }
 

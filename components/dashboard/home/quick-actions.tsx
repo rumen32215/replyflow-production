@@ -31,7 +31,10 @@ interface QuickActionsProps {
 const ACTIONS = [
   { href: "/dashboard/receptionist", icon: Headset, label: "Receptionist" },
   { href: "/dashboard/availability", icon: CalendarClock, label: "Diary" },
-  { href: "/dashboard/business", icon: BookOpen, label: "Teach me" },
+  // Sprint 8.7: "Teach me" renamed — this destination is now the
+  // Business Profile page, so the action names where it actually goes,
+  // the same way "Receptionist" and "Diary" already do.
+  { href: "/dashboard/business", icon: BookOpen, label: "Business Profile" },
   { href: "/dashboard/conversations", icon: MessagesSquare, label: "Conversations" },
 ] as const;
 

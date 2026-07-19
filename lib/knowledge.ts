@@ -73,74 +73,11 @@ export function joinList(items: string[]): string {
   return `${items.slice(0, -1).join(", ")}, and ${items[items.length - 1]}`;
 }
 
-export interface KnowledgePreviewFacts {
-  paymentMethods: string[];
-  chargesCalloutFee: boolean;
-  calloutFeeAmount: string;
-  guarantees: string[];
-  serviceAreas: string[];
-  offersEmergency: boolean;
-  emergencyNotes: string;
-  parkingAccess: string;
-}
-
-export interface KnowledgeScenario {
-  id: string;
-  label: string;
-  customerMessage: string;
-}
-
-/** Real customer questions about the business itself — a different
- * axis from the Receptionist's tone/behaviour scenarios, but the same
- * "watch it change live" proof (Receptionist V1: never guess — every
- * branch below only fires when the underlying fact is actually known). */
-export const KNOWLEDGE_PREVIEW_SCENARIOS: readonly KnowledgeScenario[] = [
-  { id: "payment", label: "How to pay", customerMessage: "How can I pay you?" },
-  { id: "callout-fee", label: "Call-out fee", customerMessage: "Do you charge a call-out fee?" },
-  { id: "guarantee", label: "Guarantee", customerMessage: "Do you guarantee your work?" },
-  { id: "areas", label: "Areas covered", customerMessage: "What areas do you cover?" },
-  { id: "access", label: "Before arrival", customerMessage: "Is there anything I need to do before you arrive?" },
-  { id: "emergency", label: "Emergency call-out", customerMessage: "Do you do emergency call-outs?" },
-] as const;
-
-export function buildKnowledgeReply(scenarioId: string, f: KnowledgePreviewFacts): string {
-  switch (scenarioId) {
-    case "payment":
-      return f.paymentMethods.length > 0
-        ? `You can pay by ${joinList(f.paymentMethods).toLowerCase()}.`
-        : "I'll check with the team and confirm the best way for you to pay.";
-
-    case "callout-fee":
-      if (!f.chargesCalloutFee) return "No call-out fee for this — you'll only pay for the work itself.";
-      return f.calloutFeeAmount.trim()
-        ? `Yes, there's a call-out fee of ${f.calloutFeeAmount.trim()}, which we'll always mention upfront.`
-        : "Yes, there is a call-out fee, which we'll always mention upfront.";
-
-    case "guarantee":
-      return f.guarantees.length > 0
-        ? `Yes — ${joinList(f.guarantees).toLowerCase()}.`
-        : "The team will confirm exactly what's covered before starting.";
-
-    case "areas":
-      return f.serviceAreas.length > 0
-        ? `We cover ${joinList(f.serviceAreas)}.`
-        : "I'll double check with the team whether we cover your area.";
-
-    case "access":
-      return f.parkingAccess.trim()
-        ? f.parkingAccess.trim()
-        : "Nothing in particular — just let us know if there's anything we should be aware of.";
-
-    case "emergency":
-      if (!f.offersEmergency) return "We don't currently offer emergency call-outs, but the team can advise on next steps.";
-      return f.emergencyNotes.trim()
-        ? `Yes, we do emergency call-outs. ${f.emergencyNotes.trim()}`
-        : "Yes, we do offer emergency call-outs.";
-
-    default:
-      return "I'll check with the team and get back to you on that.";
-  }
-}
+// Business Knowledge's own conversation-preview scenarios/reply-builder
+// (KNOWLEDGE_PREVIEW_SCENARIOS / buildKnowledgeReply) were removed in
+// Sprint 8.7: Business Knowledge no longer shows a live WhatsApp demo —
+// that's Receptionist's job, where tone and reply style are actually
+// being shaped. See components/dashboard/business/business-memory.tsx.
 
 // The "how well do I understand this business" scoring that used to
 // live here (understandingScore) is now part of the shared reasoning

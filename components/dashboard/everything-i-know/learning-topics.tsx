@@ -73,7 +73,7 @@ export function LearningTopics({
                   href={DOMAIN_HREF[domain]}
                   className="mt-2 inline-block text-[12.5px] font-semibold text-primary transition-colors hover:text-primary/80"
                 >
-                  Continue teaching →
+                  Update this →
                 </Link>
               </div>
             </Reveal>

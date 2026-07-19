@@ -62,7 +62,7 @@ export function Recommendations({ gaps }: { gaps: readonly Topic[] }) {
                 className="overflow-hidden rounded-2xl border border-border bg-card p-4 shadow-sm"
               >
                 <div className="flex items-start justify-between gap-2">
-                  <p className="text-[14px] font-semibold leading-snug">Teach me {topic.label}</p>
+                  <p className="text-[14px] font-semibold leading-snug">I don&apos;t know {topic.label} yet</p>
                   <button
                     type="button"
                     aria-label="Dismiss recommendation"
@@ -79,7 +79,7 @@ export function Recommendations({ gaps }: { gaps: readonly Topic[] }) {
                     {...press}
                     className="flex min-h-[36px] items-center gap-1.5 rounded-lg bg-primary px-3.5 text-[12.5px] font-semibold text-primary-foreground"
                   >
-                    Teach me
+                    Add this
                     <ArrowRight className="h-3.5 w-3.5" />
                   </motion.span>
                 </Link>

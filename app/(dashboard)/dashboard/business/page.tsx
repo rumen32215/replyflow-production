@@ -14,7 +14,20 @@ export const metadata: Metadata = { title: "Business — ReplyFlow" };
  * that grow forever; FAQs stay in ai_configurations.faqs where the
  * conversation engine already reads them.
  */
-export default async function BusinessPage() {
+const VALID_TOPICS = new Set([
+  "identity",
+  "services",
+  "declined",
+  "areas",
+  "special",
+  "payments",
+  "guarantees",
+  "emergency",
+  "faqs",
+  "access",
+]);
+
+export default async function BusinessPage({ searchParams }: { searchParams: { topic?: string } }) {
   const supabase = createClient();
   const {
     data: { user },
@@ -48,10 +61,13 @@ export default async function BusinessPage() {
         .map((f) => ({ question: f.question, answer: f.answer }))
     : [];
 
+  const initialTopic = VALID_TOPICS.has(searchParams.topic ?? "") ? (searchParams.topic as string) : null;
+
   return (
     <BusinessMemory
       businessId={business.id}
       trade={business.trade}
+      initialTopic={initialTopic}
       initial={{
         businessName: business.business_name ?? "",
         phone: business.phone ?? "",

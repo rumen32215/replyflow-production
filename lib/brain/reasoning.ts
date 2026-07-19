@@ -81,13 +81,24 @@ interface TopicDef extends Topic {
   done: (input: BrainInput) => boolean;
 }
 
+/**
+ * Sprint 8.6: `href` now carries `?topic=<id>` so a Recommendations
+ * click lands on the exact topic that was recommended, not wherever
+ * the destination page's own auto-advance happens to open — clicking
+ * "Teach me your guarantees" used to be able to land on a completely
+ * different open section if it wasn't that page's own first gap. The
+ * destination pages read this param once, on the first render only
+ * (see business-memory.tsx / receptionist-playground.tsx); normal
+ * direct navigation without the param keeps auto-advancing exactly as
+ * before.
+ */
 const TOPIC_DEFINITIONS: readonly TopicDef[] = [
   // Business Knowledge (8) — same ids as business-memory.tsx's SectionId.
   {
     id: "identity",
     domain: "knowledge",
     label: "a short introduction",
-    href: "/dashboard/business",
+    href: "/dashboard/business?topic=identity",
     prompt: "Before I answer customers today — what would you like me to call your business, and how would you describe what you do?",
     done: (i) => Boolean(i.knowledge?.businessDescription?.trim()),
   },
@@ -95,7 +106,7 @@ const TOPIC_DEFINITIONS: readonly TopicDef[] = [
     id: "services",
     domain: "knowledge",
     label: "the services you offer",
-    href: "/dashboard/business",
+    href: "/dashboard/business?topic=services",
     prompt: "What kinds of jobs do you usually help people with?",
     done: (i) => Boolean(i.knowledge && i.knowledge.services.length > 0),
   },
@@ -103,7 +114,7 @@ const TOPIC_DEFINITIONS: readonly TopicDef[] = [
     id: "areas",
     domain: "knowledge",
     label: "the areas you cover",
-    href: "/dashboard/business",
+    href: "/dashboard/business?topic=areas",
     prompt: "Where do you usually work?",
     done: (i) => Boolean(i.knowledge && i.knowledge.serviceAreas.length > 0),
   },
@@ -111,7 +122,7 @@ const TOPIC_DEFINITIONS: readonly TopicDef[] = [
     id: "special",
     domain: "knowledge",
     label: "what makes you special",
-    href: "/dashboard/business",
+    href: "/dashboard/business?topic=special",
     prompt: "What makes your business different from others customers might call instead?",
     done: (i) => Boolean(i.knowledge && i.knowledge.knowledge.personality.length > 0),
   },
@@ -119,7 +130,7 @@ const TOPIC_DEFINITIONS: readonly TopicDef[] = [
     id: "declined",
     domain: "knowledge",
     label: "jobs you don't take",
-    href: "/dashboard/business",
+    href: "/dashboard/business?topic=declined",
     prompt: "Are there any jobs you don't take on?",
     done: (i) => Boolean(i.knowledge && i.knowledge.knowledge.jobsDeclined.length > 0),
   },
@@ -127,7 +138,7 @@ const TOPIC_DEFINITIONS: readonly TopicDef[] = [
     id: "payments",
     domain: "knowledge",
     label: "how customers can pay",
-    href: "/dashboard/business",
+    href: "/dashboard/business?topic=payments",
     prompt: "I've realised customers keep asking how to pay. What should I tell them?",
     done: (i) => Boolean(i.knowledge && i.knowledge.knowledge.paymentMethods.length > 0),
   },
@@ -135,7 +146,7 @@ const TOPIC_DEFINITIONS: readonly TopicDef[] = [
     id: "guarantees",
     domain: "knowledge",
     label: "your guarantees",
-    href: "/dashboard/business",
+    href: "/dashboard/business?topic=guarantees",
     prompt: "If someone asks whether your work is guaranteed, how would you normally answer?",
     done: (i) => Boolean(i.knowledge && i.knowledge.knowledge.guarantees.length > 0),
   },
@@ -143,7 +154,7 @@ const TOPIC_DEFINITIONS: readonly TopicDef[] = [
     id: "faqs",
     domain: "knowledge",
     label: "answers to common questions",
-    href: "/dashboard/business",
+    href: "/dashboard/business?topic=faqs",
     prompt: "Customers often ask the same questions. Would you like to teach me the answers?",
     done: (i) => Boolean(i.knowledge && i.knowledge.faqCount > 0),
   },
@@ -152,7 +163,7 @@ const TOPIC_DEFINITIONS: readonly TopicDef[] = [
     id: "behaviours",
     domain: "receptionist",
     label: "what I should always do",
-    href: "/dashboard/receptionist",
+    href: "/dashboard/receptionist?topic=behaviours",
     prompt: "What should I always do when someone gets in touch?",
     done: (i) => Boolean(i.receptionist?.behavioursTaught),
   },
@@ -160,7 +171,7 @@ const TOPIC_DEFINITIONS: readonly TopicDef[] = [
     id: "rules",
     domain: "receptionist",
     label: "your house rules",
-    href: "/dashboard/receptionist",
+    href: "/dashboard/receptionist?topic=rules",
     prompt: "Are there things I should never get wrong?",
     important: true,
     done: (i) => Boolean(i.receptionist?.rulesTaught),
@@ -169,7 +180,7 @@ const TOPIC_DEFINITIONS: readonly TopicDef[] = [
     id: "escalation",
     domain: "receptionist",
     label: "when to hand off to you",
-    href: "/dashboard/receptionist",
+    href: "/dashboard/receptionist?topic=escalation",
     prompt: "When should I stop and come get you?",
     important: true,
     done: (i) => Boolean(i.receptionist?.escalationTaught),

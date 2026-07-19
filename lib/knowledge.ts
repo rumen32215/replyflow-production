@@ -66,7 +66,7 @@ export const FAQ_SUGGESTIONS = [
   "Do you offer emergency call-outs?",
 ] as const;
 
-function joinList(items: string[]): string {
+export function joinList(items: string[]): string {
   if (items.length === 0) return "";
   if (items.length === 1) return items[0]!;
   if (items.length === 2) return `${items[0]} and ${items[1]}`;

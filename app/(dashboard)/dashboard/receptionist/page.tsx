@@ -12,10 +12,12 @@ export const metadata: Metadata = { title: "Receptionist — ReplyFlow" };
  * Experience V2). Onboarding ends here (?welcome=1): the owner meets
  * their new employee the moment they've hired them.
  */
+const VALID_TOPICS = new Set(["behaviours", "rules", "escalation"]);
+
 export default async function ReceptionistPage({
   searchParams,
 }: {
-  searchParams: { welcome?: string };
+  searchParams: { welcome?: string; topic?: string };
 }) {
   const supabase = createClient();
   const {
@@ -64,6 +66,7 @@ export default async function ReceptionistPage({
         escalationRules: config?.escalation_rules ?? "",
       }}
       justHired={searchParams.welcome === "1"}
+      initialTopic={VALID_TOPICS.has(searchParams.topic ?? "") ? (searchParams.topic as string) : null}
     />
   );
 }

@@ -1,8 +1,7 @@
-import Link from "next/link";
-import { Brain, Radar, Settings, Users } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { SignOutButton } from "@/app/(dashboard)/sign-out-button";
 import { Logo } from "@/components/shared/logo";
+import { TopbarNav } from "@/app/(dashboard)/topbar-nav";
 
 /**
  * Settings lives here — genuine account preferences don't earn a
@@ -23,42 +22,11 @@ export function Topbar({
       </div>
       <div className="hidden md:block" />
       <div className="flex items-center gap-2 md:gap-3">
-        {/* Sprint 5: Mission Control reached from here, same pattern as
-         * Settings — not a sixth primary tab (Dashboard Map decision),
-         * just a way in while it's new. */}
-        <Link
-          href="/dashboard/mission-control"
-          aria-label="Mission Control"
-          className="flex h-9 w-9 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-        >
-          <Radar className="h-[17px] w-[17px]" />
-        </Link>
-        {/* Sprint 7: same reachability pattern as Mission Control above —
-         * not a seventh primary tab, just a way in while it's new. */}
-        <Link
-          href="/dashboard/customers"
-          aria-label="Customers"
-          className="flex h-9 w-9 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-        >
-          <Users className="h-[17px] w-[17px]" />
-        </Link>
-        {/* Sprint 8: same reachability pattern as Mission Control and
-         * Customers above — not a fifth primary tab, just a way in
-         * while it's new. */}
-        <Link
-          href="/dashboard/everything-i-know"
-          aria-label="Everything I Know"
-          className="flex h-9 w-9 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-        >
-          <Brain className="h-[17px] w-[17px]" />
-        </Link>
-        <Link
-          href="/dashboard/settings"
-          aria-label="Settings"
-          className="flex h-9 w-9 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-        >
-          <Settings className="h-[17px] w-[17px]" />
-        </Link>
+        {/* Mission Control, Customers, Everything I Know, Settings —
+         * reachable from here rather than as primary tabs (Dashboard
+         * Map decision). Sprint 8.5 gave this row a real active state;
+         * see topbar-nav.tsx. */}
+        <TopbarNav />
         <Avatar className="h-9 w-9 border border-border">
           {logoUrl && <AvatarImage src={logoUrl} alt={businessName} />}
           <AvatarFallback className="text-xs">{businessName.slice(0, 1).toUpperCase()}</AvatarFallback>

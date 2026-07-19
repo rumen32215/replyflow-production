@@ -12,14 +12,10 @@ import { cn } from "@/lib/utils";
  */
 export function ConversationsShell({
   conversations,
-  topGap,
-  learned = [],
   draftConversationIds = [],
   children,
 }: {
   conversations: ConversationListItem[];
-  topGap?: string | null;
-  learned?: readonly string[];
   draftConversationIds?: readonly string[];
   children: React.ReactNode;
 }) {
@@ -34,12 +30,7 @@ export function ConversationsShell({
           isDetailView ? "hidden md:block" : "block"
         )}
       >
-        <ConversationList
-          conversations={conversations}
-          topGap={topGap}
-          learned={learned}
-          draftConversationIds={draftConversationIds}
-        />
+        <ConversationList conversations={conversations} draftConversationIds={draftConversationIds} />
       </div>
 
       <div className={cn("min-w-0 flex-1 flex-col bg-background", isDetailView ? "flex" : "hidden md:flex")}>

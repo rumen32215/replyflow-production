@@ -4,26 +4,26 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import { Check, ArrowRight } from "lucide-react";
+import { PhonePreview, type PreviewTurn } from "@/components/shared/phone-preview";
 
 /**
- * Screen 2 — the live customer conversation. The same four-message
- * script as before (it works), replayed with more considered motion:
- * a typing indicator precedes every receptionist reply, pauses scale
- * with message length, and bubbles settle with a soft spring instead
- * of a linear fade.
+ * Screen 2 — the live customer conversation.
  *
- * When the conversation ends, the whole chat fades away and one line
- * remains — "This is how I'll help every customer." — before
- * the continue button appears. No feature grid, no bullet points.
+ * Sprint 8.6: this used to be its own bespoke chat UI (its own bubble
+ * markup, its own colours, no phone chrome) — a third, visually
+ * different "WhatsApp-style demonstration" alongside Receptionist's
+ * and Business Knowledge's `PhonePreview`. There is now exactly one
+ * canonical conversation preview in the product; this screen reuses it
+ * rather than rendering its own. The script, pacing, and closing
+ * sentence stay bespoke to onboarding's first-impression moment —
+ * only the chat frame and bubbles are shared.
  */
 
-type Bubble = { from: "customer" | "replyflow"; text: string };
-
-const SCRIPT: Bubble[] = [
+const SCRIPT: PreviewTurn[] = [
   { from: "customer", text: "Hi, can you quote my kitchen?" },
-  { from: "replyflow", text: "Absolutely. Could you send me a few photos?" },
+  { from: "receptionist", text: "Absolutely. Could you send me a few photos?" },
   { from: "customer", text: "📷 3 photos sent" },
-  { from: "replyflow", text: "Perfect — I've booked you in. The team will follow up shortly." },
+  { from: "receptionist", text: "Perfect — I've booked you in. The team will follow up shortly." },
 ];
 
 const EASE = [0.22, 1, 0.36, 1] as const;
@@ -36,7 +36,7 @@ function delayBefore(index: number): number {
   const current = SCRIPT[index];
   if (!prev || !current) return 700;
   const reading = Math.min(400 + prev.text.length * 28, 1600);
-  const typing = current.from === "replyflow" ? 900 : 300;
+  const typing = current.from === "receptionist" ? 900 : 300;
   return reading + typing;
 }
 
@@ -72,14 +72,18 @@ export function HireDemo() {
     return () => clearTimeout(t);
   }, [phase]);
 
-  const nextIsReply = SCRIPT[visibleCount]?.from === "replyflow";
+  // The revealed slice of the script, split into "already settled"
+  // turns and the one currently live — the exact shape PhonePreview
+  // already expects from Receptionist/Business Knowledge, so her
+  // reply here gets the same typing-dots-then-type animation for free.
+  const shown = SCRIPT.slice(0, visibleCount);
+  const lastIsReply = shown.length > 0 && shown[shown.length - 1]?.from === "receptionist";
+  const turns = lastIsReply ? shown.slice(0, -1) : shown;
+  const liveReply = lastIsReply ? shown[shown.length - 1]!.text : "";
 
   return (
     <div className="w-full">
-      <AnimatePresence
-        mode="wait"
-        onExitComplete={() => setPhase("sentence")}
-      >
+      <AnimatePresence mode="wait" onExitComplete={() => setPhase("sentence")}>
         {(phase === "chat" || phase === "booked") && (
           <motion.div
             key="chat"
@@ -87,54 +91,7 @@ export function HireDemo() {
             transition={{ duration: 0.7, ease: EASE }}
             className="rounded-3xl border border-border bg-card p-6 shadow-elevated"
           >
-            <div className="space-y-2.5">
-              <AnimatePresence initial={false}>
-                {SCRIPT.slice(0, visibleCount).map((bubble, i) => (
-                  <motion.div
-                    key={i}
-                    initial={{ opacity: 0, y: 10, scale: 0.96 }}
-                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                    transition={{ type: "spring", stiffness: 380, damping: 28 }}
-                    className={bubble.from === "customer" ? "flex justify-end" : "flex justify-start"}
-                  >
-                    <div
-                      className={
-                        "max-w-[80%] rounded-2xl px-4 py-2.5 text-[13.5px] leading-relaxed " +
-                        (bubble.from === "customer"
-                          ? "rounded-br-sm bg-primary text-primary-foreground"
-                          : "rounded-bl-sm bg-muted text-foreground")
-                      }
-                    >
-                      {bubble.text}
-                    </div>
-                  </motion.div>
-                ))}
-              </AnimatePresence>
-
-              {/* Typing indicator, only while the receptionist is "typing" */}
-              <AnimatePresence>
-                {phase === "chat" && nextIsReply && visibleCount > 0 && (
-                  <motion.div
-                    key="typing"
-                    initial={{ opacity: 0, y: 6 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, transition: { duration: 0.15 } }}
-                    transition={{ duration: 0.3, ease: EASE }}
-                    className="flex justify-start"
-                  >
-                    <div className="flex w-fit items-center gap-1 rounded-2xl rounded-bl-sm bg-muted px-4 py-3">
-                      {[0, 1, 2].map((i) => (
-                        <span
-                          key={i}
-                          className="h-1.5 w-1.5 animate-bounce rounded-full bg-muted-foreground/50"
-                          style={{ animationDelay: `${i * 140}ms`, animationDuration: "900ms" }}
-                        />
-                      ))}
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
+            <PhonePreview businessName="Your Business" turns={turns} liveReply={liveReply} />
 
             <AnimatePresence>
               {phase === "booked" && (

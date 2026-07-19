@@ -84,6 +84,7 @@ export function ReceptionistPlayground({
   receptionistName,
   initial,
   justHired,
+  initialTopic = null,
 }: {
   businessId: string;
   businessName: string;
@@ -95,6 +96,10 @@ export function ReceptionistPlayground({
   receptionistName: string | null;
   initial: SavedConfig;
   justHired: boolean;
+  /** Sprint 8.6: set when arriving from a Recommendations "Teach me"
+   * link (?topic=) — see the identical pattern and rationale in
+   * business-memory.tsx. Already validated by the Server Component page. */
+  initialTopic?: string | null;
 }) {
   const supabase = createClient();
   const scenarios = useMemo(() => scenariosForTrade(trade), [trade]);
@@ -138,7 +143,7 @@ export function ReceptionistPlayground({
   const receptionistTopics = brain.topics.filter((t) => t.domain === "receptionist");
   const topicDone = (id: TopicId): boolean => receptionistTopics.find((t) => t.id === id)?.done ?? false;
   const nextTopicId = (brain.gaps.find((g) => g.domain === "receptionist")?.id as TopicId | undefined) ?? null;
-  const [open, setOpen] = useState<TopicId | null>(null);
+  const [open, setOpen] = useState<TopicId | null>((initialTopic as TopicId | null) ?? null);
   const prevNextTopicId = useRef<TopicId | null | undefined>(undefined);
   // Typing the very first character into a topic's own-words field
   // flips that topic from "not taught" to "taught" mid-keystroke,
@@ -149,7 +154,7 @@ export function ReceptionistPlayground({
   const typingRef = useRef(false);
   useEffect(() => {
     if (prevNextTopicId.current === undefined) {
-      setOpen(nextTopicId);
+      if (!initialTopic) setOpen(nextTopicId);
     } else if (nextTopicId !== prevNextTopicId.current && !typingRef.current) {
       setOpen((current) => (current === prevNextTopicId.current ? nextTopicId : current));
     }

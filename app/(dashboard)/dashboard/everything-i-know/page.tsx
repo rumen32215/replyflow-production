@@ -73,6 +73,11 @@ export default async function EverythingIKnowPage() {
   });
 
   const knownTopics = brain.topics.filter((t) => t.done);
+  const percentByDomain = {
+    knowledge: brain.percentFor("knowledge"),
+    receptionist: brain.percentFor("receptionist"),
+    diary: brain.percentFor("diary"),
+  };
 
   const completedConversationIds = new Set(
     (jobs ?? []).filter((j) => j.status === "completed" && j.conversation_id).map((j) => j.conversation_id as string)
@@ -105,7 +110,7 @@ export default async function EverythingIKnowPage() {
       </SettleCard>
 
       <KnownTopics topics={knownTopics} />
-      <LearningTopics gaps={brain.gaps} />
+      <LearningTopics gaps={brain.gaps} percentByDomain={percentByDomain} />
       <RecentChanges changes={recentChanges} />
       <CustomerSnapshot totalCustomers={totalCustomers} returningCustomers={returningCustomers} />
     </div>

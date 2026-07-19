@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { motion } from "framer-motion";
-import { Headset, Sparkles, GraduationCap, Briefcase } from "lucide-react";
+import { Sparkles, Briefcase } from "lucide-react";
 import { Reveal, press } from "@/components/shared/motion";
 import { groupForStatus, statusLabel, GROUP_ORDER, GROUP_LABELS, type ConversationGroup } from "@/lib/conversations";
 import { minutesSince, formatWaitingTime } from "@/lib/dashboard-signals";
@@ -45,24 +45,21 @@ function whenLabel(iso: string | null): string {
 
 export function ConversationList({
   conversations,
-  topGap = null,
-  learned = [],
   draftConversationIds = [],
 }: {
   conversations: ConversationListItem[];
-  topGap?: string | null;
-  learned?: readonly string[];
   draftConversationIds?: readonly string[];
 }) {
   const pathname = usePathname();
   const draftIds = new Set(draftConversationIds);
 
   if (conversations.length === 0) {
-    // Never "No conversations." — celebrate the calm and make quiet
-    // time productive (Conversations Experience V2: Empty State). When
-    // there's a real, specific gap in what she knows, say that instead
-    // of just being calm — same restraint rule as Front Desk: specific
-    // and rare beats chatty, and it's the same gap signal, never invented.
+    // Never "No conversations." — celebrate the calm (Conversations
+    // Experience V2: Empty State). Sprint 8.5 IA review: this used to
+    // also nudge "teach me X" and list recently-learned facts here —
+    // Conversations' one job is live customer communication, so that
+    // content moved out entirely rather than being duplicated from
+    // Front Desk / Everything I Know.
     return (
       <div className="flex h-full flex-col">
         <div className="shrink-0 border-b border-border px-4 py-4">
@@ -72,54 +69,12 @@ export function ConversationList({
           <div className="flex h-12 w-12 items-center justify-center rounded-full bg-success/10 text-success">
             <Sparkles className="h-5 w-5" />
           </div>
-          {topGap ? (
-            <>
-              <div>
-                <p className="text-[15px] font-bold">You&apos;re all caught up.</p>
-                <p className="mt-1 text-[13px] leading-relaxed text-muted-foreground">
-                  While it&apos;s quiet — I still don&apos;t know {topGap}. Want to teach me?
-                </p>
-              </div>
-              <Link
-                href="/dashboard/business"
-                className="mt-2 flex items-center gap-2 rounded-xl bg-accent px-4 py-2.5 text-[13px] font-semibold text-primary"
-              >
-                <Headset className="h-4 w-4" />
-                Teach me that
-              </Link>
-            </>
-          ) : (
-            <>
-              <div>
-                <p className="text-[15px] font-bold">You&apos;re all caught up.</p>
-                <p className="mt-1 text-[13px] leading-relaxed text-muted-foreground">
-                  When your first enquiry arrives, I&apos;ll bring it here.
-                </p>
-              </div>
-              <Link
-                href="/dashboard/receptionist"
-                className="mt-2 flex items-center gap-2 rounded-xl bg-accent px-4 py-2.5 text-[13px] font-semibold text-primary"
-              >
-                <Headset className="h-4 w-4" />
-                Teach your receptionist
-              </Link>
-            </>
-          )}
-          {learned.length > 0 && (
-            <div className="mt-5 w-full max-w-[280px] rounded-xl border border-border bg-muted/30 p-3.5 text-left">
-              <p className="mb-2 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-widest text-muted-foreground">
-                <GraduationCap className="h-3.5 w-3.5" />
-                What I&apos;ve learned recently
-              </p>
-              <ul className="space-y-1">
-                {learned.map((fact) => (
-                  <li key={fact} className="text-[12.5px] leading-relaxed text-muted-foreground">
-                    I know {fact}.
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
+          <div>
+            <p className="text-[15px] font-bold">You&apos;re all caught up.</p>
+            <p className="mt-1 text-[13px] leading-relaxed text-muted-foreground">
+              When your next enquiry arrives, I&apos;ll bring it here.
+            </p>
+          </div>
         </div>
       </div>
     );

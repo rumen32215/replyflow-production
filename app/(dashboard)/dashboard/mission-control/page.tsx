@@ -10,14 +10,10 @@ import { TodaysJobs, type TodaysJobItem } from "@/components/dashboard/mission-c
 import { WaitingCustomers } from "@/components/dashboard/mission-control/waiting-customers";
 import { RecentActivity } from "@/components/dashboard/mission-control/recent-activity";
 import { MissionControlBusinessHealth, type MissionControlHealthMetrics } from "@/components/dashboard/mission-control/business-health";
-import { Recommendations } from "@/components/dashboard/home/recommendations";
 import { SettleCard } from "@/components/shared/motion";
 import { minutesSince } from "@/lib/dashboard-signals";
 import { computeWaitStats, buildRecentActivity, type WaitStats, type ActivityEvent } from "@/lib/mission-control-signals";
 import { groupForStatus } from "@/lib/conversations";
-import { parseAvailability } from "@/lib/availability";
-import { parseKnowledge } from "@/lib/knowledge";
-import { getBrainContext, type BrainTopic as Topic } from "@/lib/brain";
 
 export const metadata: Metadata = { title: "Mission Control — ReplyFlow" };
 
@@ -25,15 +21,19 @@ export const metadata: Metadata = { title: "Mission Control — ReplyFlow" };
  * Mission Control (Sprint 5) — the operational command centre. Answers
  * four questions: what needs attention, what's happening right now,
  * what's at risk, what should I do next. Every section reads from data
- * that already exists (conversations, jobs, the existing Brain's real
- * gaps) — nothing here is fabricated, no confidence value is invented,
- * and any section without a real fact to show renders honestly around
- * that (or not at all).
+ * that already exists (conversations, jobs) — nothing here is
+ * fabricated, no confidence value is invented, and any section without
+ * a real fact to show renders honestly around that (or not at all).
  *
- * Two sections are reused directly rather than rebuilt: `BusinessHealth`
- * and `Recommendations` already exist from Front Desk (Sprint 3) and
- * are equally honest, real-data-only components here — reuse before
- * building.
+ * `BusinessHealth` is reused directly from Front Desk (Sprint 3) —
+ * equally honest, real-data-only, reuse before building. Recommendations
+ * ("Teach me X") is deliberately NOT here (Sprint 8.5 IA review):
+ * showing the same "Teach me" cards on both Front Desk and Mission
+ * Control was exactly the cross-page duplication that sprint asked to
+ * remove. Front Desk keeps the one ranked nudge; Everything I Know
+ * (Sprint 8) is the dedicated home for the full picture of what's
+ * still unknown. Mission Control stays operational only — what needs
+ * attention right now, never what to teach.
  */
 
 /**
@@ -55,7 +55,6 @@ interface MissionControlData {
   waitStats: WaitStats;
   businessHealth: MissionControlHealthMetrics;
   recentActivity: ActivityEvent[];
-  recommendations: Topic[];
 }
 
 async function getMissionControlData(supabase: SupabaseClient, businessId: string, now: Date): Promise<MissionControlData> {
@@ -72,8 +71,6 @@ async function getMissionControlData(supabase: SupabaseClient, businessId: strin
     { data: recentCompletedJobs },
     { data: recentCreatedJobs },
     { data: draftJobs },
-    { data: business },
-    { data: config },
   ] = await Promise.all([
     supabase
       .from("conversations")
@@ -108,16 +105,6 @@ async function getMissionControlData(supabase: SupabaseClient, businessId: strin
       .select("id, customer_name, job_title, conversation_id")
       .eq("business_id", businessId)
       .eq("status", "draft"),
-    supabase
-      .from("businesses")
-      .select("business_description, services, service_areas, business_knowledge, availability, opening_time, closing_time")
-      .eq("id", businessId)
-      .maybeSingle(),
-    supabase
-      .from("ai_configurations")
-      .select("system_prompt, business_rules, escalation_rules, faqs")
-      .eq("business_id", businessId)
-      .maybeSingle(),
   ]);
 
   const allConversations = conversations ?? [];
@@ -209,29 +196,6 @@ async function getMissionControlData(supabase: SupabaseClient, businessId: strin
       .map((c) => ({ id: c.id, name: c.customer_name || c.customer_phone, createdAt: c.last_message_at as string })),
   });
 
-  // Same shared reasoning model Front Desk reads from — real gaps,
-  // not a second, independently-invented recommendation engine.
-  // Sprint 6: reached through the Shared Brain contract (lib/brain),
-  // same as Front Desk — this is the second real caller Sprint 4A's
-  // migration order was waiting for.
-  const availability = parseAvailability(business?.availability, business?.opening_time, business?.closing_time);
-  const brain = getBrainContext({
-    businessId,
-    knowledge: {
-      businessDescription: business?.business_description ?? null,
-      services: business?.services ?? [],
-      serviceAreas: business?.service_areas ?? [],
-      knowledge: parseKnowledge(business?.business_knowledge),
-      faqCount: Array.isArray(config?.faqs) ? (config.faqs as unknown[]).length : 0,
-    },
-    receptionist: {
-      behavioursTaught: Boolean(config?.system_prompt?.trim()),
-      rulesTaught: Boolean(config?.business_rules?.trim()),
-      escalationTaught: Boolean(config?.escalation_rules?.trim()),
-    },
-    diary: { rules: availability.rules },
-  });
-
   return {
     operational,
     urgent,
@@ -240,7 +204,6 @@ async function getMissionControlData(supabase: SupabaseClient, businessId: strin
     waitStats,
     businessHealth,
     recentActivity,
-    recommendations: brain.gaps,
   };
 }
 
@@ -329,7 +292,6 @@ export default async function MissionControlPage() {
       <WaitingCustomers stats={data.waitStats} />
       <MissionControlBusinessHealth {...data.businessHealth} />
       <RecentActivity events={data.recentActivity} />
-      <Recommendations gaps={data.recommendations} />
     </div>
   );
 }

@@ -88,14 +88,37 @@ type SectionId =
   | "faqs"
   | "access";
 
+/**
+ * Sprint 8.6: ten identically-styled rows in one flat list read as a
+ * form with ten fields, however conversational each one is individually
+ * ("would a busy tradesperson understand this in five seconds?" — not
+ * as one long list). Grouping under three plain-language headings lets
+ * the eye chunk the page into "about the business / money / good to
+ * know" instead of counting ten rows — same teaching mechanism, same
+ * data, just organised the way a person would actually think about it.
+ */
+type SectionGroup = "about" | "money" | "goodToKnow";
+const GROUP_LABEL: Record<SectionGroup, string> = {
+  about: "About your business",
+  money: "Money & guarantees",
+  goodToKnow: "Good to know",
+};
+const GROUP_ORDER: SectionGroup[] = ["about", "money", "goodToKnow"];
+
 export function BusinessMemory({
   businessId,
   trade,
   initial,
+  initialTopic = null,
 }: {
   businessId: string;
   trade: string | null;
   initial: BusinessMemoryInitial;
+  /** Sprint 8.6: set when arriving from a Recommendations "Teach me"
+   * link (?topic=) so that exact topic opens, instead of whichever one
+   * this page's own auto-advance would otherwise pick. Already
+   * validated against real SectionIds by the Server Component page. */
+  initialTopic?: string | null;
 }) {
   const supabase = createClient();
   const serviceSuggestions = servicesForTrade(trade);
@@ -112,7 +135,7 @@ export function BusinessMemory({
   const [calloutFeeAmount, setCalloutFeeAmount] = useState(initial.calloutFeeAmount);
   const [knowledge, setKnowledge] = useState<BusinessKnowledge>(initial.knowledge);
   const [faqs, setFaqs] = useState<Faq[]>(initial.faqs);
-  const [open, setOpen] = useState<SectionId | null>(null);
+  const [open, setOpen] = useState<SectionId | null>((initialTopic as SectionId | null) ?? null);
   const [scenarioId, setScenarioId] = useState<string>(KNOWLEDGE_PREVIEW_SCENARIOS[0]?.id ?? "payment");
 
   /* The live proof — every answer below is a fact this reply is built
@@ -242,12 +265,15 @@ export function BusinessMemory({
   // automatically advances to the next one — the same "ask, listen,
   // ask the next thing" rhythm as a real interview, not ten panels
   // sitting open at once. If the owner has manually opened a
-  // different section, that choice is left alone.
+  // different section, that choice is left alone. Sprint 8.6: if a
+  // specific topic was requested (arrived via a Recommendations link),
+  // that one opens first instead — the auto-advance only overrides on
+  // later renders, once that topic's own gap status changes.
   const prevNextSectionId = useRef<SectionId | null | undefined>(undefined);
   useEffect(() => {
     const newNext = nextLesson?.section ?? null;
     if (prevNextSectionId.current === undefined) {
-      setOpen(newNext);
+      if (!initialTopic) setOpen(newNext);
     } else if (newNext !== prevNextSectionId.current) {
       setOpen((current) => (current === prevNextSectionId.current ? newNext : current));
     }
@@ -288,6 +314,7 @@ export function BusinessMemory({
    * many things in it, not one form repeated ten times). */
   const sections: {
     id: SectionId;
+    group: SectionGroup;
     title: string;
     icon: LucideIcon;
     iconClass: string;
@@ -298,6 +325,7 @@ export function BusinessMemory({
   }[] = [
     {
       id: "identity",
+      group: "about",
       title: "Your business",
       icon: User,
       iconClass: "bg-slate-100 text-slate-600",
@@ -335,6 +363,7 @@ export function BusinessMemory({
     },
     {
       id: "services",
+      group: "about",
       title: "Services",
       icon: Wrench,
       iconClass: "bg-blue-50 text-blue-600",
@@ -352,6 +381,7 @@ export function BusinessMemory({
     },
     {
       id: "declined",
+      group: "goodToKnow",
       title: "Jobs we don't take",
       icon: Ban,
       iconClass: "bg-red-50 text-red-600",
@@ -374,6 +404,7 @@ export function BusinessMemory({
     },
     {
       id: "areas",
+      group: "about",
       title: "Areas we cover",
       icon: MapPin,
       iconClass: "bg-teal-50 text-teal-600",
@@ -396,6 +427,7 @@ export function BusinessMemory({
     },
     {
       id: "special",
+      group: "about",
       title: "What makes you special",
       icon: Sparkles,
       iconClass: "bg-violet-50 text-violet-600",
@@ -413,6 +445,7 @@ export function BusinessMemory({
     },
     {
       id: "payments",
+      group: "money",
       title: "Payment methods",
       icon: CreditCard,
       iconClass: "bg-emerald-50 text-emerald-600",
@@ -430,6 +463,7 @@ export function BusinessMemory({
     },
     {
       id: "guarantees",
+      group: "money",
       title: "Guarantees",
       icon: ShieldCheck,
       iconClass: "bg-indigo-50 text-indigo-600",
@@ -447,6 +481,7 @@ export function BusinessMemory({
     },
     {
       id: "emergency",
+      group: "money",
       title: "Emergency jobs",
       icon: AlertTriangle,
       iconClass: "bg-orange-50 text-orange-600",
@@ -504,6 +539,7 @@ export function BusinessMemory({
     },
     {
       id: "faqs",
+      group: "goodToKnow",
       title: "Common questions",
       icon: HelpCircle,
       iconClass: "bg-sky-50 text-sky-600",
@@ -517,6 +553,7 @@ export function BusinessMemory({
     },
     {
       id: "access",
+      group: "goodToKnow",
       title: "Parking & access",
       icon: DoorOpen,
       iconClass: "bg-stone-100 text-stone-600",
@@ -584,26 +621,15 @@ export function BusinessMemory({
         </div>
 
         <div className="min-w-0 space-y-4 lg:order-1">
-          {/* Business understanding — not a game, a gentle signal. */}
+          {/* Business understanding — not a game, a gentle signal. No
+           * repeated "Teach me" nudge here any more (Sprint 8.6): the
+           * next unanswered topic already opens itself below, so a
+           * second button restating the same question was pure
+           * repetition, not help. */}
           <SettleCard delay={0.05} className="rounded-2xl border border-border bg-card p-5 shadow-sm">
             <ConfidenceBar title="How well I understand you" percent={knowledgePercent} />
             <AnimatePresence mode="wait" initial={false}>
-              {nextLesson ? (
-                <motion.button
-                  key={nextLesson.section}
-                  {...press}
-                  initial={{ opacity: 0, y: 4 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -4 }}
-                  transition={{ duration: 0.25, ease: EASE }}
-                  type="button"
-                  onClick={() => setOpen(nextLesson.section)}
-                  className="mt-3.5 flex w-full items-center justify-between rounded-xl border border-dashed border-blue-200 bg-blue-50/40 px-4 py-3 text-left transition-colors hover:border-blue-400"
-                >
-                  <span className="text-[13px] font-medium text-foreground">{nextLesson.prompt}</span>
-                  <span className="ml-3 shrink-0 text-[12.5px] font-semibold text-blue-600">Teach me</span>
-                </motion.button>
-              ) : (
+              {!nextLesson && (
                 <motion.p
                   key="complete"
                   initial={{ opacity: 0, y: 4 }}
@@ -616,24 +642,39 @@ export function BusinessMemory({
             </AnimatePresence>
           </SettleCard>
 
-          {/* Her questions — one conversation turn per topic, revealed
-           * like papers laid on a desk. */}
-          <div className="space-y-3">
-            {sections.map((section, index) => (
-              <TeachingCard
-                key={section.id}
-                index={index}
-                icon={section.icon}
-                avatarClass={section.iconClass}
-                question={section.question}
-                known={section.known}
-                summary={section.summary}
-                open={open === section.id}
-                onToggle={() => setOpen(open === section.id ? null : section.id)}
-              >
-                {section.content}
-              </TeachingCard>
-            ))}
+          {/* Her questions — grouped the way an owner would actually
+           * think about their business (Sprint 8.6), not ten identical
+           * rows in a row. One conversation turn per topic within each
+           * group, revealed like papers laid on a desk. */}
+          <div className="space-y-5">
+            {GROUP_ORDER.map((group) => {
+              const groupSections = sections.filter((s) => s.group === group);
+              if (groupSections.length === 0) return null;
+              return (
+                <div key={group}>
+                  <h2 className="mb-2.5 px-1 text-[11px] font-bold uppercase tracking-widest text-muted-foreground">
+                    {GROUP_LABEL[group]}
+                  </h2>
+                  <div className="space-y-3">
+                    {groupSections.map((section, index) => (
+                      <TeachingCard
+                        key={section.id}
+                        index={index}
+                        icon={section.icon}
+                        avatarClass={section.iconClass}
+                        question={section.question}
+                        known={section.known}
+                        summary={section.summary}
+                        open={open === section.id}
+                        onToggle={() => setOpen(open === section.id ? null : section.id)}
+                      >
+                        {section.content}
+                      </TeachingCard>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
       </div>

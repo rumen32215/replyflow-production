@@ -43,6 +43,38 @@ export function SettleCard({
   );
 }
 
+/**
+ * Sprint 7.7 — a card that settles into place only once it's actually
+ * scrolled into view, instead of on mount. Same calm motion as
+ * SettleCard (same distance, duration, easing) — the only difference
+ * is *when* it fires. Reserved for content that can plausibly start
+ * below the fold (the WhatsApp banner, AI Summary, Quick Actions);
+ * content that's always in the initial viewport (the Greeting) stays
+ * on SettleCard, since a scroll trigger there would just fire on
+ * mount anyway and adds nothing but an extra concept to reason about.
+ * `once: true` so it never re-triggers scrolling back up — motion
+ * marks arrival, it doesn't repeat as decoration.
+ */
+export function ScrollReveal({
+  className,
+  delay = 0,
+  children,
+  ...props
+}: HTMLMotionProps<"div"> & { delay?: number }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 14 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true, margin: "0px 0px -60px 0px" }}
+      transition={{ duration: 0.4, ease: EASE, delay }}
+      className={className}
+      {...props}
+    >
+      {children}
+    </motion.div>
+  );
+}
+
 /** Staggered list reveal — children appear one after another. */
 export function Reveal({
   index = 0,

@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { ArrowRight, CalendarDays, Check, Headset, MapPin, MessageCircle, Sparkles } from "lucide-react";
-import { SettleCard, GentleSwap, Reveal, press, EASE } from "@/components/shared/motion";
+import { SettleCard, ScrollReveal, GentleSwap, Reveal, press, EASE } from "@/components/shared/motion";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { formatWaitingTime, calmStatusMessages } from "@/lib/dashboard-signals";
 import type { TodaysPriority } from "@/lib/brain";
@@ -63,8 +63,16 @@ export function GreetingCard({
   const line = rotateCalm ? messages[calmIndex % messages.length] : supportLine;
 
   return (
-    <SettleCard className="max-h-[220px] rounded-2xl border border-border bg-card p-6 shadow-sm">
-      <div className="flex items-start gap-3.5">
+    <SettleCard className="relative max-h-[220px] overflow-hidden rounded-2xl border border-border bg-card p-6 shadow-sm">
+      {/* Sprint 7.7 — Aurora: an almost-invisible wash of the two brand
+       * colours drifting behind the greeting, confined entirely to this
+       * card. Meant to be felt, not seen — see app/globals.css for the
+       * "why CSS, not framer-motion" note. */}
+      <div className="aurora-layer" aria-hidden="true">
+        <div className="aurora-blob aurora-blob-primary" />
+        <div className="aurora-blob aurora-blob-success" />
+      </div>
+      <div className="relative flex items-start gap-3.5">
         {/* The business's own logo takes this spot when set — the
          * business is the centre of the experience, not ReplyFlow
          * itself; falls back to the headset badge (her presence)
@@ -167,7 +175,7 @@ export function TodaysPriorityCard({ priority }: { priority: TodaysPriority }) {
 export function AISummaryCard({ bullets }: { bullets: readonly string[] }) {
   if (bullets.length === 0) return null;
   return (
-    <SettleCard delay={0.08} className="rounded-2xl border border-border bg-card p-6 shadow-sm">
+    <ScrollReveal className="rounded-2xl border border-border bg-card p-6 shadow-sm">
       <h2 className="mb-3 text-[11px] font-bold uppercase tracking-widest text-muted-foreground">Today so far</h2>
       <ul className="space-y-2">
         {bullets.map((bullet, i) => (
@@ -177,7 +185,7 @@ export function AISummaryCard({ bullets }: { bullets: readonly string[] }) {
           </li>
         ))}
       </ul>
-    </SettleCard>
+    </ScrollReveal>
   );
 }
 

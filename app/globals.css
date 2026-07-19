@@ -85,3 +85,59 @@
   .no-scrollbar::-webkit-scrollbar { display: none; }
   .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 }
+
+/*
+  Sprint 7.7 — Aurora (Front Desk arrival only). A pair of heavily
+  blurred, low-opacity blobs in the two existing brand colours
+  (primary blue, success green — never a new colour), drifting slowly
+  behind the Greeting Card's content. Pure CSS, not framer-motion: it's
+  ambient, not communicative, so it doesn't need JS or a mount trigger,
+  and a GPU-composited transform loop is cheaper on mobile than a
+  React-driven one. Confined to the card via overflow-hidden on the
+  parent — this must never become a page-level background.
+*/
+@layer utilities {
+  .aurora-layer {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    pointer-events: none;
+  }
+  .aurora-blob {
+    position: absolute;
+    border-radius: 9999px;
+    filter: blur(40px);
+    will-change: transform;
+  }
+  .aurora-blob-primary {
+    top: -40%;
+    left: -8%;
+    width: 160px;
+    height: 160px;
+    background: hsl(var(--primary) / 0.14);
+    animation: aurora-drift-a 24s ease-in-out infinite;
+  }
+  .aurora-blob-success {
+    bottom: -45%;
+    right: -6%;
+    width: 150px;
+    height: 150px;
+    background: hsl(var(--success) / 0.12);
+    animation: aurora-drift-b 28s ease-in-out infinite;
+  }
+}
+
+@keyframes aurora-drift-a {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50% { transform: translate(5%, 6%) scale(1.12); }
+}
+@keyframes aurora-drift-b {
+  0%, 100% { transform: translate(0, 0) scale(1.08); }
+  50% { transform: translate(-4%, -5%) scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .aurora-blob-primary, .aurora-blob-success {
+    animation: none;
+  }
+}

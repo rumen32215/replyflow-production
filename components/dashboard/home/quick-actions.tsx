@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { ArrowRight, BookOpen, CalendarClock, Headset, MessagesSquare, Smartphone } from "lucide-react";
-import { press, SettleCard, Reveal } from "@/components/shared/motion";
+import { press, ScrollReveal } from "@/components/shared/motion";
 import { Acknowledgement, ACK, useAcknowledgement } from "@/components/shared/acknowledgement";
 import { SwitchVisual } from "@/components/ui/switch";
 import { createClient } from "@/lib/supabase/client";
@@ -78,15 +78,19 @@ export function QuickActions({ businessId, initialAvailability }: QuickActionsPr
   }
 
   return (
-    <SettleCard delay={0.26} className="rounded-2xl border border-border bg-card p-6 shadow-sm">
+    <ScrollReveal className="rounded-2xl border border-border bg-card p-6 shadow-sm">
       <h2 className="mb-4 text-[11px] font-bold uppercase tracking-widest text-muted-foreground">Quick actions</h2>
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         {ACTIONS.map((action, i) => (
-          <Reveal key={action.href} index={i}>
+          // Sprint 7.7: scroll-triggered like the card around it, not
+          // mount-triggered — a mount-based stagger here would already
+          // have finished (invisibly, while the card's own opacity was
+          // still 0) by the time anyone scrolls down to see it.
+          <ScrollReveal key={action.href} delay={0.05 * i}>
             <QuickActionButton href={action.href} icon={<action.icon className="h-5 w-5" />}>
               {action.label}
             </QuickActionButton>
-          </Reveal>
+          </ScrollReveal>
         ))}
       </div>
 
@@ -109,7 +113,7 @@ export function QuickActions({ businessId, initialAvailability }: QuickActionsPr
           <Acknowledgement message={message} isError={isError} isSaving={isSaving} className="text-[12px]" />
         </div>
       </div>
-    </SettleCard>
+    </ScrollReveal>
   );
 }
 
@@ -146,7 +150,7 @@ function QuickActionButton({ href, icon, children }: { href: string; icon: React
  */
 export function ConnectWhatsAppBanner() {
   return (
-    <SettleCard delay={0.03}>
+    <ScrollReveal>
       <Link
         href="/dashboard/whatsapp"
         className="group block rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
@@ -167,6 +171,6 @@ export function ConnectWhatsAppBanner() {
           <ArrowRight className="h-4 w-4 shrink-0 transition-transform group-hover:translate-x-0.5" />
         </motion.div>
       </Link>
-    </SettleCard>
+    </ScrollReveal>
   );
 }

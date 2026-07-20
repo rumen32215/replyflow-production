@@ -42,3 +42,9 @@ export interface WabaPhoneNumberInfo {
   phone_number_id: string;
   display_phone_number: string;
 }
+
+export interface SendTextMessageResponse {
+  messaging_product: "whatsapp";
+  contacts: Array<{ input: string; wa_id: string }>;
+  messages: Array<{ id: string }>;
+}

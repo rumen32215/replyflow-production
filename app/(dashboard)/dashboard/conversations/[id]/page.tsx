@@ -32,7 +32,7 @@ export default async function ConversationDetailPage({ params }: { params: { id:
 
   if (!conversation) notFound();
 
-  const [{ data: messages }, { data: existingJobs }, { data: business }] = await Promise.all([
+  const [{ data: messages }, { data: existingJobs }, { data: business }, { data: pendingDrafts }] = await Promise.all([
     supabase
       .from("messages")
       .select("id, direction, body, message_type, created_at")
@@ -53,6 +53,16 @@ export default async function ConversationDetailPage({ params }: { params: { id:
       .select("business_name, availability, opening_time, closing_time")
       .eq("id", conversation.business_id)
       .maybeSingle(),
+    // The Reply Engine's most recent still-open draft for this
+    // conversation (Sprint 10A) — same most-recent-first + limit(1)
+    // pattern as jobs above, for the same reason.
+    supabase
+      .from("reply_drafts")
+      .select("id, draft_text, final_text, intent, confidence, requires_escalation, escalation_reason, status")
+      .eq("conversation_id", conversation.id)
+      .eq("status", "pending")
+      .order("created_at", { ascending: false })
+      .limit(1),
   ]);
 
   const allMessages = messages ?? [];
@@ -113,6 +123,7 @@ export default async function ConversationDetailPage({ params }: { params: { id:
         latestCustomerMessage={latestCustomerMessage}
         suggestedSlotDate={suggestedSlot ? toDateString(suggestedSlot.date) : null}
         suggestedSlotLabel={suggestedSlot?.label ?? null}
+        pendingDraft={pendingDrafts?.[0] ?? null}
       />
 
       <div className="flex-1 space-y-3 overflow-y-auto p-5 md:p-6">
@@ -147,9 +158,9 @@ export default async function ConversationDetailPage({ params }: { params: { id:
       </div>
 
       {/*
-        No composer yet — sending doesn't exist until the conversation
-        engine is wired to WhatsApp. A disabled input would imply
-        functionality that isn't real (Trust before features).
+        No free-form composer yet (Sprint 10A) — the only outbound path
+        today is approving an AI-drafted reply above. A disabled input
+        would imply functionality that isn't real (Trust before features).
       */}
     </div>
   );

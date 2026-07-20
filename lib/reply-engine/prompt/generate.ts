@@ -1,0 +1,74 @@
+import "server-only";
+import { getCompletion } from "../llm/client";
+import type { UnderstandingResult } from "../understanding/types";
+import type { ReplyContext } from "../context/types";
+import { buildPrompt } from "./build";
+import type { Fact } from "./facts";
+import type { GenerationResult, ReplyConfidence } from "./types";
+
+interface RawGeneration {
+  draft_reply: string;
+  confidence: ReplyConfidence;
+  requires_escalation: boolean;
+  escalation_reason: string | null;
+  facts_used: string[];
+}
+
+function toGenerationResult(raw: unknown): GenerationResult {
+  const fallback: GenerationResult = {
+    draftReply: "",
+    confidence: "unknown",
+    requiresEscalation: true,
+    escalationReason: "The reply could not be generated safely — please handle this one yourself.",
+    factsUsed: [],
+  };
+
+  if (!raw || typeof raw !== "object") return fallback;
+  const r = raw as Partial<RawGeneration>;
+  if (typeof r.draft_reply !== "string" || !r.draft_reply.trim()) return fallback;
+
+  const confidence: ReplyConfidence =
+    r.confidence === "low" || r.confidence === "medium" || r.confidence === "high" || r.confidence === "verified"
+      ? r.confidence
+      : "unknown";
+
+  return {
+    draftReply: r.draft_reply.trim(),
+    confidence,
+    requiresEscalation: Boolean(r.requires_escalation),
+    escalationReason: typeof r.escalation_reason === "string" ? r.escalation_reason : null,
+    factsUsed: Array.isArray(r.facts_used) ? r.facts_used.filter((f): f is string => typeof f === "string") : [],
+  };
+}
+
+export interface GeneratedReply {
+  generation: GenerationResult;
+  facts: Fact[];
+}
+
+/**
+ * Reply generation — the Reply Engine's own, larger LLM call (Sprint 9
+ * §5), unchanged in shape by the Understanding Engine (Sprint 9.1 §7).
+ * A failure here degrades to a fallback that always requires
+ * escalation, never a thrown error that would lose the message.
+ */
+export async function generateReplyDraft(context: ReplyContext, understanding: UnderstandingResult): Promise<GeneratedReply> {
+  const { messages, jsonSchema, facts } = buildPrompt(context, understanding);
+
+  try {
+    const result = await getCompletion({ tier: "large", messages, jsonSchema, maxOutputTokens: 500 });
+    return { generation: toGenerationResult(result.data), facts };
+  } catch (err) {
+    console.error("[reply-engine] generation failed:", err);
+    return {
+      generation: {
+        draftReply: "",
+        confidence: "unknown",
+        requiresEscalation: true,
+        escalationReason: "The reply could not be generated — please handle this one yourself.",
+        factsUsed: [],
+      },
+      facts,
+    };
+  }
+}

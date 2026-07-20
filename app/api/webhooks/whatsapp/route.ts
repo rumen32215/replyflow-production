@@ -1,6 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { waitUntil } from "@vercel/functions";
 import { verifyWebhookSignature } from "@/lib/whatsapp/verify-signature";
 import { createServiceClient } from "@/lib/supabase/service";
+import { generateReplyForMessage } from "@/lib/reply-engine/generate-reply";
 import type { WhatsAppWebhookPayload } from "@/lib/whatsapp/types";
 
 // Needs the Node.js runtime (not Edge) for node:crypto in verify-signature.ts.
@@ -115,19 +117,39 @@ async function processWebhookPayload(payload: WhatsAppWebhookPayload) {
         // whatsapp_message_id is unique — Meta retries webhook delivery,
         // so this upsert (rather than insert) makes re-delivery a no-op
         // instead of a duplicate message.
-        await supabase.from("messages").upsert(
-          {
-            conversation_id: conversation.id,
-            business_id: connection.business_id,
-            direction: "inbound",
-            whatsapp_message_id: message.id,
-            from_number: message.from,
-            to_number: metadata.phone_number_id,
-            message_type: message.type,
-            body,
-          },
-          { onConflict: "whatsapp_message_id" }
-        );
+        const { data: insertedMessage } = await supabase
+          .from("messages")
+          .upsert(
+            {
+              conversation_id: conversation.id,
+              business_id: connection.business_id,
+              direction: "inbound",
+              whatsapp_message_id: message.id,
+              from_number: message.from,
+              to_number: metadata.phone_number_id,
+              message_type: message.type,
+              body,
+            },
+            { onConflict: "whatsapp_message_id" }
+          )
+          .select("id")
+          .single();
+
+        // Reply Engine trigger (Sprint 10A) — deferred via waitUntil so
+        // the LLM call never delays this handler's ACK to Meta. Text
+        // messages only for this milestone; other message types are
+        // stored (with an honest placeholder body above) but not yet
+        // understood or replied to (Sprint 9.1 §8).
+        if (insertedMessage && message.type === "text") {
+          waitUntil(
+            generateReplyForMessage({
+              businessId: connection.business_id,
+              conversationId: conversation.id,
+              customerMessageId: insertedMessage.id,
+              messageBody: body,
+            })
+          );
+        }
       }
     }
   }

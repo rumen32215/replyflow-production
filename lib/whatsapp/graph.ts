@@ -1,5 +1,5 @@
 import "server-only";
-import type { TokenExchangeResponse, WabaPhoneNumberInfo } from "@/lib/whatsapp/types";
+import type { SendTextMessageResponse, TokenExchangeResponse, WabaPhoneNumberInfo } from "@/lib/whatsapp/types";
 
 const GRAPH_VERSION = process.env.WHATSAPP_GRAPH_API_VERSION || "v20.0";
 const GRAPH_BASE = `https://graph.facebook.com/${GRAPH_VERSION}`;
@@ -74,6 +74,43 @@ export async function subscribeAppToWaba(wabaId: string, accessToken: string): P
   if (!res.ok || data?.success !== true) {
     throw new Error(`Failed to subscribe app to WABA webhooks: ${data?.error?.message || res.statusText}`);
   }
+}
+
+/**
+ * The one outbound send capability Sprint 10A needs: a plain text
+ * reply to a customer who has already messaged in (within Meta's
+ * 24-hour customer-service window — no template message support here,
+ * that's future work for messages initiated outside that window).
+ * Same request/error-handling shape as every other function in this
+ * file — Bearer auth via the connection's stored access_token, throw
+ * with the Graph API's own error message on failure.
+ */
+export async function sendTextMessage(
+  phoneNumberId: string,
+  accessToken: string,
+  to: string,
+  body: string
+): Promise<SendTextMessageResponse> {
+  const url = `${GRAPH_BASE}/${phoneNumberId}/messages`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      messaging_product: "whatsapp",
+      to,
+      type: "text",
+      text: { body },
+    }),
+  });
+  const data = await res.json();
+
+  if (!res.ok) {
+    throw new Error(`Graph API send message failed: ${data?.error?.message || res.statusText}`);
+  }
+  return data as SendTextMessageResponse;
 }
 
 export type { WabaPhoneNumberInfo };

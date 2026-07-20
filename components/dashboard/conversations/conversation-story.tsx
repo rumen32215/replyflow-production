@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
-import { Briefcase, Check, Phone, Pencil, X } from "lucide-react";
+import { Bot, Briefcase, Check, Phone, Pencil, X } from "lucide-react";
 import { press, Reveal, EASE } from "@/components/shared/motion";
 import { Acknowledgement, useAcknowledgement } from "@/components/shared/acknowledgement";
 import { TypingDots } from "@/components/shared/typed-message";
@@ -17,6 +17,24 @@ interface ExistingJob {
   scheduled_for: string | null;
   status: string;
   notes: string | null;
+}
+
+interface PendingReplyDraft {
+  id: string;
+  draft_text: string;
+  final_text: string | null;
+  intent: string;
+  confidence: string;
+  requires_escalation: boolean;
+  escalation_reason: string | null;
+  status: string;
+}
+
+/** Turns the Understanding Engine's SCREAMING_CASE intent into
+ * something an owner reads naturally, without a second label table to
+ * keep in sync — a mechanical transform of the same real value. */
+function intentLabel(intent: string): string {
+  return intent.toLowerCase().replace(/_/g, " ");
 }
 
 function formatScheduled(iso: string | null): string | null {
@@ -56,6 +74,7 @@ export function ConversationStory({
   latestCustomerMessage,
   suggestedSlotDate,
   suggestedSlotLabel,
+  pendingDraft,
 }: {
   conversationId: string;
   businessId: string;
@@ -69,6 +88,7 @@ export function ConversationStory({
   latestCustomerMessage: string | null;
   suggestedSlotDate: string | null;
   suggestedSlotLabel: string | null;
+  pendingDraft: PendingReplyDraft | null;
 }) {
   const router = useRouter();
   const supabase = createClient();
@@ -84,6 +104,12 @@ export function ConversationStory({
   const [savingJob, setSavingJob] = useState(false);
   const [decidingJob, setDecidingJob] = useState(false);
   const [showSentPreview, setShowSentPreview] = useState(false);
+
+  const [replyDraft, setReplyDraft] = useState<PendingReplyDraft | null>(pendingDraft);
+  const [editingReply, setEditingReply] = useState(false);
+  const [replyText, setReplyText] = useState(pendingDraft?.final_text ?? pendingDraft?.draft_text ?? "");
+  const [decidingReply, setDecidingReply] = useState(false);
+  const [replyError, setReplyError] = useState<string | null>(null);
 
   const story = buildStory({ status, messageCount, photoCount });
   const group = groupForStatus(status);
@@ -210,6 +236,47 @@ export function ConversationStory({
     setJob({ ...job, status: "cancelled" });
     acknowledge("Rejected — this won't be booked.");
     router.refresh();
+  }
+
+  /**
+   * Resolving an AI draft goes through the API route, not a direct
+   * client-side Supabase write like a job's approve/reject — approving
+   * sends a real WhatsApp message using a stored access token the
+   * browser must never see (see app/api/reply-drafts/[id]/route.ts).
+   */
+  async function resolveDraft(action: "approve" | "edit" | "reject", text?: string) {
+    if (!replyDraft || decidingReply) return;
+    setDecidingReply(true);
+    setReplyError(null);
+    try {
+      const res = await fetch(`/api/reply-drafts/${replyDraft.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(text !== undefined ? { action, text } : { action }),
+      });
+      const payload = await res.json();
+      if (!res.ok) {
+        setReplyError(payload.error ?? "Something went wrong.");
+        setDecidingReply(false);
+        return;
+      }
+      setDecidingReply(false);
+      if (action === "reject") {
+        setReplyDraft(null);
+        acknowledge("Rejected — I won't send this one.");
+      } else if (action === "edit") {
+        setReplyDraft(payload.draft);
+        setEditingReply(false);
+        acknowledge("Saved your edit.");
+      } else {
+        setReplyDraft(null);
+        acknowledge("Sent.");
+      }
+      router.refresh();
+    } catch {
+      setDecidingReply(false);
+      setReplyError("Couldn't reach the server — try again.");
+    }
   }
 
   const scheduledLabel = job ? formatScheduled(job.scheduled_for) : null;
@@ -364,6 +431,100 @@ export function ConversationStory({
               Reject
             </motion.button>
           </div>
+        </div>
+      )}
+
+      {/* An AI-drafted reply (Sprint 10A) — never sent automatically.
+       * The owner reviews, optionally edits, then approves or rejects,
+       * the same three-way decision a job draft already offers. */}
+      {replyDraft && (
+        <div className="mt-3.5 rounded-xl border border-primary/20 bg-accent/40 p-3.5">
+          <div className="mb-2 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-widest text-primary">
+            <Bot className="h-3.5 w-3.5" />
+            Drafted reply — {intentLabel(replyDraft.intent)}
+          </div>
+
+          {replyDraft.requires_escalation && (
+            <p className="mb-2 rounded-lg bg-amber-50 px-2.5 py-1.5 text-[12px] text-amber-800">
+              {replyDraft.escalation_reason || "This one is flagged for your judgement before sending."}
+            </p>
+          )}
+
+          {editingReply ? (
+            <div className="space-y-2.5">
+              <textarea
+                value={replyText}
+                onChange={(e) => setReplyText(e.target.value)}
+                rows={3}
+                className="w-full resize-none rounded-lg border border-border bg-background px-3 py-2 text-[13px] leading-relaxed outline-none transition-colors focus:border-primary"
+              />
+              <div className="flex flex-wrap gap-2">
+                <motion.button
+                  {...press}
+                  type="button"
+                  onClick={() => resolveDraft("edit", replyText)}
+                  disabled={decidingReply || !replyText.trim()}
+                  className="flex items-center gap-1.5 rounded-lg bg-success px-3.5 py-2 text-[12.5px] font-semibold text-success-foreground disabled:opacity-60"
+                >
+                  <Check className="h-3.5 w-3.5" />
+                  Save
+                </motion.button>
+                <motion.button
+                  {...press}
+                  type="button"
+                  onClick={() => {
+                    setReplyText(replyDraft.final_text ?? replyDraft.draft_text);
+                    setEditingReply(false);
+                  }}
+                  className="rounded-lg px-3.5 py-2 text-[12.5px] font-semibold text-muted-foreground hover:text-foreground"
+                >
+                  Cancel
+                </motion.button>
+              </div>
+            </div>
+          ) : (
+            <>
+              <div className="inline-block max-w-full rounded-2xl rounded-br-sm bg-[#d7f8c8] px-3.5 py-2 text-[13px] leading-relaxed text-foreground">
+                {replyDraft.final_text ?? replyDraft.draft_text}
+              </div>
+              <div className="mt-2.5 flex flex-wrap gap-2">
+                <motion.button
+                  {...press}
+                  type="button"
+                  onClick={() => resolveDraft("approve")}
+                  disabled={decidingReply}
+                  className="flex items-center gap-1.5 rounded-lg bg-success px-3.5 py-2 text-[12.5px] font-semibold text-success-foreground disabled:opacity-60"
+                >
+                  <Check className="h-3.5 w-3.5" />
+                  Approve &amp; send
+                </motion.button>
+                <motion.button
+                  {...press}
+                  type="button"
+                  onClick={() => {
+                    setReplyText(replyDraft.final_text ?? replyDraft.draft_text);
+                    setEditingReply(true);
+                  }}
+                  disabled={decidingReply}
+                  className="flex items-center gap-1.5 rounded-lg border border-border bg-card px-3.5 py-2 text-[12.5px] font-semibold text-foreground disabled:opacity-60"
+                >
+                  <Pencil className="h-3.5 w-3.5" />
+                  Edit
+                </motion.button>
+                <motion.button
+                  {...press}
+                  type="button"
+                  onClick={() => resolveDraft("reject")}
+                  disabled={decidingReply}
+                  className="flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-[12.5px] font-semibold text-red-600 hover:bg-red-50 disabled:opacity-60"
+                >
+                  <X className="h-3.5 w-3.5" />
+                  Reject
+                </motion.button>
+              </div>
+            </>
+          )}
+          {replyError && <p className="mt-2 text-[12px] text-red-600">{replyError}</p>}
         </div>
       )}
 

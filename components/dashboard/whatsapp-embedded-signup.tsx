@@ -78,6 +78,23 @@ export function WhatsAppEmbeddedSignup({ redirectTo }: { redirectTo?: string } =
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [appId]);
 
+  // A popup that never opens, or opens and never posts back (blocked,
+  // closed by the user without a CANCEL event, or a Meta-side signup
+  // config problem), used to leave the UI stuck on "awaiting-signup"
+  // forever with zero feedback. This surfaces that as a real error
+  // instead of a silent hang.
+  useEffect(() => {
+    if (state !== "awaiting-signup") return;
+    const timeout = setTimeout(() => {
+      console.error("[WhatsApp Embedded Signup] Timed out after 30s waiting for the popup to respond.");
+      setState("error");
+      setErrorMessage(
+        "The signup popup didn't respond. This usually means a popup blocker stopped it, or WhatsApp isn't fully configured for this app yet — please allow popups for this site and try again."
+      );
+    }, 30000);
+    return () => clearTimeout(timeout);
+  }, [state]);
+
   async function tryFinish() {
     if (!codeRef.current || !wabaIdRef.current || !phoneNumberIdRef.current) return; // still waiting on one of the three
 
@@ -104,15 +121,42 @@ export function WhatsAppEmbeddedSignup({ redirectTo }: { redirectTo?: string } =
         router.refresh();
       }
     } catch (err) {
+      console.error("[WhatsApp Embedded Signup] Failed to finish connecting:", err);
       setState("error");
       setErrorMessage(err instanceof Error ? err.message : "Something went wrong");
     }
   }
 
   function startSignup() {
-  // Development bypass
-  if (!window.FB || !configId) {
-    router.push(redirectTo ?? "/dashboard");
+    // Fully unconfigured environment (neither value present) — silently
+    // bounce to the dashboard rather than show an error a real merchant
+    // on a properly configured account would never see.
+    if (!appId && !configId) {
+      router.push(redirectTo ?? "/dashboard");
+      return;
+    }
+
+    // A *partially* configured environment (one value present, the
+    // other missing) or an SDK that hasn't finished initializing is
+    // never a legitimate state to attempt signup from — previously this
+    // fell through into FB.login() regardless, which hangs forever with
+    // no feedback because FB.login() silently no-ops when FB.init()
+    // never ran (e.g. appId was missing) and never invokes its callback.
+    if (!window.FB || !appId || !configId || !sdkReady) {
+      console.error("[WhatsApp Embedded Signup] Cannot start signup — configuration incomplete or SDK not ready.", {
+        hasFB: Boolean(window.FB),
+        hasAppId: Boolean(appId),
+        hasConfigId: Boolean(configId),
+        sdkReady,
+      });
+      setState("error");
+      setErrorMessage(
+        !appId
+          ? "WhatsApp isn't fully configured for this environment (missing App ID) — contact support."
+          : !configId
+          ? "WhatsApp isn't fully configured for this environment (missing Config ID) — contact support."
+          : "The Facebook SDK hasn't finished loading yet — please wait a moment and try again."
+      );
       return;
     }
 
@@ -127,6 +171,7 @@ export function WhatsAppEmbeddedSignup({ redirectTo }: { redirectTo?: string } =
           codeRef.current = response.authResponse.code;
           tryFinish();
         } else {
+          console.warn("[WhatsApp Embedded Signup] FB.login returned without an authorization code — cancelled or denied.", response);
           setState("idle");
         }
       },

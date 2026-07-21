@@ -30,6 +30,18 @@ export async function GET(request: NextRequest) {
     return new NextResponse(challenge, { status: 200 });
   }
 
+  // Never log the token values themselves — only which precondition
+  // failed, so a real cause is visible in the logs instead of a bare
+  // 403 that looks identical whether the env var is unset, the mode is
+  // wrong, or someone is just probing the endpoint.
+  if (!expectedToken) {
+    console.error("[whatsapp webhook] GET verification failed — WHATSAPP_WEBHOOK_VERIFY_TOKEN is not set in this environment.");
+  } else if (mode !== "subscribe") {
+    console.warn(`[whatsapp webhook] GET verification failed — unexpected hub.mode "${mode}".`);
+  } else if (!token || token !== expectedToken) {
+    console.error("[whatsapp webhook] GET verification failed — hub.verify_token did not match WHATSAPP_WEBHOOK_VERIFY_TOKEN.");
+  }
+
   return new NextResponse("Verification failed", { status: 403 });
 }
 
@@ -44,7 +56,19 @@ export async function POST(request: NextRequest) {
   const signature = request.headers.get("x-hub-signature-256");
   const appSecret = process.env.WHATSAPP_APP_SECRET;
 
-  if (!appSecret || !verifyWebhookSignature(rawBody, signature, appSecret)) {
+  // Same principle as the GET handler: distinguish "not configured" from
+  // "configured but wrong" in the logs (never in the HTTP response, and
+  // never logging the secret or signature values themselves) — these
+  // used to be indistinguishable, which made this failure silent in
+  // practice even though it returned a 401.
+  if (!appSecret) {
+    console.error("[whatsapp webhook] POST rejected — WHATSAPP_APP_SECRET is not set in this environment.");
+    return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
+  }
+  if (!verifyWebhookSignature(rawBody, signature, appSecret)) {
+    console.error(
+      "[whatsapp webhook] POST rejected — signature did not match. WHATSAPP_APP_SECRET is set but does not match the App Secret Meta signed this request with."
+    );
     return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
   }
 

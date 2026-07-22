@@ -204,8 +204,39 @@ export async function generateReplyForMessage(params: {
     // covered" — a real question always deserves an explicit answer,
     // even a one-word one, never silence on the model's own judgment.
     const messageIsAQuestion = messageBody.includes("?");
+
+    // Deterministic backstop for exact-match acknowledgements — live
+    // adversarial testing found the model inconsistently applying its
+    // own silence instruction to a bare "ok" even with genuinely nothing
+    // outstanding (priorState.openQuestion null), while "cool" and
+    // "thanks so much" in the identical position correctly went silent.
+    // Rather than chase this with more prompt wording against inherent
+    // LLM run-to-run variance, force it for the narrow, unambiguous case
+    // this rule can be applied with total confidence: an exact-match
+    // acknowledgement with nothing left open from before this message.
+    const EXACT_ACKNOWLEDGEMENTS = new Set([
+      "ok",
+      "okay",
+      "k",
+      "kk",
+      "cool",
+      "nice",
+      "great",
+      "perfect",
+      "sounds good",
+      "thanks",
+      "thank you",
+      "thanks so much",
+      "cheers",
+      "ta",
+      "👍",
+      "👍🏻",
+    ]);
+    const isForcedSilence =
+      EXACT_ACKNOWLEDGEMENTS.has(messageBody.trim().toLowerCase()) && priorState.openQuestion === null && !isFirstMessage;
+
     const canSkipReply =
-      generation.noReplyNeeded &&
+      (generation.noReplyNeeded || isForcedSilence) &&
       !messageIsAQuestion &&
       !isFirstMessage &&
       safety.category === "general" &&

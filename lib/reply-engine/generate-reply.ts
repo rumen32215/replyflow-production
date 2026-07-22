@@ -235,13 +235,22 @@ export async function generateReplyForMessage(params: {
     const isForcedSilence =
       EXACT_ACKNOWLEDGEMENTS.has(messageBody.trim().toLowerCase()) && priorState.openQuestion === null && !isFirstMessage;
 
+    // The category==="general" gate exists to keep AUTO-SEND narrow (a
+    // real send carries risk depending on category). It doesn't apply
+    // the same way to isForcedSilence: sending nothing at all carries no
+    // such risk regardless of what category the surrounding conversation
+    // is in — a bare "ok" mid-booking is exactly as safely silenceable
+    // as one during general chat. Live testing found this gate blocking
+    // the deterministic override for exactly that reason ("ok" mid-
+    // booking classifies as booking, not general) — only the
+    // model-judgment path (generation.noReplyNeeded) still needs the
+    // narrower category restriction.
     const canSkipReply =
-      (generation.noReplyNeeded || isForcedSilence) &&
       !messageIsAQuestion &&
       !isFirstMessage &&
-      safety.category === "general" &&
       !safety.requiresEscalation &&
-      !safety.groundingFailed;
+      !safety.groundingFailed &&
+      (isForcedSilence || (generation.noReplyNeeded && safety.category === "general"));
 
     if (canSkipReply) {
       await supabase.from("reply_drafts").upsert(

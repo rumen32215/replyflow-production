@@ -68,11 +68,30 @@ export function evaluateSafety(input: {
     );
   }
 
+  // Deterministic backstop for a specific overclaim the system prompt
+  // alone failed to prevent twice in live testing: a reschedule request
+  // ("can we move it to Friday?") getting "your booking is confirmed for
+  // Friday" when nothing about the booking actually changed. Cancellation
+  // correctly hedges with the same wording; reschedule kept confidently
+  // confirming a new date it has no authority to set. Forces escalation
+  // (not just a blocked auto-send) — the same class of risk as the
+  // original booking-overclaim bug, and prompt wording alone has already
+  // been shown not to reliably prevent it here.
+  const hasUnconfirmedRescheduleClaim =
+    decision.category === "change_booking" &&
+    Boolean(generation.draftReply) &&
+    /\b(is confirmed|confirmed for|now confirmed|booking is set)\b/i.test(generation.draftReply) &&
+    !generation.factsUsed.includes("booking.status");
+  if (hasUnconfirmedRescheduleClaim) {
+    groundingFailed = true;
+    reasons.push("Draft confirms a reschedule to a new date without [booking.status] reflecting that change — only the owner can actually move a booking.");
+  }
+
   // Check 2 — escalation category: the Understanding Engine's safety
   // tag or category-level "always escalate" rule (e.g. Emergency,
   // Complaint) or the generation model's own judgment.
   const requiresEscalation = Boolean(
-    generation.requiresEscalation || decision.alwaysEscalate || understanding.safetyTag !== null
+    generation.requiresEscalation || decision.alwaysEscalate || understanding.safetyTag !== null || hasUnconfirmedRescheduleClaim
   );
   if (decision.alwaysEscalate) reasons.push(`"${decision.category}" always requires the owner's review.`);
   if (generation.requiresEscalation) reasons.push(generation.escalationReason ?? "The draft itself flagged this for escalation.");

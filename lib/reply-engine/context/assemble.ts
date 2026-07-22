@@ -72,12 +72,17 @@ export async function assembleContext(input: AssembleContextInput): Promise<Repl
         .limit(CONVERSATION_HISTORY_WINDOW)
     : Promise.resolve({ data: null });
 
-  const [{ data: jobRows }, { data: businessRow }, { data: aiConfig }, { data: historyRows }] = await Promise.all([
-    jobRowsPromise,
-    businessRowPromise,
-    aiConfigPromise,
-    historyPromise,
-  ]);
+  // Always fetched, regardless of needs — see CurrentBookingContext.
+  const currentJobPromise = supabase
+    .from("jobs")
+    .select("job_title, status, scheduled_for")
+    .eq("conversation_id", conversationId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const [{ data: jobRows }, { data: businessRow }, { data: aiConfig }, { data: historyRows }, { data: currentJobRow }] =
+    await Promise.all([jobRowsPromise, businessRowPromise, aiConfigPromise, historyPromise, currentJobPromise]);
 
   const jobs: CustomerJob[] = (jobRows ?? []).map((j) => ({
     id: j.id,
@@ -96,6 +101,9 @@ export async function assembleContext(input: AssembleContextInput): Promise<Repl
     customerMemory: null,
     conversationHistory: null,
     customerJobs: null,
+    currentBooking: currentJobRow
+      ? { jobTitle: currentJobRow.job_title, status: currentJobRow.status, scheduledFor: currentJobRow.scheduled_for }
+      : null,
     newMessage: { body: input.messageBody, customerName, customerPhone },
   };
 

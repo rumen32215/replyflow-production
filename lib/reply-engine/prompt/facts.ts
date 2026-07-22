@@ -68,5 +68,41 @@ export function collectFacts(context: ReplyContext): Fact[] {
     );
   }
 
+  // Always present (Conversation Design Sprint) — the one fact that
+  // exists specifically so the model never has to infer or guess
+  // whether this conversation's booking is real. Every branch is
+  // written to be unambiguous about what may and may not be claimed.
+  const b = context.currentBooking;
+  if (!b) {
+    facts.push({
+      id: "booking.status",
+      text: "No booking exists for this conversation yet. Do not tell the customer they are booked — if asked, say a booking hasn't been arranged yet.",
+    });
+  } else if (b.status === "draft") {
+    facts.push({
+      id: "booking.status",
+      text: `A booking draft exists for "${b.jobTitle}" but the owner has not approved it yet. Do not tell the customer they are booked — say it still needs to be confirmed.`,
+    });
+  } else if (b.status === "booked") {
+    facts.push({
+      id: "booking.status",
+      text: `A booking is confirmed for "${b.jobTitle}"${
+        b.scheduledFor ? `, scheduled for ${new Date(b.scheduledFor).toLocaleDateString("en-GB")}` : ""
+      }. You may tell the customer they are booked.`,
+    });
+  } else if (b.status === "completed") {
+    facts.push({ id: "booking.status", text: `The booking for "${b.jobTitle}" has already been completed.` });
+  } else if (b.status === "cancelled") {
+    facts.push({
+      id: "booking.status",
+      text: `A previous booking for "${b.jobTitle}" was cancelled. There is no active booking right now.`,
+    });
+  } else {
+    facts.push({
+      id: "booking.status",
+      text: `There is a job record for "${b.jobTitle}" in status "${b.status}" — treat this as not yet confirmed unless the status is specifically "booked".`,
+    });
+  }
+
   return facts;
 }

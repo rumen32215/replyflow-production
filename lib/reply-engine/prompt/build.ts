@@ -40,11 +40,25 @@ function buildSystemBlock(context: ReplyContext, facts: Fact[]): string {
   if (r?.escalationRules) lines.push(`When to hand off to the owner instead of answering yourself: ${r.escalationRules}`);
 
   lines.push(
-    "Hard rules, always: never invent a fact that is not in the numbered list below. Every price, date, guarantee, " +
-      "or commitment you state must come from a listed fact — put its id in facts_used. If the customer needs " +
-      "something you cannot ground in a listed fact, say so honestly and set requires_escalation true with a short " +
-      "reason, rather than guessing. Keep the reply short and natural for WhatsApp — a couple of sentences, not an " +
-      "email. Never claim to be an AI or a bot unless directly asked."
+    "Grounding rules, always: never invent a fact that is not in the numbered list below. Every price, date, " +
+      "guarantee, or commitment you state must come from a listed fact — put its id in facts_used. The " +
+      "[booking.status] fact is the only source of truth for whether this conversation's booking is real — never " +
+      "tell the customer they are booked, confirmed, or that someone is assigned unless that fact says you may. If " +
+      "the customer needs something you cannot ground in a listed fact, say so honestly and set requires_escalation " +
+      "true with a short reason, rather than guessing."
+  );
+
+  lines.push(
+    "Conversation-writing rules (Conversation Design Sprint): write like a real member of staff answering WhatsApp " +
+      "while juggling the phone, customers, and engineers — not like a chatbot. Every sentence must either move the " +
+      "conversation toward its outcome or collect information you genuinely still need; if a sentence does neither, " +
+      "cut it. Avoid stock phrases unless there's a specific reason for them: \"Perfect\", \"Great\", \"Wonderful\", " +
+      "\"Thank you for confirming\", \"Let me know if you need anything else\", \"Have a great day\". Don't " +
+      "reflexively thank, re-thank, or re-confirm information the customer already gave you earlier in this " +
+      "conversation. Use emojis extremely sparingly — most replies should have none at all, and never add one out " +
+      "of habit. If the conversation is naturally finished, it's fine to keep the reply short and let it end rather " +
+      "than manufacturing another sentence — silence is more human than a forced sign-off. Keep every reply short, " +
+      "a couple of sentences, never an email. Never claim to be an AI or a bot unless directly asked."
   );
 
   if (facts.length === 0) {

@@ -55,6 +55,17 @@ export interface CustomerJobsContext {
   jobs: { jobTitle: string; status: string; scheduledFor: string | null; completedAt: string | null }[];
 }
 
+/** The single source of truth for "is this conversation's booking
+ * actually real yet." Always fetched (one cheap indexed lookup on
+ * conversation_id), regardless of ContextNeeds — overclaiming a
+ * booking that doesn't exist is a safety issue for any intent, not
+ * just booking-related ones (Conversation Design Sprint). */
+export interface CurrentBookingContext {
+  jobTitle: string;
+  status: string;
+  scheduledFor: string | null;
+}
+
 /** Everything Context Assembly gathered for one message — each field
  * is null when its category wasn't in ContextNeeds, never fetched
  * speculatively (Sprint 10A: "Only retrieve the information actually
@@ -66,5 +77,6 @@ export interface ReplyContext {
   customerMemory: CustomerMemoryContext | null;
   conversationHistory: ConversationHistoryContext | null;
   customerJobs: CustomerJobsContext | null;
+  currentBooking: CurrentBookingContext | null;
   newMessage: { body: string; customerName: string | null; customerPhone: string };
 }

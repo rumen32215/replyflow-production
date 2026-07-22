@@ -143,6 +143,22 @@ export async function generateReplyForMessage(params: {
     const { generation, facts } = await generateReplyDraft(context, understanding);
     const safety = evaluateSafety({ understanding, generation, facts });
 
+    // Correct open_question with what the reply actually asks, now that
+    // it's been written — the pre-generation guess in `understanding`
+    // can't know the exact wording generation lands on, and the two
+    // disagreeing (state says nothing outstanding, reply asks a
+    // question anyway, or vice versa) is what caused generic, dodging
+    // replies in production testing. The generation call is the one
+    // true source for "what does THIS reply ask," since it wrote it.
+    try {
+      await supabase
+        .from("conversations")
+        .update({ ai_state: { ...understanding.conversationState, openQuestion: generation.asksQuestion } })
+        .eq("id", conversationId);
+    } catch (err) {
+      console.error("[reply-engine] could not persist post-generation conversation state:", err);
+    }
+
     // Silence (Voice doc 07 §2, Judgement doc 08 "deliberately do
     // nothing") — honoured only within the same narrow, already-safe
     // category auto-send uses, and only when nothing else flagged a

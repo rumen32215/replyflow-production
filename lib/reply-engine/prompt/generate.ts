@@ -13,6 +13,7 @@ interface RawGeneration {
   escalation_reason: string | null;
   facts_used: string[];
   no_reply_needed: boolean;
+  asks_question: string | null;
 }
 
 function toGenerationResult(raw: unknown): GenerationResult {
@@ -23,6 +24,7 @@ function toGenerationResult(raw: unknown): GenerationResult {
     escalationReason: "The reply could not be generated safely — please handle this one yourself.",
     factsUsed: [],
     noReplyNeeded: false,
+    asksQuestion: null,
   };
 
   if (!raw || typeof raw !== "object") return fallback;
@@ -48,6 +50,7 @@ function toGenerationResult(raw: unknown): GenerationResult {
     escalationReason: typeof r.escalation_reason === "string" ? r.escalation_reason : null,
     factsUsed: Array.isArray(r.facts_used) ? r.facts_used.filter((f): f is string => typeof f === "string") : [],
     noReplyNeeded,
+    asksQuestion: typeof r.asks_question === "string" && r.asks_question.trim() ? r.asks_question.trim() : null,
   };
 }
 
@@ -78,6 +81,7 @@ export async function generateReplyDraft(context: ReplyContext, understanding: U
         escalationReason: "The reply could not be generated — please handle this one yourself.",
         factsUsed: [],
         noReplyNeeded: false,
+        asksQuestion: null,
       },
       facts,
     };

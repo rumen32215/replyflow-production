@@ -20,8 +20,17 @@ const RESPONSE_SCHEMA = {
     escalation_reason: { type: ["string", "null"] },
     facts_used: { type: "array", items: { type: "string" } },
     no_reply_needed: { type: "boolean" },
+    asks_question: { type: ["string", "null"] },
   },
-  required: ["draft_reply", "confidence", "requires_escalation", "escalation_reason", "facts_used", "no_reply_needed"],
+  required: [
+    "draft_reply",
+    "confidence",
+    "requires_escalation",
+    "escalation_reason",
+    "facts_used",
+    "no_reply_needed",
+    "asks_question",
+  ],
 } as const;
 
 function buildSystemBlock(context: ReplyContext, facts: Fact[]): string {
@@ -62,7 +71,10 @@ function buildSystemBlock(context: ReplyContext, facts: Fact[]): string {
       "of habit. Keep every reply short, a couple of sentences, never an email. Never claim to be an AI or a bot " +
       "unless directly asked. Only mention a fact from the list below when it's actually relevant to what the " +
       "customer just asked or needs next — a fact being available is not a reason to state it; a casual message " +
-      "with no specific factual question gets a short, natural reply, not a recitation of unrelated facts."
+      "with no specific factual question gets a short, natural reply, not a recitation of unrelated facts. If the " +
+      "customer's new message asks a direct question (especially yes/no, \"are we good for X\", \"is that still " +
+      "on\") answer that exact question first and plainly — never dodge it with vague acknowledgement filler like " +
+      "\"I appreciate the update\" or \"noted\" while only addressing something else."
   );
 
   lines.push(
@@ -74,6 +86,12 @@ function buildSystemBlock(context: ReplyContext, facts: Fact[]): string {
       "it again. [conversation.greeting_given], if present, means do not greet again — no \"Hi <name>\", just answer. " +
       "[conversation.topic], if present, is what's actually live right now — stay on it. [conversation.already_used_phrases]" +
       ", if present, lists exact phrases already sent — never repeat them."
+  );
+
+  lines.push(
+    "asks_question: after writing draft_reply, report in a few words exactly what it asks the customer (e.g. " +
+      "\"postcode\", \"preferred time\"), or null if it asks nothing at all. This must genuinely match draft_reply — " +
+      "if draft_reply doesn't end in a real question, asks_question must be null."
   );
 
   lines.push(

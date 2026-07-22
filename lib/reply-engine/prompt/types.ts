@@ -21,4 +21,12 @@ export interface GenerationResult {
    * ever honours this for the same narrow, already-safe category
    * auto-send uses, never for anything requiring escalation. */
   noReplyNeeded: boolean;
+  /** Conversation Intelligence Sprint — what, if anything, THIS reply
+   * actually asks the customer, in a few words, or null if it asks
+   * nothing. The generation call is the one true source for this (it's
+   * the one writing the sentence) — the orchestrator uses it to correct
+   * conversation_state.openQuestion after the fact, since the
+   * classification call's pre-generation guess can't know what wording
+   * generation will actually land on. */
+  asksQuestion: string | null;
 }

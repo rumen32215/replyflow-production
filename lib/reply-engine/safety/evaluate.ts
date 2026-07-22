@@ -30,6 +30,19 @@ export function evaluateSafety(input: {
   const decision = decisionCategoryFor(understanding.primaryIntent);
   const reasons: string[] = [];
 
+  // Escalation must consider secondary intents too, not just the primary
+  // one — a real gap found in adversarial testing: a long, rambling
+  // message with a genuine complaint buried inside it (alongside an
+  // unrelated booking request) got classified with COMPLAINT correctly
+  // present in secondaryIntents, but requiresEscalation stayed false
+  // because this whole evaluation only ever looked at primaryIntent's
+  // category. Compound messages are real (the Understanding Engine's
+  // own context-needs table already unions primary+secondary for
+  // fetching context) — the safety layer needs the same discipline.
+  const secondaryDecisions = understanding.secondaryIntents.map(decisionCategoryFor);
+  const anySecondaryAlwaysEscalate = secondaryDecisions.some((d) => d.alwaysEscalate);
+  const anySecondaryNeverAutomatic = secondaryDecisions.some((d) => d.neverAutomatic);
+
   // Check 1 — fact-grounding: every fact id the draft claims to rely on
   // must actually exist among the facts that were sent. A citation to a
   // fact id that was never provided means the draft is not grounded in
@@ -91,9 +104,16 @@ export function evaluateSafety(input: {
   // tag or category-level "always escalate" rule (e.g. Emergency,
   // Complaint) or the generation model's own judgment.
   const requiresEscalation = Boolean(
-    generation.requiresEscalation || decision.alwaysEscalate || understanding.safetyTag !== null || hasUnconfirmedRescheduleClaim
+    generation.requiresEscalation ||
+      decision.alwaysEscalate ||
+      anySecondaryAlwaysEscalate ||
+      understanding.safetyTag !== null ||
+      hasUnconfirmedRescheduleClaim
   );
   if (decision.alwaysEscalate) reasons.push(`"${decision.category}" always requires the owner's review.`);
+  if (anySecondaryAlwaysEscalate) {
+    reasons.push("A secondary intent on this message always requires the owner's review, even though it wasn't the primary one.");
+  }
   if (generation.requiresEscalation) reasons.push(generation.escalationReason ?? "The draft itself flagged this for escalation.");
 
   // Check 3 — confidence gate against the Decision Categories table.
@@ -103,7 +123,12 @@ export function evaluateSafety(input: {
   }
 
   const wouldAutoSend =
-    !decision.neverAutomatic && !requiresEscalation && !groundingFailed && confidenceCleared && Boolean(generation.draftReply);
+    !decision.neverAutomatic &&
+    !anySecondaryNeverAutomatic &&
+    !requiresEscalation &&
+    !groundingFailed &&
+    confidenceCleared &&
+    Boolean(generation.draftReply);
 
   return {
     category: decision.category,

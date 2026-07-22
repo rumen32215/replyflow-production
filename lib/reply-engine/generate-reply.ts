@@ -171,10 +171,23 @@ export async function generateReplyForMessage(params: {
     // question anyway, or vice versa) is what caused generic, dodging
     // replies in production testing. The generation call is the one
     // true source for "what does THIS reply ask," since it wrote it.
+    // Same correction for the commitments ledger (Sprint B) — the
+    // pre-generation classify call can only guess whether an outstanding
+    // commitment gets resolved this turn, since it runs before the reply
+    // exists. Without this, an item answered in turn 2 stayed marked
+    // "outstanding" forever afterward, causing the model to keep
+    // re-stating an answer it had already given (confirmed in testing).
+    const resolvedTexts = new Set(generation.resolvesCommitments);
+    const correctedCommitments = understanding.conversationState.commitments.map((c) =>
+      resolvedTexts.has(c.text) ? { ...c, status: "resolved" as const } : c
+    );
+
     try {
       await supabase
         .from("conversations")
-        .update({ ai_state: { ...understanding.conversationState, openQuestion: generation.asksQuestion } })
+        .update({
+          ai_state: { ...understanding.conversationState, openQuestion: generation.asksQuestion, commitments: correctedCommitments },
+        })
         .eq("id", conversationId);
     } catch (err) {
       console.error("[reply-engine] could not persist post-generation conversation state:", err);

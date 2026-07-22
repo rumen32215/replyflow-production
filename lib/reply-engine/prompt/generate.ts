@@ -14,6 +14,7 @@ interface RawGeneration {
   facts_used: string[];
   no_reply_needed: boolean;
   asks_question: string | null;
+  resolves_commitments: string[];
 }
 
 function toGenerationResult(raw: unknown): GenerationResult {
@@ -25,6 +26,7 @@ function toGenerationResult(raw: unknown): GenerationResult {
     factsUsed: [],
     noReplyNeeded: false,
     asksQuestion: null,
+    resolvesCommitments: [],
   };
 
   if (!raw || typeof raw !== "object") return fallback;
@@ -51,6 +53,9 @@ function toGenerationResult(raw: unknown): GenerationResult {
     factsUsed: Array.isArray(r.facts_used) ? r.facts_used.filter((f): f is string => typeof f === "string") : [],
     noReplyNeeded,
     asksQuestion: typeof r.asks_question === "string" && r.asks_question.trim() ? r.asks_question.trim() : null,
+    resolvesCommitments: Array.isArray(r.resolves_commitments)
+      ? r.resolves_commitments.filter((t): t is string => typeof t === "string")
+      : [],
   };
 }
 
@@ -86,6 +91,7 @@ export async function generateReplyDraft(
         factsUsed: [],
         noReplyNeeded: false,
         asksQuestion: null,
+        resolvesCommitments: [],
       },
       facts,
     };

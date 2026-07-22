@@ -29,4 +29,10 @@ export interface GenerationResult {
    * classification call's pre-generation guess can't know what wording
    * generation will actually land on. */
   asksQuestion: string | null;
+  /** Sprint B (Goals & Commitments) — exact text of outstanding
+   * commitments this reply actually resolves, same reasoning as
+   * asksQuestion: the pre-generation classify call can only guess
+   * whether a commitment gets resolved this turn, since it runs before
+   * the reply is written. Generation is the authoritative source. */
+  resolvesCommitments: string[];
 }

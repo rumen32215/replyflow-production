@@ -21,6 +21,7 @@ const RESPONSE_SCHEMA = {
     facts_used: { type: "array", items: { type: "string" } },
     no_reply_needed: { type: "boolean" },
     asks_question: { type: ["string", "null"] },
+    resolves_commitments: { type: "array", items: { type: "string" } },
   },
   required: [
     "draft_reply",
@@ -30,6 +31,7 @@ const RESPONSE_SCHEMA = {
     "facts_used",
     "no_reply_needed",
     "asks_question",
+    "resolves_commitments",
   ],
 } as const;
 
@@ -117,6 +119,13 @@ function buildSystemBlock(context: ReplyContext, facts: Fact[], options: { isFir
     "asks_question: after writing draft_reply, report in a few words exactly what it asks the customer (e.g. " +
       "\"postcode\", \"preferred time\"), or null if it asks nothing at all. This must genuinely match draft_reply — " +
       "if draft_reply doesn't end in a real question, asks_question must be null."
+  );
+
+  lines.push(
+    "resolves_commitments: if any [conversation.outstanding_commitments] fact is present, and draft_reply actually " +
+      "answers one or more of them, list their exact text here (copy it exactly as given) so the ledger can mark " +
+      "them resolved — the classification step that ran before you only guessed at this, it doesn't know what you " +
+      "actually wrote, so this is the real, authoritative answer. Empty array if none apply or none were present."
   );
 
   lines.push(

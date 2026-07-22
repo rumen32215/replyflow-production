@@ -163,8 +163,19 @@ export async function generateReplyForMessage(params: {
     // nothing") — honoured only within the same narrow, already-safe
     // category auto-send uses, and only when nothing else flagged a
     // problem. Never lets the model's own claim of "no reply needed"
-    // override a real escalation or a grounding failure.
-    const canSkipReply = generation.noReplyNeeded && safety.category === "general" && !safety.requiresEscalation && !safety.groundingFailed;
+    // override a real escalation or a grounding failure — and never
+    // lets it override a message that's literally a question. Live
+    // testing found the model going silent on a genuine "could someone
+    // come today instead?" once it judged the answer was "already
+    // covered" — a real question always deserves an explicit answer,
+    // even a one-word one, never silence on the model's own judgment.
+    const messageIsAQuestion = messageBody.includes("?");
+    const canSkipReply =
+      generation.noReplyNeeded &&
+      !messageIsAQuestion &&
+      safety.category === "general" &&
+      !safety.requiresEscalation &&
+      !safety.groundingFailed;
 
     if (canSkipReply) {
       await supabase.from("reply_drafts").upsert(

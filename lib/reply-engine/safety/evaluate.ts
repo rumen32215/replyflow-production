@@ -36,12 +36,36 @@ export function evaluateSafety(input: {
   // real data (Sprint 9 §6).
   const knownFactIds = new Set(facts.map((f) => f.id));
   const ungroundedCitations = generation.factsUsed.filter((id) => !knownFactIds.has(id));
-  const groundingFailed = ungroundedCitations.length > 0;
+  let groundingFailed = ungroundedCitations.length > 0;
   if (groundingFailed) {
     reasons.push(`Cited fact id(s) not present in what was sent: ${ungroundedCitations.join(", ")}.`);
   }
-  if (generation.draftReply && /£\s?\d|\bfree\b|guarantee/i.test(generation.draftReply) && generation.factsUsed.length === 0) {
-    reasons.push("Draft appears to state a price, guarantee, or commitment without citing a supporting fact.");
+
+  // Sprint A (Grounded Facts) — this used to only add a reason string
+  // without ever actually setting groundingFailed, so it never blocked
+  // anything (a real bug: a price stated with zero cited facts still
+  // cleared the gate). Widened beyond price/guarantee to catch invented
+  // operational instructions too — live testing found the model telling
+  // a customer to "ensure the stopcock is accessible" with zero facts
+  // cited, nothing configured anywhere for this business. The rule the
+  // brief asked for: "she should either know it or say she doesn't" —
+  // any specific instruction with no citation behind it fails grounding,
+  // not just prices.
+  const hasUncitedPriceClaim =
+    Boolean(generation.draftReply) && /£\s?\d|\bfree\b|\bguarantee/i.test(generation.draftReply) && generation.factsUsed.length === 0;
+  const hasUncitedInstruction =
+    Boolean(generation.draftReply) &&
+    /\b(please ensure|make sure|kindly ensure|please have|you'll need to have|you will need to have|please arrange for|please clear|clear access)\b/i.test(
+      generation.draftReply
+    ) &&
+    generation.factsUsed.length === 0;
+  if (hasUncitedPriceClaim || hasUncitedInstruction) {
+    groundingFailed = true;
+    reasons.push(
+      hasUncitedPriceClaim
+        ? "Draft states a price, guarantee, or commitment without citing a supporting fact."
+        : "Draft gives the customer a specific instruction or requirement without citing a supporting fact."
+    );
   }
 
   // Check 2 — escalation category: the Understanding Engine's safety

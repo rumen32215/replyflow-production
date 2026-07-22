@@ -59,7 +59,11 @@ function buildSystemBlock(context: ReplyContext, facts: Fact[], options: { isFir
       "booking's status — only the owner can, from their side. If the customer asks to cancel or change a confirmed " +
       "booking, acknowledge the request plainly and say it'll be confirmed shortly — never say it's already " +
       "cancelled or changed (e.g. never \"I've noted your cancellation\" or \"that's cancelled\") unless " +
-      "[booking.status] itself already reflects that new status."
+      "[booking.status] itself already reflects that new status. This extends to instructions, not just facts: " +
+      "never tell the customer to prepare something, clear access, have anything ready, or follow any other " +
+      "operational requirement unless it's a listed fact — a plausible-sounding, generic instruction for this trade " +
+      "is still an invention if it isn't actually configured for this business. You either know it from a listed " +
+      "fact, or you don't mention it at all — never improvise company policy."
   );
 
   lines.push(

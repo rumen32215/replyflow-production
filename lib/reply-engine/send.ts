@@ -25,7 +25,7 @@ export async function sendReplyToCustomer(params: {
 
   const { data: conversation } = await supabase
     .from("conversations")
-    .select("customer_phone")
+    .select("customer_phone, status")
     .eq("id", conversationId)
     .maybeSingle();
   const { data: connection } = await supabase
@@ -59,9 +59,19 @@ export async function sendReplyToCustomer(params: {
       status: "sent",
     });
 
+    // "open" is documented (0003) as meaning "no receptionist replies
+    // exist yet" — but nothing ever moved a conversation off it once a
+    // reply actually sent, so Front Desk / Mission Control kept
+    // showing "waiting for you" on threads already replied to. Move it
+    // to "gathering" (the existing status that reads as "I'm looking
+    // after this") — never downgrade a conversation that's already
+    // booked/completed/closed just because a message went out on it.
+    const statusUpdate =
+      conversation.status === "open" || conversation.status === "new" ? { status: "gathering" as const } : {};
+
     await supabase
       .from("conversations")
-      .update({ last_message_at: new Date().toISOString(), last_message_preview: text.slice(0, 140) })
+      .update({ last_message_at: new Date().toISOString(), last_message_preview: text.slice(0, 140), ...statusUpdate })
       .eq("id", conversationId);
 
     return { ok: true, whatsappMessageId };

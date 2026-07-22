@@ -161,7 +161,7 @@ export async function generateReplyForMessage(params: {
       messageBody,
     });
 
-    const { generation, facts } = await generateReplyDraft(context, understanding);
+    const { generation, facts } = await generateReplyDraft(context, understanding, { isFirstMessage });
     const safety = evaluateSafety({ understanding, generation, facts });
 
     // Correct open_question with what the reply actually asks, now that

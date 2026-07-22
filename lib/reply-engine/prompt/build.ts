@@ -33,7 +33,7 @@ const RESPONSE_SCHEMA = {
   ],
 } as const;
 
-function buildSystemBlock(context: ReplyContext, facts: Fact[]): string {
+function buildSystemBlock(context: ReplyContext, facts: Fact[], options: { isFirstMessage: boolean }): string {
   const r = context.receptionist;
   const businessName = context.businessProfile?.businessName ?? "the business";
   const receptionistName = context.businessProfile?.receptionistName;
@@ -112,7 +112,12 @@ function buildSystemBlock(context: ReplyContext, facts: Fact[]): string {
       "[conversation.open_question] fact present and nothing else is genuinely outstanding, set no_reply_needed to " +
       "true and leave draft_reply empty — this should be your default for a plain acknowledgement with nothing open, " +
       "not a rare exception. Silence is a deliberate, correct outcome, not a gap. Only skip this when there's a real " +
-      "open question, an unconfirmed booking, or an unresolved issue."
+      "open question, an unconfirmed booking, or an unresolved issue." +
+      (options.isFirstMessage
+        ? " This is the very first message in this conversation — there is nothing to acknowledge yet, so never set " +
+          "no_reply_needed here, even if the message itself is vague or low-content (e.g. \"just checking in\"). " +
+          "Always write a real, brief, natural reply to an opening message."
+        : "")
   );
 
   if (facts.length === 0) {
@@ -159,10 +164,14 @@ export interface BuiltPrompt {
   facts: Fact[];
 }
 
-export function buildPrompt(context: ReplyContext, understanding: UnderstandingResult): BuiltPrompt {
+export function buildPrompt(
+  context: ReplyContext,
+  understanding: UnderstandingResult,
+  options: { isFirstMessage: boolean } = { isFirstMessage: false }
+): BuiltPrompt {
   const facts = collectFacts(context, understanding);
 
-  const system = buildSystemBlock(context, facts);
+  const system = buildSystemBlock(context, facts, options);
   const userBlocks = [buildFactsBlock(facts), buildCustomerContextBlock(context), buildNewMessageBlock(context, understanding)].filter(
     Boolean
   );

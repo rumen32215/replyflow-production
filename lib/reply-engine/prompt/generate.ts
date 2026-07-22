@@ -65,8 +65,12 @@ export interface GeneratedReply {
  * A failure here degrades to a fallback that always requires
  * escalation, never a thrown error that would lose the message.
  */
-export async function generateReplyDraft(context: ReplyContext, understanding: UnderstandingResult): Promise<GeneratedReply> {
-  const { messages, jsonSchema, facts } = buildPrompt(context, understanding);
+export async function generateReplyDraft(
+  context: ReplyContext,
+  understanding: UnderstandingResult,
+  options: { isFirstMessage: boolean } = { isFirstMessage: false }
+): Promise<GeneratedReply> {
+  const { messages, jsonSchema, facts } = buildPrompt(context, understanding, options);
 
   try {
     const result = await getCompletion({ tier: "large", messages, jsonSchema, maxOutputTokens: 500 });

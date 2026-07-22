@@ -3,12 +3,13 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
-import { Bot, Briefcase, Check, Phone, Pencil, X } from "lucide-react";
-import { press, Reveal, EASE } from "@/components/shared/motion";
+import { AlertTriangle, Briefcase, Check, Loader2, Phone, Pencil, Sparkles, X } from "lucide-react";
+import { press, GrowingCheck, Reveal, EASE } from "@/components/shared/motion";
 import { Acknowledgement, useAcknowledgement } from "@/components/shared/acknowledgement";
 import { TypingDots } from "@/components/shared/typed-message";
 import { createClient } from "@/lib/supabase/client";
 import { buildStory, groupForStatus } from "@/lib/conversations";
+import { joinList } from "@/lib/knowledge";
 import { cn } from "@/lib/utils";
 
 interface ExistingJob {
@@ -27,14 +28,74 @@ interface PendingReplyDraft {
   confidence: string;
   requires_escalation: boolean;
   escalation_reason: string | null;
+  facts_used: string[] | null;
   status: string;
 }
 
 /** Turns the Understanding Engine's SCREAMING_CASE intent into
- * something an owner reads naturally, without a second label table to
- * keep in sync — a mechanical transform of the same real value. */
+ * something an owner would actually say. Falls back to a mechanical
+ * transform for anything not yet mapped, so a future intent never
+ * renders as literally undefined. */
+const INTENT_LABELS: Record<string, string> = {
+  BOOKING_REQUEST: "New booking enquiry",
+  BOOKING_CHANGE: "Changing a booking",
+  BOOKING_CANCELLATION: "Cancelling a booking",
+  BUSINESS_INFORMATION: "Asking about your business",
+  PRICING_INQUIRY: "Asking about pricing",
+  RETURNING_PROBLEM: "A recurring problem",
+  EMERGENCY: "Emergency",
+  COMPLAINT: "A complaint",
+  STATUS_CHECK: "Checking in on a job",
+  PAYMENT_QUERY: "Asking about payment",
+  SOCIAL: "Just saying hello",
+  UNCLEAR: "Not sure what they need",
+};
 function intentLabel(intent: string): string {
-  return intent.toLowerCase().replace(/_/g, " ");
+  return INTENT_LABELS[intent] ?? intent.toLowerCase().replace(/_/g, " ");
+}
+
+/** A calm, human read on how sure the draft is — never a raw
+ * percentage (Shared Brain precedent: "the user receives High
+ * confidence / Needs review, not raw probabilities"). */
+function ConfidenceTag({ confidence }: { confidence: string }) {
+  if (confidence === "high" || confidence === "verified") {
+    return (
+      <span className="flex shrink-0 items-center gap-1 rounded-full bg-success/10 px-2 py-1 text-[10.5px] font-bold text-success">
+        <Check className="h-2.5 w-2.5" strokeWidth={3.5} />
+        Confident
+      </span>
+    );
+  }
+  if (confidence === "medium") {
+    return (
+      <span className="shrink-0 rounded-full bg-muted px-2 py-1 text-[10.5px] font-bold text-muted-foreground">
+        Fairly sure
+      </span>
+    );
+  }
+  return (
+    <span className="shrink-0 rounded-full bg-amber-100 px-2 py-1 text-[10.5px] font-bold text-amber-700">
+      Worth a check
+    </span>
+  );
+}
+
+/** What this draft actually leans on, in plain terms — turns the
+ * Reply Engine's internal fact-grounding ids (Sprint 10A) into the
+ * one trust signal that matters to the owner: not *that* it's
+ * grounded, but *in what*. Category-level only — never claims a
+ * specific fact wasn't shown here to keep the summary honest. */
+const FACT_SOURCE_LABELS: Record<string, string> = {
+  profile: "your business details",
+  receptionist: "your FAQs",
+  diary: "your diary",
+  customer: "this customer's history",
+};
+function factSourceSummary(factsUsed: string[] | null | undefined): string | null {
+  if (!Array.isArray(factsUsed) || factsUsed.length === 0) return null;
+  const prefixes = Array.from(new Set(factsUsed.map((id) => id.split(".")[0])));
+  const labels = prefixes.map((p) => (p ? FACT_SOURCE_LABELS[p] : undefined)).filter((l): l is string => Boolean(l));
+  return labels.length > 0 ? joinList(labels) : null;
 }
 
 function formatScheduled(iso: string | null): string | null {
@@ -108,7 +169,8 @@ export function ConversationStory({
   const [replyDraft, setReplyDraft] = useState<PendingReplyDraft | null>(pendingDraft);
   const [editingReply, setEditingReply] = useState(false);
   const [replyText, setReplyText] = useState(pendingDraft?.final_text ?? pendingDraft?.draft_text ?? "");
-  const [decidingReply, setDecidingReply] = useState(false);
+  const [pendingAction, setPendingAction] = useState<"approve" | "edit" | "reject" | null>(null);
+  const [justSent, setJustSent] = useState(false);
   const [replyError, setReplyError] = useState<string | null>(null);
 
   const story = buildStory({ status, messageCount, photoCount });
@@ -243,10 +305,15 @@ export function ConversationStory({
    * client-side Supabase write like a job's approve/reject — approving
    * sends a real WhatsApp message using a stored access token the
    * browser must never see (see app/api/reply-drafts/[id]/route.ts).
+   *
+   * Approve doesn't clear the draft immediately — it holds a brief
+   * "Sent" confirmation in place first (GrowingCheck), so the moment
+   * of a real message going out is felt, not just inferred from the
+   * card silently disappearing.
    */
   async function resolveDraft(action: "approve" | "edit" | "reject", text?: string) {
-    if (!replyDraft || decidingReply) return;
-    setDecidingReply(true);
+    if (!replyDraft || pendingAction) return;
+    setPendingAction(action);
     setReplyError(null);
     try {
       const res = await fetch(`/api/reply-drafts/${replyDraft.id}`, {
@@ -257,24 +324,30 @@ export function ConversationStory({
       const payload = await res.json();
       if (!res.ok) {
         setReplyError(payload.error ?? "Something went wrong.");
-        setDecidingReply(false);
+        setPendingAction(null);
         return;
       }
-      setDecidingReply(false);
       if (action === "reject") {
+        setPendingAction(null);
         setReplyDraft(null);
         acknowledge("Rejected — I won't send this one.");
       } else if (action === "edit") {
+        setPendingAction(null);
         setReplyDraft(payload.draft);
         setEditingReply(false);
         acknowledge("Saved your edit.");
       } else {
-        setReplyDraft(null);
+        setJustSent(true);
         acknowledge("Sent.");
+        setTimeout(() => {
+          setReplyDraft(null);
+          setPendingAction(null);
+          setJustSent(false);
+        }, 1600);
       }
       router.refresh();
     } catch {
-      setDecidingReply(false);
+      setPendingAction(null);
       setReplyError("Couldn't reach the server — try again.");
     }
   }
@@ -434,99 +507,158 @@ export function ConversationStory({
         </div>
       )}
 
-      {/* An AI-drafted reply (Sprint 10A) — never sent automatically.
-       * The owner reviews, optionally edits, then approves or rejects,
-       * the same three-way decision a job draft already offers. */}
-      {replyDraft && (
-        <div className="mt-3.5 rounded-xl border border-primary/20 bg-accent/40 p-3.5">
-          <div className="mb-2 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-widest text-primary">
-            <Bot className="h-3.5 w-3.5" />
-            Drafted reply — {intentLabel(replyDraft.intent)}
-          </div>
+      {/* The AI-drafted reply (Sprint 10A) — the product's hero moment,
+       * so it gets its own distinct card rather than sharing the muted
+       * "info box" treatment job-drafts use. Never sent automatically:
+       * the owner reviews, optionally edits, then approves or rejects. */}
+      <AnimatePresence initial={false}>
+        {replyDraft && (
+          <motion.div
+            initial={{ opacity: 0, y: 10, height: 0 }}
+            animate={{ opacity: 1, y: 0, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.35, ease: EASE }}
+            className="mt-3.5 overflow-hidden"
+          >
+            <div className="overflow-hidden rounded-2xl border border-primary/15 bg-card shadow-sm">
+              <div className="flex items-center justify-between gap-2 border-b border-primary/10 bg-accent/50 px-3.5 py-2.5">
+                <div className="flex min-w-0 items-center gap-2">
+                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground">
+                    <Sparkles className="h-3.5 w-3.5" />
+                  </span>
+                  <div className="min-w-0">
+                    <p className="text-[12.5px] font-bold leading-tight text-foreground">Suggested reply</p>
+                    <p className="truncate text-[11px] leading-tight text-muted-foreground">
+                      {intentLabel(replyDraft.intent)}
+                    </p>
+                  </div>
+                </div>
+                {!justSent && <ConfidenceTag confidence={replyDraft.confidence} />}
+              </div>
 
-          {replyDraft.requires_escalation && (
-            <p className="mb-2 rounded-lg bg-amber-50 px-2.5 py-1.5 text-[12px] text-amber-800">
-              {replyDraft.escalation_reason || "This one is flagged for your judgement before sending."}
-            </p>
-          )}
+              <div className="p-3.5">
+                {justSent ? (
+                  <div className="flex items-center gap-2.5 py-1 text-[13px] font-semibold text-success">
+                    <GrowingCheck />
+                    Sent to {customerName || "the customer"}
+                  </div>
+                ) : (
+                  <>
+                    {replyDraft.requires_escalation && (
+                      <div className="mb-3 flex items-start gap-2 rounded-lg bg-amber-50 px-2.5 py-2 text-[12px] leading-relaxed text-amber-900">
+                        <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                        <span>{replyDraft.escalation_reason || "This one needs your judgement before sending."}</span>
+                      </div>
+                    )}
 
-          {editingReply ? (
-            <div className="space-y-2.5">
-              <textarea
-                value={replyText}
-                onChange={(e) => setReplyText(e.target.value)}
-                rows={3}
-                className="w-full resize-none rounded-lg border border-border bg-background px-3 py-2 text-[13px] leading-relaxed outline-none transition-colors focus:border-primary"
-              />
-              <div className="flex flex-wrap gap-2">
-                <motion.button
-                  {...press}
-                  type="button"
-                  onClick={() => resolveDraft("edit", replyText)}
-                  disabled={decidingReply || !replyText.trim()}
-                  className="flex items-center gap-1.5 rounded-lg bg-success px-3.5 py-2 text-[12.5px] font-semibold text-success-foreground disabled:opacity-60"
-                >
-                  <Check className="h-3.5 w-3.5" />
-                  Save
-                </motion.button>
-                <motion.button
-                  {...press}
-                  type="button"
-                  onClick={() => {
-                    setReplyText(replyDraft.final_text ?? replyDraft.draft_text);
-                    setEditingReply(false);
-                  }}
-                  className="rounded-lg px-3.5 py-2 text-[12.5px] font-semibold text-muted-foreground hover:text-foreground"
-                >
-                  Cancel
-                </motion.button>
+                    {editingReply ? (
+                      <div className="space-y-2.5">
+                        <textarea
+                          value={replyText}
+                          onChange={(e) => setReplyText(e.target.value)}
+                          rows={3}
+                          autoFocus
+                          className="w-full resize-none rounded-2xl border border-primary/30 bg-accent/30 px-3.5 py-2.5 text-[13px] leading-relaxed outline-none transition-colors focus:border-primary"
+                        />
+                        <div className="flex flex-wrap gap-2">
+                          <motion.button
+                            {...press}
+                            type="button"
+                            onClick={() => resolveDraft("edit", replyText)}
+                            disabled={pendingAction !== null || !replyText.trim()}
+                            className="flex min-h-[44px] items-center gap-1.5 rounded-xl bg-success px-4 py-2.5 text-[13px] font-semibold text-success-foreground disabled:opacity-60"
+                          >
+                            {pendingAction === "edit" ? (
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            ) : (
+                              <Check className="h-3.5 w-3.5" />
+                            )}
+                            {pendingAction === "edit" ? "Saving…" : "Save"}
+                          </motion.button>
+                          <motion.button
+                            {...press}
+                            type="button"
+                            onClick={() => {
+                              setReplyText(replyDraft.final_text ?? replyDraft.draft_text);
+                              setEditingReply(false);
+                            }}
+                            disabled={pendingAction !== null}
+                            className="flex min-h-[44px] items-center rounded-xl px-4 py-2.5 text-[13px] font-semibold text-muted-foreground hover:text-foreground disabled:opacity-60"
+                          >
+                            Cancel
+                          </motion.button>
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        {latestCustomerMessage && (
+                          <p className="mb-2 truncate text-[11.5px] leading-snug text-muted-foreground">
+                            Replying to <span className="italic">&ldquo;{latestCustomerMessage}&rdquo;</span>
+                          </p>
+                        )}
+                        <div className="flex justify-end">
+                          <div className="max-w-[85%] rounded-2xl rounded-br-sm bg-primary px-3.5 py-2.5 text-[13px] leading-relaxed text-primary-foreground">
+                            {replyDraft.final_text ?? replyDraft.draft_text}
+                          </div>
+                        </div>
+                        {factSourceSummary(replyDraft.facts_used) && (
+                          <p className="mt-2 text-[11px] text-muted-foreground">
+                            Based on {factSourceSummary(replyDraft.facts_used)}.
+                          </p>
+                        )}
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          <motion.button
+                            {...press}
+                            type="button"
+                            onClick={() => resolveDraft("approve")}
+                            disabled={pendingAction !== null}
+                            className="flex min-h-[44px] items-center gap-1.5 rounded-xl bg-success px-4 py-2.5 text-[13px] font-semibold text-success-foreground shadow-sm disabled:opacity-60"
+                          >
+                            {pendingAction === "approve" ? (
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            ) : (
+                              <Check className="h-3.5 w-3.5" />
+                            )}
+                            {pendingAction === "approve" ? "Sending…" : "Approve & send"}
+                          </motion.button>
+                          <motion.button
+                            {...press}
+                            type="button"
+                            onClick={() => {
+                              setReplyText(replyDraft.final_text ?? replyDraft.draft_text);
+                              setEditingReply(true);
+                            }}
+                            disabled={pendingAction !== null}
+                            className="flex min-h-[44px] items-center gap-1.5 rounded-xl border border-border bg-card px-4 py-2.5 text-[13px] font-semibold text-foreground disabled:opacity-60"
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                            Edit
+                          </motion.button>
+                          <motion.button
+                            {...press}
+                            type="button"
+                            onClick={() => resolveDraft("reject")}
+                            disabled={pendingAction !== null}
+                            className="flex min-h-[44px] items-center gap-1.5 rounded-xl px-4 py-2.5 text-[13px] font-semibold text-red-600 hover:bg-red-50 disabled:opacity-60"
+                          >
+                            {pendingAction === "reject" ? (
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            ) : (
+                              <X className="h-3.5 w-3.5" />
+                            )}
+                            Reject
+                          </motion.button>
+                        </div>
+                      </>
+                    )}
+                    {replyError && <p className="mt-2 text-[12px] text-red-600">{replyError}</p>}
+                  </>
+                )}
               </div>
             </div>
-          ) : (
-            <>
-              <div className="inline-block max-w-full rounded-2xl rounded-br-sm bg-[#d7f8c8] px-3.5 py-2 text-[13px] leading-relaxed text-foreground">
-                {replyDraft.final_text ?? replyDraft.draft_text}
-              </div>
-              <div className="mt-2.5 flex flex-wrap gap-2">
-                <motion.button
-                  {...press}
-                  type="button"
-                  onClick={() => resolveDraft("approve")}
-                  disabled={decidingReply}
-                  className="flex items-center gap-1.5 rounded-lg bg-success px-3.5 py-2 text-[12.5px] font-semibold text-success-foreground disabled:opacity-60"
-                >
-                  <Check className="h-3.5 w-3.5" />
-                  Approve &amp; send
-                </motion.button>
-                <motion.button
-                  {...press}
-                  type="button"
-                  onClick={() => {
-                    setReplyText(replyDraft.final_text ?? replyDraft.draft_text);
-                    setEditingReply(true);
-                  }}
-                  disabled={decidingReply}
-                  className="flex items-center gap-1.5 rounded-lg border border-border bg-card px-3.5 py-2 text-[12.5px] font-semibold text-foreground disabled:opacity-60"
-                >
-                  <Pencil className="h-3.5 w-3.5" />
-                  Edit
-                </motion.button>
-                <motion.button
-                  {...press}
-                  type="button"
-                  onClick={() => resolveDraft("reject")}
-                  disabled={decidingReply}
-                  className="flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-[12.5px] font-semibold text-red-600 hover:bg-red-50 disabled:opacity-60"
-                >
-                  <X className="h-3.5 w-3.5" />
-                  Reject
-                </motion.button>
-              </div>
-            </>
-          )}
-          {replyError && <p className="mt-2 text-[12px] text-red-600">{replyError}</p>}
-        </div>
-      )}
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* A simulated confirmation — clearly labeled, never phrased as
        * a delivery receipt. Real outbound sending isn't wired up yet. */}

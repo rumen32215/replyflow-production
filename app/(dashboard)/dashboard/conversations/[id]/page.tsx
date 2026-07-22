@@ -58,7 +58,9 @@ export default async function ConversationDetailPage({ params }: { params: { id:
     // pattern as jobs above, for the same reason.
     supabase
       .from("reply_drafts")
-      .select("id, draft_text, final_text, intent, confidence, requires_escalation, escalation_reason, status")
+      .select(
+        "id, draft_text, final_text, intent, confidence, requires_escalation, escalation_reason, facts_used, status"
+      )
       .eq("conversation_id", conversation.id)
       .eq("status", "pending")
       .order("created_at", { ascending: false })

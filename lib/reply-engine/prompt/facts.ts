@@ -1,4 +1,6 @@
 import type { ReplyContext } from "../context/types";
+import type { UnderstandingResult } from "../understanding/types";
+import { standingForDate, describeStanding } from "@/lib/availability";
 
 /** One bounded fact, stably identified so the generation LLM can cite
  * exactly which real fact it used (Sprint 9 §5: `facts_used`) and the
@@ -17,7 +19,7 @@ export interface Fact {
  * for contributes zero facts, exactly like it contributes zero prompt
  * text.
  */
-export function collectFacts(context: ReplyContext): Fact[] {
+export function collectFacts(context: ReplyContext, understanding: UnderstandingResult): Fact[] {
   const facts: Fact[] = [];
   const p = context.businessProfile;
 
@@ -57,6 +59,18 @@ export function collectFacts(context: ReplyContext): Fact[] {
     if (context.diary.nextAvailable) {
       facts.push({ id: "diary.next_available", text: `Next realistic availability: ${context.diary.nextAvailable.label}.` });
     }
+    // Fixes a real fact-drift bug found in production testing: the
+    // model would answer a "what about tomorrow?" question using the
+    // "today" fact (or invent one), because "tomorrow" was never
+    // actually grounded in anything. standingForDate already supports
+    // any date — it just had never been asked for one before.
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const tomorrowStanding = standingForDate(context.diary.availability, tomorrow);
+    facts.push({
+      id: "diary.tomorrow",
+      text: `Tomorrow (${tomorrow.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "short" })}): ${describeStanding(tomorrowStanding)}.`,
+    });
   }
 
   if (context.customerJobs) {
@@ -104,12 +118,13 @@ export function collectFacts(context: ReplyContext): Fact[] {
     });
   }
 
-  // Conversation stage (Voice doc 07 §5) — computed deterministically
-  // from data already assembled, never inferred by the generation model
-  // from raw history. Exists so "never go backwards, never repeat a
-  // stage" is a fact the model is told, not a pattern it has to notice
-  // on its own in a 12-message window.
-  facts.push(stageFact(context.currentBooking, context.conversationHistory));
+  // Conversation State (Conversation Intelligence Sprint) — carried
+  // forward turn by turn by the Understanding Engine (see
+  // understanding/state.ts), never re-derived from raw history by this
+  // call. This is what fixes re-greeting, re-asking answered questions,
+  // and losing the thread: the model is TOLD where the conversation is
+  // and what's already known, not left to infer it fresh every time.
+  facts.push(...conversationStateFacts(understanding.conversationState, context.currentBooking));
 
   // Phrase memory (Voice doc 07 §5) — a small, deterministic,
   // non-model check: which of the known stock phrases has this
@@ -148,49 +163,67 @@ function detectUsedStockPhrases(history: ReplyContext["conversationHistory"]): s
   return STOCK_PHRASES.filter((phrase) => outboundText.includes(phrase));
 }
 
-function stageFact(
-  booking: ReplyContext["currentBooking"],
-  history: ReplyContext["conversationHistory"]
-): Fact {
-  const hasHistory = Boolean(history && history.messages.length > 0);
+const STAGE_GUIDANCE: Record<string, string> = {
+  understand: "nothing has been established yet — find out what the customer actually needs.",
+  diagnose: "working out what the problem or need actually is — ask one diagnostic question at a time.",
+  collect: "the need is understood — you're gathering the specific details still missing (see collected/outstanding below) before a quote or booking can happen.",
+  quote_or_book: "enough is known to offer a price or a visit — move to actually offering one, don't keep asking diagnostic questions.",
+  confirm: "a booking has just been proposed or made — confirm it plainly, don't re-collect anything.",
+  waiting: "a booking is confirmed and there's nothing further to do until the job happens — a plain acknowledgement from the customer here usually needs no reply at all.",
+  completed: "the job for this conversation is done — treat any new message as a fresh enquiry, not a continuation.",
+  closed: "this conversation is finished — treat any new message as a fresh enquiry.",
+};
 
-  if (booking?.status === "booked") {
-    return {
-      id: "conversation.stage",
-      text:
-        "Stage: Confirm/Close — a booking is already confirmed for this conversation. Do not re-collect information " +
-        "already used to make it, do not re-explain the booking unless asked, and do not offer to book again. If the " +
-        "customer's new message is just an acknowledgement with nothing new to address, the right move may be no " +
-        "reply at all.",
-    };
+/** Turns Conversation State (understanding/state.ts) — carried forward
+ * turn by turn, never re-derived from raw history — into the facts the
+ * generation prompt actually reads. Reconciles with `booking.status`
+ * (the real jobs-table ground truth) when they'd otherwise disagree:
+ * ground truth always wins on whether a booking is real. */
+function conversationStateFacts(
+  state: UnderstandingResult["conversationState"],
+  booking: ReplyContext["currentBooking"]
+): Fact[] {
+  const facts: Fact[] = [];
+
+  let stage = state.stage;
+  if (booking?.status === "booked" && (stage === "understand" || stage === "diagnose" || stage === "collect" || stage === "quote_or_book")) {
+    stage = "confirm";
   }
-  if (booking?.status === "draft") {
-    return {
-      id: "conversation.stage",
-      text:
-        "Stage: Quote or book — a booking has already been proposed and is waiting on the owner, not yet confirmed. " +
-        "Do not ask again for information already collected to create it, and do not tell the customer it's confirmed.",
-    };
-  }
-  if (booking?.status === "completed" || booking?.status === "cancelled") {
-    return {
-      id: "conversation.stage",
-      text:
-        "Stage: Understand — the previous booking for this conversation is finished or cancelled. Treat a new " +
-        "message as a fresh enquiry from scratch, not a continuation of that old booking.",
-    };
-  }
-  if (!hasHistory) {
-    return {
-      id: "conversation.stage",
-      text: "Stage: Understand — this is the first message in this conversation. Nothing has been asked or answered yet.",
-    };
-  }
-  return {
+  facts.push({
     id: "conversation.stage",
-    text:
-      "Stage: Diagnose/Collect — no booking exists yet for this conversation. Check the conversation history below " +
-      "before asking anything: never ask again for a detail (symptom, postcode, preferred time, name) the customer " +
-      "already gave earlier in this thread.",
-  };
+    text: `Stage: ${stage} — ${STAGE_GUIDANCE[stage] ?? STAGE_GUIDANCE.understand}. Never move backwards to an earlier stage unless the customer has clearly started a brand new, unrelated request.`,
+  });
+
+  const known = Object.entries(state.slots)
+    .filter((entry): entry is [string, string] => Boolean(entry[1]))
+    .map(([key, value]) => `${key} = "${value}"`);
+  if (known.length > 0) {
+    facts.push({
+      id: "conversation.collected",
+      text: `Already collected in this conversation, do not ask for again unless the customer changes it: ${known.join(", ")}.`,
+    });
+  }
+
+  if (state.openQuestion) {
+    facts.push({
+      id: "conversation.open_question",
+      text: `You are currently waiting to hear back on: "${state.openQuestion}". If the customer's new message answers this, treat it as answered — do not ask it again.`,
+    });
+  }
+
+  if (state.greetingGiven) {
+    facts.push({
+      id: "conversation.greeting_given",
+      text: "A greeting has already happened earlier in this conversation. Do not open this reply with a greeting or the customer's name again — just answer.",
+    });
+  }
+
+  if (state.lastTopic) {
+    facts.push({
+      id: "conversation.topic",
+      text: `Current live topic: ${state.lastTopic}. Stay on this — don't bring in an unrelated fact, a different job, or switch topics unless the customer does.`,
+    });
+  }
+
+  return facts;
 }

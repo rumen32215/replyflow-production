@@ -5,6 +5,7 @@
  * facts it mentions, and how much of the business's context is worth
  * fetching before the Reply Engine drafts anything.
  */
+import type { ConversationState } from "./state";
 
 /**
  * The 12-category taxonomy from Sprint 9.1 §1 — grounded in the
@@ -78,6 +79,9 @@ export interface UnderstandingResult {
   patternEntities: PatternEntities;
   meaningEntities: MeaningEntities;
   safetyTag: SafetyTag;
+  /** Conversation Intelligence Sprint — carried forward turn by turn,
+   * never re-derived from scratch (see understanding/state.ts). */
+  conversationState: ConversationState;
 }
 
 /** The six context categories the deterministic lookup table (§3)

@@ -60,23 +60,30 @@ function buildSystemBlock(context: ReplyContext, facts: Fact[]): string {
       "Don't reflexively thank, re-thank, or re-confirm information the customer already gave you earlier in this " +
       "conversation. Use emojis extremely sparingly — most replies should have none at all, and never add one out " +
       "of habit. Keep every reply short, a couple of sentences, never an email. Never claim to be an AI or a bot " +
-      "unless directly asked."
+      "unless directly asked. Only mention a fact from the list below when it's actually relevant to what the " +
+      "customer just asked or needs next — a fact being available is not a reason to state it; a casual message " +
+      "with no specific factual question gets a short, natural reply, not a recitation of unrelated facts."
   );
 
   lines.push(
-    "Stage and repetition, always: the [conversation.stage] fact below tells you where this conversation actually " +
-      "is — treat it as authoritative, never guess it from the message history yourself, and never move the " +
-      "conversation backwards or repeat a stage it's already passed. If a [conversation.already_used_phrases] fact " +
-      "is present, those exact phrases have already been sent in this thread — do not send them again."
+    "Conversation state, always authoritative — never re-derive any of this yourself from the raw history below, " +
+      "it is carried forward for you turn by turn: [conversation.stage] tells you where this conversation actually " +
+      "is — never move it backwards or repeat a stage it's already passed. [conversation.collected], if present, " +
+      "lists exactly what's already known — never ask for any of it again. [conversation.open_question], if present, " +
+      "is exactly what you're waiting to hear back on — if this message answers it, treat it as answered, don't ask " +
+      "it again. [conversation.greeting_given], if present, means do not greet again — no \"Hi <name>\", just answer. " +
+      "[conversation.topic], if present, is what's actually live right now — stay on it. [conversation.already_used_phrases]" +
+      ", if present, lists exact phrases already sent — never repeat them."
   );
 
   lines.push(
     "Silence (doc 07 §2, doc 08 'deliberately do nothing'): the message that resolves the immediate need is allowed " +
       "to simply be the last message — no forced sign-off tacked on by reflex. If the customer's message is a bare " +
-      "acknowledgement (\"thanks\", \"ok\", \"great\", a thumbs up) and nothing is outstanding — no open question, " +
-      "no unconfirmed booking, no unresolved issue — set no_reply_needed to true and leave draft_reply empty. Silence " +
-      "is a deliberate, correct outcome here, not a gap. Only ever do this when you are genuinely sure nothing is " +
-      "outstanding; if there's any real doubt, write the short reply instead."
+      "acknowledgement (\"thanks\", \"ok\", \"great\", \"perfect\", a laugh, a thumbs up) and there is no " +
+      "[conversation.open_question] fact present and nothing else is genuinely outstanding, set no_reply_needed to " +
+      "true and leave draft_reply empty — this should be your default for a plain acknowledgement with nothing open, " +
+      "not a rare exception. Silence is a deliberate, correct outcome, not a gap. Only skip this when there's a real " +
+      "open question, an unconfirmed booking, or an unresolved issue."
   );
 
   if (facts.length === 0) {
@@ -124,7 +131,7 @@ export interface BuiltPrompt {
 }
 
 export function buildPrompt(context: ReplyContext, understanding: UnderstandingResult): BuiltPrompt {
-  const facts = collectFacts(context);
+  const facts = collectFacts(context, understanding);
 
   const system = buildSystemBlock(context, facts);
   const userBlocks = [buildFactsBlock(facts), buildCustomerContextBlock(context), buildNewMessageBlock(context, understanding)].filter(

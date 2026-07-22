@@ -1,11 +1,13 @@
 import "server-only";
 import { createServiceClient } from "@/lib/supabase/service";
 import { getBrainContext } from "@/lib/brain";
-import { classifyMessage, resolveContextNeeds } from "./understanding";
+import { classifyMessage, resolveContextNeeds, EMPTY_CONVERSATION_STATE, toConversationState } from "./understanding";
 import { assembleContext } from "./context/assemble";
 import { generateReplyDraft } from "./prompt/generate";
 import { evaluateSafety } from "./safety/evaluate";
 import { sendReplyToCustomer } from "./send";
+
+const STATE_HISTORY_WINDOW = 4;
 
 /**
  * The Reply Engine orchestrator — the one entry point that wires
@@ -74,7 +76,50 @@ export async function generateReplyForMessage(params: {
     });
     if (!brain.thoughts.readyToActAlone) return;
 
-    const understanding = await classifyMessage(messageBody);
+    // Prior Conversation State (Conversation Intelligence Sprint) —
+    // fetched as its own defensive, separate query rather than folded
+    // into the `conversations` select above: a PostgREST select fails
+    // its *entire* query if any one requested column doesn't exist, and
+    // the ai_state column depends on a migration that may not have run
+    // yet in every environment. Isolating it means a missing column
+    // degrades to "no state yet" instead of breaking message processing
+    // outright — the exact failure mode the tone_notes migration gap
+    // caused once already.
+    let priorState = EMPTY_CONVERSATION_STATE;
+    try {
+      const { data: stateRow } = await supabase
+        .from("conversations")
+        .select("ai_state")
+        .eq("id", conversationId)
+        .maybeSingle();
+      if (stateRow?.ai_state) priorState = toConversationState(stateRow.ai_state);
+    } catch (err) {
+      console.error("[reply-engine] could not read prior conversation state (migration 0012 may not be applied yet):", err);
+    }
+
+    const { data: recentRows } = await supabase
+      .from("messages")
+      .select("direction, body, created_at")
+      .eq("conversation_id", conversationId)
+      .order("created_at", { ascending: false })
+      .limit(STATE_HISTORY_WINDOW);
+    const recentHistory = (recentRows ?? [])
+      .slice()
+      .reverse()
+      .map((m) => ({ direction: m.direction as "inbound" | "outbound", body: m.body ?? "" }));
+
+    const understanding = await classifyMessage(messageBody, priorState, recentHistory);
+
+    // Persist the updated state immediately, regardless of what happens
+    // downstream (escalation, silence, auto-send, pending draft) — the
+    // state describes the conversation's understanding, not the outcome
+    // of any one reply. Best-effort: a failure here (e.g. migration
+    // 0012 not applied yet) must never block drafting a reply.
+    try {
+      await supabase.from("conversations").update({ ai_state: understanding.conversationState }).eq("id", conversationId);
+    } catch (err) {
+      console.error("[reply-engine] could not persist conversation state:", err);
+    }
 
     // Understanding-level safety pre-check (Sprint 9.1 §6) — some
     // messages must never reach the generation call at all.

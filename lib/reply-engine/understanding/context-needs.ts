@@ -36,7 +36,13 @@ const CONTEXT_NEEDS_TABLE: Record<Intent, ContextNeeds> = {
   BUSINESS_INFORMATION: {
     businessProfile: true,
     receptionistRules: false,
-    diary: false,
+    // Widened after production testing (Stability Sprint): "business
+    // information" genuinely includes questions like "how much notice
+    // do you need" / "are you open weekends" — real diary facts, not
+    // just static profile fields. Without this, the model had no
+    // grounded fact to answer with and gave a vague, hedging reply
+    // instead of the specific answer it should have been able to give.
+    diary: true,
     customerMemory: false,
     conversationHistory: true,
     customerJobs: false,

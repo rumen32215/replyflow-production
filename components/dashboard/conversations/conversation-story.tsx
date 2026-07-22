@@ -165,6 +165,8 @@ export function ConversationStory({
   const [savingJob, setSavingJob] = useState(false);
   const [decidingJob, setDecidingJob] = useState(false);
   const [showSentPreview, setShowSentPreview] = useState(false);
+  const [sentPreviewText, setSentPreviewText] = useState<string | null>(null);
+  const [sendFailedReason, setSendFailedReason] = useState<string | null>(null);
 
   const [replyDraft, setReplyDraft] = useState<PendingReplyDraft | null>(pendingDraft);
   const [editingReply, setEditingReply] = useState(false);
@@ -264,26 +266,26 @@ export function ConversationStory({
   async function approveJob() {
     if (!job || decidingJob) return;
     setDecidingJob(true);
-    const { error: jobError } = await supabase.from("jobs").update({ status: "booked" }).eq("id", job.id);
-    if (jobError) {
+    setSentPreviewText(null);
+    setSendFailedReason(null);
+    try {
+      const res = await fetch(`/api/jobs/${job.id}/approve`, { method: "POST" });
+      const payload = await res.json();
+      setDecidingJob(false);
+      if (!res.ok) {
+        softError();
+        return;
+      }
+      setJob({ ...job, status: "booked" });
+      setSentPreviewText(payload.confirmationText);
+      if (!payload.sent) setSendFailedReason(payload.sendError || "Couldn't send the confirmation.");
+      setShowSentPreview(true);
+      router.refresh();
+      acknowledge(payload.sent ? "Booked — confirmation sent." : "Booked — but the confirmation didn't send.");
+    } catch {
       setDecidingJob(false);
       softError();
-      return;
     }
-    // The job is real either way — a failure past this point only
-    // means the conversation's status didn't flip, never that the
-    // approval itself didn't happen (Supabase has no cross-table
-    // transaction here).
-    const { error: statusError } = await supabase
-      .from("conversations")
-      .update({ status: "booked" })
-      .eq("id", conversationId);
-    setDecidingJob(false);
-    setJob({ ...job, status: "booked" });
-    setShowSentPreview(true);
-    router.refresh();
-    if (statusError) softError();
-    else acknowledge("Approved and booked.");
   }
 
   async function rejectJob() {
@@ -660,8 +662,10 @@ export function ConversationStory({
         )}
       </AnimatePresence>
 
-      {/* A simulated confirmation — clearly labeled, never phrased as
-       * a delivery receipt. Real outbound sending isn't wired up yet. */}
+      {/* The real booking confirmation — actually sent via WhatsApp on
+       * approve (app/api/jobs/[id]/approve/route.ts), not a preview.
+       * An honest failure state if the send itself didn't go through —
+       * the booking still stands either way, only the message failed. */}
       <AnimatePresence initial={false}>
         {showSentPreview && (
           <motion.div
@@ -673,14 +677,20 @@ export function ConversationStory({
           >
             <div className="mt-3.5 rounded-xl border border-border bg-card p-3.5">
               <p className="mb-2 text-[11px] font-bold uppercase tracking-widest text-muted-foreground">
-                Preview — here&apos;s what I&apos;d send the customer
+                {sendFailedReason ? "This is what I tried to send" : "Sent to the customer"}
               </p>
-              <div className="inline-block max-w-full rounded-2xl rounded-br-sm bg-[#d7f8c8] px-3.5 py-2 text-[13px] leading-relaxed text-foreground">
-                {confirmationPreview}
+              <div className="flex justify-end">
+                <div className="max-w-[85%] rounded-2xl rounded-br-sm bg-primary px-3.5 py-2.5 text-[13px] leading-relaxed text-primary-foreground">
+                  {sentPreviewText ?? confirmationPreview}
+                </div>
               </div>
-              <p className="mt-2 text-[11px] text-muted-foreground">
-                Not actually sent — outbound WhatsApp messaging isn&apos;t connected yet.
-              </p>
+              {sendFailedReason ? (
+                <p className="mt-2 rounded-lg bg-red-50 px-2.5 py-1.5 text-[11px] leading-relaxed text-red-700">
+                  The booking is confirmed, but the WhatsApp message didn&apos;t send: {sendFailedReason}
+                </p>
+              ) : (
+                <p className="mt-2 text-[11px] text-muted-foreground">Delivered over WhatsApp.</p>
+              )}
             </div>
           </motion.div>
         )}

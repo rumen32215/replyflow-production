@@ -98,6 +98,37 @@ export async function generateReplyForMessage(params: {
     const { generation, facts } = await generateReplyDraft(context, understanding);
     const safety = evaluateSafety({ understanding, generation, facts });
 
+    // Silence (Voice doc 07 §2, Judgement doc 08 "deliberately do
+    // nothing") — honoured only within the same narrow, already-safe
+    // category auto-send uses, and only when nothing else flagged a
+    // problem. Never lets the model's own claim of "no reply needed"
+    // override a real escalation or a grounding failure.
+    const canSkipReply = generation.noReplyNeeded && safety.category === "general" && !safety.requiresEscalation && !safety.groundingFailed;
+
+    if (canSkipReply) {
+      await supabase.from("reply_drafts").upsert(
+        {
+          business_id: businessId,
+          conversation_id: conversationId,
+          customer_message_id: customerMessageId,
+          draft_text: "",
+          intent: understanding.primaryIntent,
+          understanding_confidence: understanding.confidence,
+          confidence: generation.confidence,
+          category: safety.category,
+          requires_escalation: false,
+          escalation_reason: null,
+          facts_used: generation.factsUsed,
+          would_auto_send: false,
+          safety_reasons: [...safety.reasons, "Receptionist judged no reply was needed — silence was the correct response."],
+          status: "no_reply_needed",
+          resolved_at: new Date().toISOString(),
+        },
+        { onConflict: "customer_message_id" }
+      );
+      return;
+    }
+
     const draftText = generation.draftReply || "I'm not confident enough to draft this one — please reply yourself.";
 
     // Auto-send — a narrow, deliberate, opt-in exception to "every

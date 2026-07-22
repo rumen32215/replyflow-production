@@ -12,6 +12,7 @@ interface RawGeneration {
   requires_escalation: boolean;
   escalation_reason: string | null;
   facts_used: string[];
+  no_reply_needed: boolean;
 }
 
 function toGenerationResult(raw: unknown): GenerationResult {
@@ -21,11 +22,19 @@ function toGenerationResult(raw: unknown): GenerationResult {
     requiresEscalation: true,
     escalationReason: "The reply could not be generated safely — please handle this one yourself.",
     factsUsed: [],
+    noReplyNeeded: false,
   };
 
   if (!raw || typeof raw !== "object") return fallback;
   const r = raw as Partial<RawGeneration>;
-  if (typeof r.draft_reply !== "string" || !r.draft_reply.trim()) return fallback;
+
+  const noReplyNeeded = Boolean(r.no_reply_needed);
+  // An empty draft_reply is only ever valid when the model explicitly
+  // chose silence — otherwise it's the same "couldn't generate safely"
+  // failure this fallback has always represented (Voice doc 07 §2:
+  // silence must be a deliberate choice, never a default for "nothing
+  // came back").
+  if (typeof r.draft_reply !== "string" || (!r.draft_reply.trim() && !noReplyNeeded)) return fallback;
 
   const confidence: ReplyConfidence =
     r.confidence === "low" || r.confidence === "medium" || r.confidence === "high" || r.confidence === "verified"
@@ -38,6 +47,7 @@ function toGenerationResult(raw: unknown): GenerationResult {
     requiresEscalation: Boolean(r.requires_escalation),
     escalationReason: typeof r.escalation_reason === "string" ? r.escalation_reason : null,
     factsUsed: Array.isArray(r.facts_used) ? r.facts_used.filter((f): f is string => typeof f === "string") : [],
+    noReplyNeeded,
   };
 }
 
@@ -67,6 +77,7 @@ export async function generateReplyDraft(context: ReplyContext, understanding: U
         requiresEscalation: true,
         escalationReason: "The reply could not be generated — please handle this one yourself.",
         factsUsed: [],
+        noReplyNeeded: false,
       },
       facts,
     };

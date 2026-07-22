@@ -104,5 +104,93 @@ export function collectFacts(context: ReplyContext): Fact[] {
     });
   }
 
+  // Conversation stage (Voice doc 07 §5) — computed deterministically
+  // from data already assembled, never inferred by the generation model
+  // from raw history. Exists so "never go backwards, never repeat a
+  // stage" is a fact the model is told, not a pattern it has to notice
+  // on its own in a 12-message window.
+  facts.push(stageFact(context.currentBooking, context.conversationHistory));
+
+  // Phrase memory (Voice doc 07 §5) — a small, deterministic,
+  // non-model check: which of the known stock phrases has this
+  // conversation already used. Converts "please don't repeat yourself"
+  // from a request the model might ignore into a fact it can't.
+  const alreadyUsed = detectUsedStockPhrases(context.conversationHistory);
+  if (alreadyUsed.length > 0) {
+    facts.push({
+      id: "conversation.already_used_phrases",
+      text: `Already used earlier in this conversation, do not use again: ${alreadyUsed.map((p) => `"${p}"`).join(", ")}.`,
+    });
+  }
+
   return facts;
+}
+
+const STOCK_PHRASES = [
+  "let me know if you need anything else",
+  "have a great day",
+  "thank you for confirming",
+  "i completely understand your frustration",
+  "i hope this message finds you well",
+  "no problem at all",
+  "don't hesitate to reach out",
+  "do not hesitate to reach out",
+  "is there anything else i can help",
+];
+
+function detectUsedStockPhrases(history: ReplyContext["conversationHistory"]): string[] {
+  if (!history) return [];
+  const outboundText = history.messages
+    .filter((m) => m.direction === "outbound")
+    .map((m) => m.body.toLowerCase())
+    .join(" \n ");
+  if (!outboundText) return [];
+  return STOCK_PHRASES.filter((phrase) => outboundText.includes(phrase));
+}
+
+function stageFact(
+  booking: ReplyContext["currentBooking"],
+  history: ReplyContext["conversationHistory"]
+): Fact {
+  const hasHistory = Boolean(history && history.messages.length > 0);
+
+  if (booking?.status === "booked") {
+    return {
+      id: "conversation.stage",
+      text:
+        "Stage: Confirm/Close — a booking is already confirmed for this conversation. Do not re-collect information " +
+        "already used to make it, do not re-explain the booking unless asked, and do not offer to book again. If the " +
+        "customer's new message is just an acknowledgement with nothing new to address, the right move may be no " +
+        "reply at all.",
+    };
+  }
+  if (booking?.status === "draft") {
+    return {
+      id: "conversation.stage",
+      text:
+        "Stage: Quote or book — a booking has already been proposed and is waiting on the owner, not yet confirmed. " +
+        "Do not ask again for information already collected to create it, and do not tell the customer it's confirmed.",
+    };
+  }
+  if (booking?.status === "completed" || booking?.status === "cancelled") {
+    return {
+      id: "conversation.stage",
+      text:
+        "Stage: Understand — the previous booking for this conversation is finished or cancelled. Treat a new " +
+        "message as a fresh enquiry from scratch, not a continuation of that old booking.",
+    };
+  }
+  if (!hasHistory) {
+    return {
+      id: "conversation.stage",
+      text: "Stage: Understand — this is the first message in this conversation. Nothing has been asked or answered yet.",
+    };
+  }
+  return {
+    id: "conversation.stage",
+    text:
+      "Stage: Diagnose/Collect — no booking exists yet for this conversation. Check the conversation history below " +
+      "before asking anything: never ask again for a detail (symptom, postcode, preferred time, name) the customer " +
+      "already gave earlier in this thread.",
+  };
 }

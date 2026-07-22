@@ -15,4 +15,10 @@ export interface GenerationResult {
   requiresEscalation: boolean;
   escalationReason: string | null;
   factsUsed: string[];
+  /** Voice doc 07 §2 "Ending conversations" / §6 Follow-up example:
+   * silence is a deliberate, correct outcome, not a gap. True only when
+   * the model judges no reply is needed at all — the orchestrator only
+   * ever honours this for the same narrow, already-safe category
+   * auto-send uses, never for anything requiring escalation. */
+  noReplyNeeded: boolean;
 }

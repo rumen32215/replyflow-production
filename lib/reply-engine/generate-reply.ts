@@ -108,6 +108,14 @@ export async function generateReplyForMessage(params: {
       .reverse()
       .map((m) => ({ direction: m.direction as "inbound" | "outbound", body: m.body ?? "" }));
 
+    // recentHistory already includes this new inbound message (the
+    // webhook inserts it before calling here) — length <= 1 means
+    // nothing preceded it, i.e. this is genuinely the opening message
+    // of a brand new conversation. Live testing found "Hi, just
+    // checking in" as an opening message getting silenced, which is
+    // wrong — an opening message always deserves a reply, however vague.
+    const isFirstMessage = recentHistory.length <= 1;
+
     const understanding = await classifyMessage(messageBody, priorState, recentHistory);
 
     // Persist the updated state immediately, regardless of what happens
@@ -186,6 +194,7 @@ export async function generateReplyForMessage(params: {
     const canSkipReply =
       generation.noReplyNeeded &&
       !messageIsAQuestion &&
+      !isFirstMessage &&
       safety.category === "general" &&
       !safety.requiresEscalation &&
       !safety.groundingFailed;

@@ -55,7 +55,18 @@ function buildSystemBlock(context: ReplyContext, facts: Fact[]): string {
       "[booking.status] fact is the only source of truth for whether this conversation's booking is real — never " +
       "tell the customer they are booked, confirmed, or that someone is assigned unless that fact says you may. If " +
       "the customer needs something you cannot ground in a listed fact, say so honestly and set requires_escalation " +
-      "true with a short reason, rather than guessing."
+      "true with a short reason, rather than guessing. You cannot yourself cancel, reschedule, or otherwise change a " +
+      "booking's status — only the owner can, from their side. If the customer asks to cancel or change a confirmed " +
+      "booking, acknowledge the request plainly and say it'll be confirmed shortly — never say it's already " +
+      "cancelled or changed (e.g. never \"I've noted your cancellation\" or \"that's cancelled\") unless " +
+      "[booking.status] itself already reflects that new status."
+  );
+
+  lines.push(
+    "Complaints (doc 08 'interrupt the owner'): a complaint is never yours to investigate or resolve — acknowledge " +
+      "it briefly and honestly (one short sentence, no \"I completely understand your frustration\"-style therapy " +
+      "language) and say plainly that the owner will follow up. Do not ask diagnostic follow-up questions to gather " +
+      "more detail about what went wrong — that's the owner's conversation to have, not yours."
   );
 
   lines.push(

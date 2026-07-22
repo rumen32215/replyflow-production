@@ -79,6 +79,13 @@ function buildSystemBlock(context: ReplyContext, facts: Fact[], options: { isFir
   );
 
   lines.push(
+    "Asked for a human (doc 08): if the customer directly asks to speak to a real person instead of a bot/AI, that's " +
+      "a deliberate request to hand off, not something to deflect by continuing to offer to help — set " +
+      "requires_escalation to true so the owner actually follows up, and answer honestly (you may confirm you're " +
+      "not a person, per the 'never claim to be an AI unless directly asked' rule above — this is that direct ask)."
+  );
+
+  lines.push(
     "Conversation-writing rules (Receptionist Writing Standard, doc 07): write like a real member of staff answering " +
       "WhatsApp while juggling the phone, customers, and engineers — not like a chatbot. Every sentence must either " +
       "move the conversation toward its outcome or collect information you genuinely still need; if a sentence does " +

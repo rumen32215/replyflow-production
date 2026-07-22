@@ -123,7 +123,20 @@ export async function generateReplyForMessage(params: {
 
     // Understanding-level safety pre-check (Sprint 9.1 §6) — some
     // messages must never reach the generation call at all.
-    if (understanding.safetyTag) {
+    //
+    // Deterministic safety net: a safety_tag must never override a real
+    // EMERGENCY or COMPLAINT classification. Live testing caught the
+    // classification call setting BOTH primary_intent: "EMERGENCY" AND
+    // safety_tag: "unsupported" on a genuine gas-leak message — the tag
+    // alone would have sent "that's not something we can help with"
+    // with no escalation at all, on a real safety issue. Those two
+    // categories already force escalation deterministically via the
+    // Decision Categories table (never automatic, always escalate) —
+    // routing through the normal path is strictly safer than a
+    // safety_tag template that doesn't escalate.
+    const tagConflictsWithRealIntent =
+      understanding.primaryIntent === "EMERGENCY" || understanding.primaryIntent === "COMPLAINT";
+    if (understanding.safetyTag && !tagConflictsWithRealIntent) {
       await handleSafetyTag(supabase, { businessId, conversationId, customerMessageId, understanding });
       return;
     }

@@ -41,7 +41,7 @@ export default async function ReceptionistPage({
 
   const { data: config } = await supabase
     .from("ai_configurations")
-    .select("tone, tone_notes, system_prompt, business_rules, escalation_rules")
+    .select("tone, tone_notes, system_prompt, business_rules, escalation_rules, auto_reply_general_enabled")
     .eq("business_id", business.id)
     .maybeSingle();
 
@@ -64,6 +64,7 @@ export default async function ReceptionistPage({
         systemPrompt: config?.system_prompt ?? "",
         businessRules: config?.business_rules ?? "",
         escalationRules: config?.escalation_rules ?? "",
+        autoReplyGeneralEnabled: config?.auto_reply_general_enabled ?? false,
       }}
       justHired={searchParams.welcome === "1"}
       initialTopic={VALID_TOPICS.has(searchParams.topic ?? "") ? (searchParams.topic as string) : null}

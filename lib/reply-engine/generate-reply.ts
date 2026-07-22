@@ -5,6 +5,7 @@ import { classifyMessage, resolveContextNeeds } from "./understanding";
 import { assembleContext } from "./context/assemble";
 import { generateReplyDraft } from "./prompt/generate";
 import { evaluateSafety } from "./safety/evaluate";
+import { sendReplyToCustomer } from "./send";
 
 /**
  * The Reply Engine orchestrator — the one entry point that wires
@@ -46,7 +47,7 @@ export async function generateReplyForMessage(params: {
 
     const { data: aiConfig } = await supabase
       .from("ai_configurations")
-      .select("system_prompt, business_rules, escalation_rules")
+      .select("system_prompt, business_rules, escalation_rules, auto_reply_general_enabled")
       .eq("business_id", businessId)
       .maybeSingle();
 
@@ -97,12 +98,54 @@ export async function generateReplyForMessage(params: {
     const { generation, facts } = await generateReplyDraft(context, understanding);
     const safety = evaluateSafety({ understanding, generation, facts });
 
+    const draftText = generation.draftReply || "I'm not confident enough to draft this one — please reply yourself.";
+
+    // Auto-send — a narrow, deliberate, opt-in exception to "every
+    // reply requires approval" (Sprint 10A's own rule). Scoped to the
+    // single lowest-risk category the safety layer already recognises
+    // (plain greetings / business-information questions / status
+    // checks — never booking, pricing, cancellation, complaints, or
+    // emergencies, which always fail `safety.category === "general"`
+    // regardless of this toggle), and only when the owner has
+    // explicitly turned it on *and* every existing safety check
+    // (confidence gate, fact-grounding, escalation) already passed.
+    // Still writes a full reply_drafts row either way — auditable,
+    // reviewable after the fact, never silent.
+    const canAutoSend =
+      Boolean(aiConfig?.auto_reply_general_enabled) && safety.category === "general" && safety.wouldAutoSend;
+
+    if (canAutoSend) {
+      const sendResult = await sendReplyToCustomer({ supabase, businessId, conversationId, text: draftText });
+      await supabase.from("reply_drafts").upsert(
+        {
+          business_id: businessId,
+          conversation_id: conversationId,
+          customer_message_id: customerMessageId,
+          draft_text: draftText,
+          intent: understanding.primaryIntent,
+          understanding_confidence: understanding.confidence,
+          confidence: generation.confidence,
+          category: safety.category,
+          requires_escalation: false,
+          escalation_reason: null,
+          facts_used: generation.factsUsed,
+          would_auto_send: true,
+          safety_reasons: safety.reasons,
+          status: sendResult.ok ? "sent" : "failed",
+          error_message: sendResult.ok ? null : sendResult.error,
+          resolved_at: sendResult.ok ? new Date().toISOString() : null,
+        },
+        { onConflict: "customer_message_id" }
+      );
+      return;
+    }
+
     await supabase.from("reply_drafts").upsert(
       {
         business_id: businessId,
         conversation_id: conversationId,
         customer_message_id: customerMessageId,
-        draft_text: generation.draftReply || "I'm not confident enough to draft this one — please reply yourself.",
+        draft_text: draftText,
         intent: understanding.primaryIntent,
         understanding_confidence: understanding.confidence,
         confidence: generation.confidence,

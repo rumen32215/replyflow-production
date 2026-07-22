@@ -2,13 +2,14 @@
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { motion } from "framer-motion";
-import { AlertTriangle, Briefcase, Check, Headset, ListChecks, ShieldCheck, Smile, Zap, type LucideIcon } from "lucide-react";
+import { AlertTriangle, Briefcase, Check, Headset, ListChecks, Sparkles, ShieldCheck, Smile, Zap, type LucideIcon } from "lucide-react";
 import { SettleCard, GentleSwap, press } from "@/components/shared/motion";
 import { Acknowledgement, ACK, randomAck, useAcknowledgement } from "@/components/shared/acknowledgement";
 import { PhonePreview } from "@/components/shared/phone-preview";
 import { TeachingCard } from "@/components/shared/teaching-card";
 import { ConfidenceBar } from "@/components/shared/confidence-bar";
 import { InsightList } from "@/components/shared/insight";
+import { Switch } from "@/components/ui/switch";
 import { buildBrain } from "@/lib/intelligence";
 import { Textarea } from "@/components/ui/textarea";
 import { createClient } from "@/lib/supabase/client";
@@ -59,6 +60,36 @@ function summariseTopic(selected: Set<string>, notes: string, options: readonly 
   return parts.length <= 2 ? parts.join(", ") : `${parts.slice(0, 2).join(", ")} + ${parts.length - 2} more`;
 }
 
+/**
+ * The autonomy legend — a human-facing simplification of the Reply
+ * Engine's real Decision Categories table (lib/reply-engine/safety/
+ * decision-categories.ts). Only the first row is actually adjustable
+ * (it's the one category wired to the auto_reply_general_enabled
+ * toggle); every other row reflects fixed, already-shipped safety
+ * behaviour — pricing, complaints, and emergencies are hard-coded as
+ * never-automatic there regardless of any setting, so this list
+ * never claims a control exists where it doesn't.
+ */
+const AUTONOMY_ROWS: {
+  id: string;
+  label: string;
+  helper: string;
+  level: "auto" | "review" | "escalate";
+  interactive?: boolean;
+}[] = [
+  {
+    id: "general",
+    label: "General questions & business info",
+    helper: "Hours, services, areas, FAQs.",
+    level: "auto",
+    interactive: true,
+  },
+  { id: "booking", label: "Booking requests", helper: "New enquiries wanting to book you in.", level: "review" },
+  { id: "quotes", label: "Quotes & pricing", helper: "Anything involving a price, ever.", level: "review" },
+  { id: "complaints", label: "Complaints", helper: "Always comes straight to you.", level: "escalate" },
+  { id: "emergencies", label: "Emergencies", helper: "Flagged the moment you open the app.", level: "escalate" },
+];
+
 const TONES: { value: Tone; label: string; description: string; icon: LucideIcon; accent: string }[] = [
   { value: "friendly", label: "Friendly", description: "Warm and personal", icon: Smile, accent: "bg-purple-500 shadow-purple-500/25" },
   { value: "professional", label: "Professional", description: "Polished and courteous", icon: Briefcase, accent: "bg-blue-600 shadow-blue-600/25" },
@@ -71,6 +102,7 @@ interface SavedConfig {
   systemPrompt: string;
   businessRules: string;
   escalationRules: string;
+  autoReplyGeneralEnabled: boolean;
 }
 
 export function ReceptionistPlayground({
@@ -122,6 +154,8 @@ export function ReceptionistPlayground({
   const [rulesNotes, setRulesNotes] = useState<string>(parsed.rules.notes);
   const [escalation, setEscalation] = useState<Set<string>>(parsed.escalation.selected);
   const [escalationNotes, setEscalationNotes] = useState<string>(parsed.escalation.notes);
+  const [autoReplyGeneral, setAutoReplyGeneral] = useState<boolean>(initial.autoReplyGeneralEnabled);
+  const [savingAutoReply, setSavingAutoReply] = useState(false);
   const [scenarioId, setScenarioId] = useState<string>(scenarios[0]?.id ?? "problem");
 
   // She leads the interview: only the next thing she doesn't know yet
@@ -261,6 +295,29 @@ export function ReceptionistPlayground({
     apply(next);
   }
 
+  /**
+   * A deliberately immediate save, not folded into the debounced
+   * text-teaching effect above — this flips real, consequential
+   * behaviour (whether a real WhatsApp message can go out with nobody
+   * reviewing it first), so it shouldn't share a 700ms debounce with
+   * "still typing a house rule."
+   */
+  async function updateAutoReply(value: boolean) {
+    setAutoReplyGeneral(value);
+    setSavingAutoReply(true);
+    const { error } = await supabase
+      .from("ai_configurations")
+      .update({ auto_reply_general_enabled: value })
+      .eq("business_id", businessId);
+    setSavingAutoReply(false);
+    if (error) {
+      setAutoReplyGeneral(!value);
+      softError();
+      return;
+    }
+    acknowledge(value ? "Done — I'll answer simple questions instantly from now on." : "Understood — every reply comes to you first again.");
+  }
+
   /* ------------------------------ layout ------------------------------- */
 
   return (
@@ -329,6 +386,55 @@ export function ReceptionistPlayground({
               caption={`${receptionistPercent}% of how you like things run`}
             />
             <InsightList observations={brain.observations} limit={1} className="mt-3.5" />
+          </SettleCard>
+
+          <SettleCard delay={0.04} className="rounded-2xl border border-primary/15 bg-card p-5 shadow-sm">
+            <div className="mb-1 flex items-center gap-2">
+              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+                <Sparkles className="h-3.5 w-3.5" />
+              </span>
+              <p className="text-[13.5px] font-bold">Receptionist autonomy</p>
+            </div>
+            <p className="mb-3.5 text-[12px] leading-relaxed text-muted-foreground">
+              What I&apos;m allowed to send on my own, and what always waits for you.
+            </p>
+            <div className="divide-y divide-border overflow-hidden rounded-xl border border-border">
+              {AUTONOMY_ROWS.map((row) => (
+                <div key={row.id} className="flex items-center justify-between gap-3 bg-card px-3.5 py-3">
+                  <div className="flex min-w-0 items-start gap-2.5">
+                    <span
+                      className={cn(
+                        "mt-1.5 h-2 w-2 shrink-0 rounded-full",
+                        row.level === "auto" && "bg-success",
+                        row.level === "review" && "bg-amber-500",
+                        row.level === "escalate" && "bg-red-500"
+                      )}
+                    />
+                    <div className="min-w-0">
+                      <p className="text-[12.5px] font-semibold leading-snug">{row.label}</p>
+                      <p className="text-[11px] leading-snug text-muted-foreground">{row.helper}</p>
+                    </div>
+                  </div>
+                  {row.interactive ? (
+                    <Switch checked={autoReplyGeneral} disabled={savingAutoReply} onCheckedChange={updateAutoReply} />
+                  ) : (
+                    <span
+                      className={cn(
+                        "shrink-0 whitespace-nowrap rounded-full px-2.5 py-1 text-[10.5px] font-bold",
+                        row.level === "review" && "bg-amber-100 text-amber-700",
+                        row.level === "escalate" && "bg-red-100 text-red-700"
+                      )}
+                    >
+                      {row.level === "review" ? "Review first" : "Always escalates"}
+                    </span>
+                  )}
+                </div>
+              ))}
+            </div>
+            <p className="mt-2.5 text-[10.5px] leading-relaxed text-muted-foreground">
+              Only the top row is adjustable today — everything below it is a fixed safety rule, not a setting, and
+              can&apos;t be turned off.
+            </p>
           </SettleCard>
 
           <TeachingTurn delay={0.05} question="How should I sound when I answer?" learned>

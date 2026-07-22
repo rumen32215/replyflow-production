@@ -225,5 +225,31 @@ function conversationStateFacts(
     });
   }
 
+  // Goal (Sprint B) — one level above stage. A side-question doesn't
+  // change it; only a genuinely different underlying request does.
+  facts.push({
+    id: "conversation.goal",
+    text: `The customer's underlying goal is: ${state.goal.type} (${state.goal.status}). A side-question doesn't change this — only answer it and continue toward this goal, unless the customer has clearly asked for something fundamentally different.`,
+  });
+
+  // Commitments ledger (Sprint B) — outstanding items must be
+  // acknowledged as still-open, never silently re-asked as if new.
+  const outstanding = state.commitments.filter((c) => c.status === "outstanding");
+  if (outstanding.length > 0) {
+    facts.push({
+      id: "conversation.outstanding_commitments",
+      text: `Still outstanding, not yet resolved — check if THIS message resolves any of these before replying, and if not, it's fine to still be waiting, but don't re-ask as if it were a fresh question: ${outstanding
+        .map((c) => `"${c.text}"`)
+        .join("; ")}.`,
+    });
+  }
+  const resolved = state.commitments.filter((c) => c.status === "resolved");
+  if (resolved.length > 0) {
+    facts.push({
+      id: "conversation.resolved_commitments",
+      text: `Already settled earlier in this conversation — do not re-ask or re-explain these: ${resolved.map((c) => `"${c.text}"`).join("; ")}.`,
+    });
+  }
+
   return facts;
 }

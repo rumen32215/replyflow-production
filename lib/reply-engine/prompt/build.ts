@@ -104,6 +104,16 @@ function buildSystemBlock(context: ReplyContext, facts: Fact[], options: { isFir
   );
 
   lines.push(
+    "Goal and commitments (Sprint B), always authoritative: [conversation.goal] is what the customer is fundamentally " +
+      "here for — a quick side-question doesn't change it, answer the side-question and stay on the same goal. " +
+      "[conversation.outstanding_commitments], if present, lists things still genuinely waiting on an answer from " +
+      "either side — if THIS message doesn't resolve one, it's fine to still be waiting on it, but never re-ask it " +
+      "fresh as if it were a new question; acknowledge it's still open if you need to reference it at all. " +
+      "[conversation.resolved_commitments], if present, lists things already settled — never re-ask or re-explain " +
+      "any of them."
+  );
+
+  lines.push(
     "asks_question: after writing draft_reply, report in a few words exactly what it asks the customer (e.g. " +
       "\"postcode\", \"preferred time\"), or null if it asks nothing at all. This must genuinely match draft_reply — " +
       "if draft_reply doesn't end in a real question, asks_question must be null."

@@ -52,8 +52,44 @@ const RESPONSE_SCHEMA = {
         open_question: { type: ["string", "null"] },
         greeting_given: { type: "boolean" },
         last_topic: { type: ["string", "null"] },
+        goal: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            type: {
+              type: "string",
+              enum: [
+                "book_appointment",
+                "change_booking",
+                "cancel_booking",
+                "get_pricing",
+                "get_information",
+                "make_payment",
+                "report_problem",
+                "make_complaint",
+                "handle_emergency",
+                "general_chat",
+              ],
+            },
+            status: { type: "string", enum: ["in_progress", "completed", "escalated", "abandoned"] },
+          },
+          required: ["type", "status"],
+        },
+        commitments: {
+          type: "array",
+          items: {
+            type: "object",
+            additionalProperties: false,
+            properties: {
+              text: { type: "string" },
+              kind: { type: "string", enum: ["customer_fact", "customer_question", "receptionist_question"] },
+              status: { type: "string", enum: ["outstanding", "resolved"] },
+            },
+            required: ["text", "kind", "status"],
+          },
+        },
       },
-      required: ["stage", "slots", "open_question", "greeting_given", "last_topic"],
+      required: ["stage", "slots", "open_question", "greeting_given", "last_topic", "goal", "commitments"],
     },
   },
   required: [
@@ -83,6 +119,11 @@ const SYSTEM_PROMPT = `You do two jobs for one inbound WhatsApp message to a UK 
 - open_question: your best guess at what will still be outstanding after this turn, in a few words (e.g. "preferred time", "postcode"), or null if you expect nothing to be outstanding. This is a provisional estimate — the actual reply-writing step may ask something different and will correct this afterward, so don't overthink it.
 - greeting_given: true if a greeting has already happened anywhere in this thread (including the previous state already being true) — once true, it stays true.
 - last_topic: a short label for what the live exchange is actually about right now (e.g. "radiator repair booking", "call-out fee question", "casual chat") — replace it when the topic genuinely changes, keep it when it doesn't.
+
+3) TRACK the goal and commitments — a layer above stage. Stage answers "where are we in the goal." Goal answers "what is the customer actually trying to achieve," and doesn't change just because they ask a quick side-question.
+- goal.type: what the customer is fundamentally here for (book_appointment, change_booking, cancel_booking, get_pricing, get_information, make_payment, report_problem, make_complaint, handle_emergency, general_chat). Carry the previous goal forward unchanged UNLESS this message represents a genuinely different underlying request, not just a side-question within the current one — a call-out-fee question asked mid-booking does NOT change the goal (still book_appointment; just answer the price question and continue), but "actually, forget that, I want to cancel my Tuesday booking instead" DOES change it. When the goal genuinely changes, also reset stage to "understand" for the new goal — but do not clear commitments, past facts may still be relevant.
+- goal.status: in_progress by default; completed once the goal is genuinely achieved (booking confirmed, question answered, payment resolved); escalated if it's been handed to the owner (complaint, emergency, anything requiring_escalation); abandoned only if the customer explicitly said they no longer want to proceed.
+- commitments: the running ledger of facts and questions that don't fit the four fixed slots — carry every item from the previous state forward, updating status where this message resolves one, and appending new ones. Never delete an item, only change its status or add to the list. Three kinds: "customer_fact" (something the customer told you unprompted, e.g. "niece will be home", "I'm at work until 5") — always status "resolved" the moment it's stated, since a stated fact isn't waiting on anything. "customer_question" (something the customer asked you) — "outstanding" until your reply actually answers it, then "resolved". "receptionist_question" (something you asked the customer) — "outstanding" until the customer's message actually answers it, then "resolved". Before marking anything resolved, check this message actually resolves it — don't mark it resolved just because time has passed. An item that stays "outstanding" across multiple turns means exactly that: still waiting, not forgotten, and never something to silently re-ask as if it were new — the reply should acknowledge it's still open, not repeat the question fresh as though this were the first time.
 
 Never invent facts. You are classifying and tracking state, not drafting a reply.`;
 

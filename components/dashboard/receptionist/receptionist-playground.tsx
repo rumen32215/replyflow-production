@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import Link from "next/link";
 import { motion } from "framer-motion";
-import { AlertTriangle, Briefcase, Check, Headset, ListChecks, Sparkles, ShieldCheck, Smile, Zap, type LucideIcon } from "lucide-react";
+import { AlertTriangle, ArrowRight, Briefcase, Check, Headset, ListChecks, Sparkles, ShieldCheck, Smile, Zap, type LucideIcon } from "lucide-react";
 import { SettleCard, GentleSwap, press } from "@/components/shared/motion";
 import { Acknowledgement, ACK, randomAck, useAcknowledgement } from "@/components/shared/acknowledgement";
 import { PhonePreview } from "@/components/shared/phone-preview";
@@ -334,6 +335,13 @@ export function ReceptionistPlayground({
               : "I'm your new receptionist. Teach me how you like things done — I'll show you exactly how I'll speak to your customers."
             : "Let's make sure I'm ready for today's customers."}
         </p>
+        <Link
+          href="/dashboard/receptionist/meet"
+          className="mt-3 inline-flex items-center gap-1.5 text-[13px] font-semibold text-primary hover:underline"
+        >
+          Meet {receptionistName || "your receptionist"}
+          <ArrowRight className="h-3.5 w-3.5" />
+        </Link>
       </SettleCard>
 
       <div className="flex flex-col gap-6 lg:grid lg:grid-cols-[1fr_360px] lg:items-start">

@@ -3,22 +3,24 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { motion } from "framer-motion";
-import { Brain, Radar, Settings, Users, type LucideIcon } from "lucide-react";
+import { Brain, Settings, Users, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 /**
- * Sprint 8.5 — the topbar's four secondary destinations (Mission
- * Control, Customers, Everything I Know, Settings) had no active
+ * Sprint 8.5 — the topbar's secondary destinations had no active
  * state at all: Topbar was a Server Component with no route to
  * compare against. Split out into its own small client island so it
  * can read the pathname, using the exact same active-state language
  * the primary sidebar/bottom nav already established (a sliding
  * `layoutId` pill in the accent token, primary-coloured icon) rather
  * than inventing a second visual vocabulary for "you are here."
+ *
+ * Mission Control removed (Owner Experience 01) — its real content is
+ * now Front Desk itself; the route still redirects there for any
+ * bookmarked link, it's just no longer a nav destination.
  */
 
 const TOPBAR_LINKS: { href: string; label: string; icon: LucideIcon }[] = [
-  { href: "/dashboard/mission-control", label: "Mission Control", icon: Radar },
   { href: "/dashboard/customers", label: "Customers", icon: Users },
   { href: "/dashboard/everything-i-know", label: "Everything I Know", icon: Brain },
   { href: "/dashboard/settings", label: "Settings", icon: Settings },

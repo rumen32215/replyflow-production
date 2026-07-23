@@ -4,34 +4,45 @@ import { createClient } from "@/lib/supabase/server";
 import {
   GreetingCard,
   TodaysPriorityCard,
-  AISummaryCard,
-  UrgentItems,
-  TodaysDiary,
   SetupJourney,
   type JourneyStep,
-  type UrgentItem,
-  type RightNowJob,
 } from "@/components/dashboard/home/home-experience";
+import { AttentionQueue } from "@/components/dashboard/home/attention-queue";
+import { TodaysWork, type TodaysWorkItem } from "@/components/dashboard/home/todays-work";
+import { WaitingForCustomer, type WaitingForCustomerItem } from "@/components/dashboard/home/waiting-for-customer";
+import { RecentlyCompleted, type RecentlyCompletedItem } from "@/components/dashboard/home/recently-completed";
+import { ReceptionistActivity } from "@/components/dashboard/home/receptionist-activity";
 import { QuickActions } from "@/components/dashboard/home/quick-actions";
 import { Recommendations } from "@/components/dashboard/home/recommendations";
-import { BusinessHealth } from "@/components/dashboard/home/business-health";
-import { RecentLearning } from "@/components/dashboard/home/whats-on-my-mind";
-import { minutesSince, buildPresenceLine, buildDailySummaryBullets } from "@/lib/dashboard-signals";
+import { minutesSince, buildPresenceLine } from "@/lib/dashboard-signals";
+import {
+  buildAttentionQueue,
+  buildReceptionistActivity,
+  type AttentionWaitingConversation,
+  type AttentionDraftWorkCard,
+  type AttentionPendingReply,
+} from "@/lib/front-desk-signals";
 import { parseAvailability } from "@/lib/availability";
 import { parseKnowledge } from "@/lib/knowledge";
 import { getBrainContext, selectTodaysPriority } from "@/lib/brain";
+import { groupForStatus, type ConversationGroup } from "@/lib/conversations";
+import { toConversationState } from "@/lib/reply-engine/understanding/state";
 
 export const metadata: Metadata = { title: "Front Desk — ReplyFlow" };
 
 /**
- * Front Desk (Sprint 3 rebuild) — the canonical hierarchy from Feature
- * 01: Greeting -> Today's Priority -> AI Summary -> Urgent Items ->
- * Today's Diary -> Recommendations -> Business Health -> Recent
- * Learning -> Quick Actions. A brand-new business sees the
- * getting-started state instead of the steady-state sections — it
- * meets its next step, never an empty dashboard. Every section reads
- * from data already fetched here; nothing is invented, and any
- * section with nothing true to say simply doesn't render.
+ * Front Desk (Owner Experience 01 — "Mission Control (Front Desk)")
+ * — the owner's one real front desk, replacing what used to be two
+ * separate pages (this calm summary at /dashboard, and a broader
+ * operational board at /dashboard/mission-control). Keeping both was
+ * real duplication — roughly three of four top-line numbers were each
+ * computed twice, independently, and a new owner had no way to know
+ * which page to actually check first. This is the one page now:
+ * ordered by urgency (Needs Your Attention -> Today's Work -> Waiting
+ * For Customer -> Recently Completed -> Receptionist Activity), not by
+ * which table the data came from. Nothing here is invented — every
+ * section reads real rows already fetched below, and any section with
+ * nothing true to say doesn't render.
  */
 export default async function HomePage() {
   const supabase = createClient();
@@ -54,51 +65,95 @@ export default async function HomePage() {
   startOfToday.setHours(0, 0, 0, 0);
   const endOfToday = new Date(startOfToday);
   endOfToday.setDate(endOfToday.getDate() + 1);
+  const sevenDaysAgo = new Date();
+  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
   const now = new Date();
 
   const [
-    { data: waitingConversations },
+    { data: conversations },
     { count: conversationCount },
-    { data: todaysJobs },
-    { data: nextUpcomingJobs },
+    { data: draftWorkCards },
+    { data: todaysWorkCards },
+    { data: futureBookedWorkCards },
+    { data: recentCompletedWorkCards },
     { count: completedEver },
+    { data: recentCreatedWorkCards },
+    { data: recentBookedWorkCards },
+    { data: pendingReplyDrafts },
+    { data: recentEscalations },
     { data: config },
   ] = await Promise.all([
-    // Waiting for Owner — the highest-priority state in the product.
-    // 'open' is the legacy status and reads as "waiting" until real
-    // receptionist replies exist.
+    // Real, already-live conversation state for every recent
+    // conversation — the one fetch every section below reads from for
+    // "is this waiting, and is it actually an emergency" (Conversation
+    // State's real goal type, never inferred from message text).
     supabase
       .from("conversations")
-      .select("id, customer_name, customer_phone, last_message_preview, last_message_at, status")
+      .select("id, customer_name, customer_phone, last_message_preview, last_message_at, status, ai_state")
       .eq("business_id", businessId)
-      .in("status", ["waiting_owner", "open", "new"])
-      .order("last_message_at", { ascending: true })
-      .limit(5),
-    supabase
-      .from("conversations")
-      .select("id", { count: "exact", head: true })
-      .eq("business_id", businessId),
+      .order("last_message_at", { ascending: false, nullsFirst: false })
+      .limit(50),
+    supabase.from("conversations").select("id", { count: "exact", head: true }).eq("business_id", businessId),
     supabase
       .from("work_cards")
-      .select("id, customer_name, issue, status, scheduled_for, notes")
+      .select("id, conversation_id, customer_name, issue, created_at")
       .eq("business_id", businessId)
-      .in("status", ["booked", "in_progress", "completed"])
+      .eq("status", "draft")
+      .order("created_at", { ascending: true }),
+    supabase
+      .from("work_cards")
+      .select("id, conversation_id, customer_name, issue, status, scheduled_for, address_confirmed")
+      .eq("business_id", businessId)
       .gte("scheduled_for", startOfToday.toISOString())
       .lt("scheduled_for", endOfToday.toISOString())
       .order("scheduled_for", { ascending: true }),
     supabase
       .from("work_cards")
-      .select("id, customer_name, issue, scheduled_for, notes")
+      .select("id, conversation_id, customer_name, issue, scheduled_for")
       .eq("business_id", businessId)
       .eq("status", "booked")
       .gte("scheduled_for", endOfToday.toISOString())
       .order("scheduled_for", { ascending: true })
-      .limit(1),
+      .limit(8),
     supabase
       .from("work_cards")
-      .select("id", { count: "exact", head: true })
+      .select("id, customer_name, issue, completed_at")
       .eq("business_id", businessId)
-      .eq("status", "completed"),
+      .not("completed_at", "is", null)
+      .gte("completed_at", sevenDaysAgo.toISOString())
+      .order("completed_at", { ascending: false })
+      .limit(6),
+    supabase.from("work_cards").select("id", { count: "exact", head: true }).eq("business_id", businessId).eq("status", "completed"),
+    supabase
+      .from("work_cards")
+      .select("id, customer_name, issue, created_at")
+      .eq("business_id", businessId)
+      .gte("created_at", sevenDaysAgo.toISOString())
+      .order("created_at", { ascending: false })
+      .limit(5),
+    supabase
+      .from("work_cards")
+      .select("id, customer_name, issue, approved_at, scheduled_for")
+      .eq("business_id", businessId)
+      .not("approved_at", "is", null)
+      .gte("approved_at", sevenDaysAgo.toISOString())
+      .order("approved_at", { ascending: false })
+      .limit(5),
+    supabase
+      .from("reply_drafts")
+      .select("id, conversation_id, requires_escalation, created_at")
+      .eq("business_id", businessId)
+      .eq("status", "pending")
+      .order("created_at", { ascending: true }),
+    supabase
+      .from("reply_drafts")
+      .select("id, escalation_reason, created_at")
+      .eq("business_id", businessId)
+      .eq("requires_escalation", true)
+      .not("escalation_reason", "is", null)
+      .gte("created_at", sevenDaysAgo.toISOString())
+      .order("created_at", { ascending: false })
+      .limit(5),
     supabase
       .from("ai_configurations")
       .select("tone_notes, system_prompt, business_rules, escalation_rules, faqs")
@@ -106,88 +161,156 @@ export default async function HomePage() {
       .maybeSingle(),
   ]);
 
-  const needsYou: UrgentItem[] = (waitingConversations ?? [])
-    .filter((c) => c.last_message_at)
-    .map((c) => ({
-      conversationId: c.id,
-      name: c.customer_name || c.customer_phone,
-      reason: c.last_message_preview || "New enquiry",
-      minutes: minutesSince(c.last_message_at as string),
+  // One map, built once, every section below reads from it — a
+  // conversation's group (waiting/active/booked/done) and whether its
+  // real goal is an emergency, keyed by id.
+  const conversationById = new Map(
+    (conversations ?? []).map((c) => {
+      const state = toConversationState(c.ai_state);
+      return [
+        c.id,
+        {
+          name: c.customer_name || c.customer_phone,
+          status: c.status,
+          group: groupForStatus(c.status) as ConversationGroup,
+          isEmergency: state.goal.type === "handle_emergency" && state.goal.status !== "completed" && state.goal.status !== "abandoned",
+          lastMessageAt: c.last_message_at as string | null,
+          lastMessagePreview: c.last_message_preview as string | null,
+        },
+      ];
+    })
+  );
+
+  /* ------------------------------ Attention queue ------------------------------ */
+
+  const waitingConversationItems: AttentionWaitingConversation[] = (conversations ?? [])
+    .filter((c) => groupForStatus(c.status) === "waiting" && c.last_message_at)
+    .map((c) => {
+      const entry = conversationById.get(c.id)!;
+      return {
+        kind: "waiting_conversation" as const,
+        conversationId: c.id,
+        name: entry.name,
+        reason: c.last_message_preview || "New enquiry",
+        minutes: minutesSince(c.last_message_at as string),
+        isEmergency: entry.isEmergency,
+      };
+    });
+
+  const draftWorkCardItems: AttentionDraftWorkCard[] = (draftWorkCards ?? []).map((j) => ({
+    kind: "draft_work_card" as const,
+    workCardId: j.id,
+    conversationId: j.conversation_id,
+    issue: j.issue,
+    customerName: j.customer_name,
+    minutes: minutesSince(j.created_at),
+  }));
+
+  const pendingReplyItems: AttentionPendingReply[] = (pendingReplyDrafts ?? []).map((d) => ({
+    kind: "pending_reply" as const,
+    draftId: d.id,
+    conversationId: d.conversation_id,
+    customerName: conversationById.get(d.conversation_id)?.name ?? "A customer",
+    minutes: minutesSince(d.created_at),
+    requiresEscalation: d.requires_escalation,
+  }));
+
+  const attentionQueue = buildAttentionQueue({
+    waitingConversations: waitingConversationItems,
+    draftWorkCards: draftWorkCardItems,
+    pendingReplies: pendingReplyItems,
+  });
+
+  /* -------------------------------- Today's work -------------------------------- */
+
+  const todaysWorkItems: TodaysWorkItem[] = (todaysWorkCards ?? []).map((j) => {
+    const entry = j.conversation_id ? conversationById.get(j.conversation_id) : undefined;
+    return {
+      id: j.id,
+      conversationId: j.conversation_id,
+      customerName: j.customer_name,
+      issue: j.issue,
+      scheduledFor: j.scheduled_for,
+      status: j.status,
+      addressConfirmed: j.address_confirmed,
+      conversationGroup: entry?.group ?? null,
+      isEmergency: entry?.isEmergency ?? false,
+    };
+  });
+
+  /* ---------------------------- Waiting for customer ----------------------------- */
+
+  const waitingForCustomerItems: WaitingForCustomerItem[] = (futureBookedWorkCards ?? [])
+    .filter((j): j is typeof j & { scheduled_for: string } => Boolean(j.scheduled_for))
+    .map((j) => ({
+      id: j.id,
+      conversationId: j.conversation_id,
+      customerName: j.customer_name,
+      issue: j.issue,
+      scheduledFor: j.scheduled_for,
     }));
 
-  const jobsToday = todaysJobs ?? [];
-  const inProgress = jobsToday.find((j) => j.status === "in_progress");
-  const nextTodayBooked = jobsToday.find(
-    (j) => j.status === "booked" && j.scheduled_for && new Date(j.scheduled_for) >= now
-  );
-  const currentSource = inProgress ?? nextTodayBooked ?? null;
+  /* ------------------------------ Recently completed ------------------------------ */
 
-  const rightNow: RightNowJob | null = currentSource
-    ? {
-        id: currentSource.id,
-        customerName: currentSource.customer_name,
-        jobTitle: currentSource.issue,
-        scheduledFor: currentSource.scheduled_for,
-        notes: currentSource.notes,
-        isCurrent: Boolean(inProgress),
-      }
-    : null;
+  const recentlyCompletedItems: RecentlyCompletedItem[] = (recentCompletedWorkCards ?? []).map((j) => ({
+    id: j.id,
+    customerName: j.customer_name,
+    issue: j.issue,
+    completedAt: j.completed_at as string,
+  }));
 
-  // Up Next = the next meaningful commitment after Right Now — never
-  // the full diary (Home Experience V2).
-  const upNextSource =
-    jobsToday.find(
-      (j) =>
-        j.status === "booked" &&
-        j.scheduled_for &&
-        new Date(j.scheduled_for) >= now &&
-        j.id !== currentSource?.id
-    ) ?? nextUpcomingJobs?.[0] ?? null;
+  /* ------------------------------ Receptionist activity ---------------------------- */
 
-  const upNext: RightNowJob | null = upNextSource
-    ? {
-        id: upNextSource.id,
-        customerName: upNextSource.customer_name,
-        jobTitle: upNextSource.issue,
-        scheduledFor: upNextSource.scheduled_for,
-        notes: upNextSource.notes ?? null,
-        isCurrent: false,
-      }
-    : null;
+  const receptionistActivity = buildReceptionistActivity({
+    startedWorkCards: (recentCreatedWorkCards ?? []).map((j) => ({
+      id: j.id,
+      issue: j.issue,
+      customerName: j.customer_name,
+      createdAt: j.created_at,
+    })),
+    bookedWorkCards: (recentBookedWorkCards ?? []).map((j) => ({
+      id: j.id,
+      issue: j.issue,
+      customerName: j.customer_name,
+      approvedAt: j.approved_at as string,
+      scheduledFor: j.scheduled_for,
+    })),
+    completedWorkCards: recentlyCompletedItems.map((j) => ({
+      id: j.id,
+      issue: j.issue,
+      customerName: j.customerName,
+      completedAt: j.completedAt,
+    })),
+    newConversations: (conversations ?? [])
+      .filter((c) => c.last_message_at && new Date(c.last_message_at) >= sevenDaysAgo && c.status === "new")
+      .slice(0, 5)
+      .map((c) => ({ id: c.id, name: c.customer_name || c.customer_phone, startedAt: c.last_message_at as string })),
+    escalations: (recentEscalations ?? []).map((e) => ({
+      id: e.id,
+      reason: e.escalation_reason as string,
+      occurredAt: e.created_at,
+    })),
+  });
 
-  const completedToday = jobsToday.filter((j) => j.status === "completed").length;
-  const remainingToday = jobsToday.filter(
-    (j) => j.status !== "completed" && j.scheduled_for && new Date(j.scheduled_for) >= now
-  ).length;
+  /* ------------------------------------------------------------------------------- */
 
   const whatsappConnected = business.whatsapp_connected ?? false;
   const noActivityYet = (conversationCount ?? 0) === 0 && (completedEver ?? 0) === 0;
-
   const availability = parseAvailability(business.availability, business.opening_time, business.closing_time);
 
-  const oldestWaiting = needsYou[0] ?? null;
+  const oldestWaiting = waitingConversationItems[0] ?? null;
+  const jobsBookedToday = todaysWorkItems.filter((j) => j.status === "booked" || j.status === "in_progress" || j.status === "completed").length;
+  const completedToday = todaysWorkItems.filter((j) => j.status === "completed").length;
+
   const presenceLine = buildPresenceLine({
     isNewBusiness: noActivityYet,
-    waitingCount: needsYou.length,
+    waitingCount: waitingConversationItems.length,
     waitingCustomer: oldestWaiting ? { name: oldestWaiting.name, minutes: oldestWaiting.minutes } : null,
-    jobsBookedToday: jobsToday.length,
+    jobsBookedToday,
   });
-  // Nothing specific to report — safe to gently rotate through calm,
-  // reassuring variants instead of one static line (never when there's
-  // a real fact to state, like someone waiting or a job booked).
-  const rotateCalm = !oldestWaiting && jobsToday.length === 0;
+  const rotateCalm = !oldestWaiting && jobsBookedToday === 0;
 
-  // The one shared reasoning model every screen reads from — replaces
-  // what used to be three independently-computed "how ready is she"
-  // signals (Business Knowledge's own score, an ad hoc receptionist
-  // percent, and a 50/50 average of the two). Front Desk is the one
-  // page with real activity data to hand, so it's the only caller
-  // that populates `activity` — that's what lets `thoughts.watching`/
-  // `thoughts.handled` reflect what's actually happening right now,
-  // not just what's been taught. Sprint 6: now reached through the
-  // Shared Brain contract (lib/brain) instead of calling buildBrain()
-  // directly — same reasoning, same result shape, one public entry
-  // point shared with Mission Control.
+  // The one shared reasoning model every screen reads from.
   const brain = getBrainContext({
     businessId,
     knowledge: {
@@ -205,21 +328,14 @@ export default async function HomePage() {
     diary: { rules: availability.rules },
     activity: {
       whatsappConnected,
-      waitingCount: needsYou.length,
+      waitingCount: waitingConversationItems.length,
       oldestWaitingName: oldestWaiting?.name ?? null,
       oldestWaitingMinutes: oldestWaiting?.minutes ?? null,
       completedToday,
-      bookedToday: jobsToday.length,
+      bookedToday: jobsBookedToday,
     },
   });
-  // Sprint 8.8 — the setup journey. Three real, already-computed
-  // signals (never a fabricated "readiness score"): Business Profile
-  // and Receptionist are each "done" the same way the rest of the
-  // product already defines complete (100% of that Shared Brain
-  // domain); WhatsApp is done the same way it's always been checked.
-  // Business Profile before Receptionist before WhatsApp is a
-  // suggested reading order, not an enforced gate — every step link
-  // works regardless of order, and completion is entirely signal-driven.
+
   const journeySteps: JourneyStep[] = [
     { id: "business", label: "Business Profile", done: brain.percentFor("knowledge") >= 100, href: "/dashboard/business" },
     { id: "receptionist", label: "Receptionist", done: brain.percentFor("receptionist") >= 100, href: "/dashboard/receptionist" },
@@ -227,42 +343,18 @@ export default async function HomePage() {
   ];
   const journeyComplete = journeySteps.every((s) => s.done);
 
-  // Section 2 — exactly one priority, chosen by a fixed, honest
-  // precedence over the same real facts above (see selectTodaysPriority).
-  const currentJobForPriority = rightNow?.isCurrent
-    ? { title: rightNow.jobTitle, customerName: rightNow.customerName }
-    : null;
-  const nextJobForPriority =
-    rightNow && !rightNow.isCurrent
-      ? { title: rightNow.jobTitle, customerName: rightNow.customerName, scheduledFor: rightNow.scheduledFor }
-      : upNext
-        ? { title: upNext.jobTitle, customerName: upNext.customerName, scheduledFor: upNext.scheduledFor }
-        : null;
+  const currentJob = todaysWorkItems.find((j) => j.status === "in_progress");
+  const nextJob = todaysWorkItems.find((j) => j.status === "booked" && j.scheduledFor && new Date(j.scheduledFor) >= now);
   const todaysPriority = selectTodaysPriority({
-    waitingCustomer: oldestWaiting
-      ? { name: oldestWaiting.name, minutes: oldestWaiting.minutes, conversationId: oldestWaiting.conversationId }
-      : null,
-    waitingCount: needsYou.length,
-    currentJob: currentJobForPriority,
-    nextJob: nextJobForPriority,
-    jobsBookedToday: jobsToday.length,
-  });
-
-  // Section 3 — up to four real facts, never filler.
-  const summaryBullets = buildDailySummaryBullets({
-    waitingCount: needsYou.length,
-    completedToday,
-    bookedToday: jobsToday.length,
-    topGapLabel: brain.gaps[0]?.label ?? null,
+    waitingCustomer: oldestWaiting ? { name: oldestWaiting.name, minutes: oldestWaiting.minutes, conversationId: oldestWaiting.conversationId } : null,
+    waitingCount: waitingConversationItems.length,
+    currentJob: currentJob ? { title: currentJob.issue, customerName: currentJob.customerName } : null,
+    nextJob: nextJob ? { title: nextJob.issue, customerName: nextJob.customerName, scheduledFor: nextJob.scheduledFor } : null,
+    jobsBookedToday,
   });
 
   return (
     <div className="mx-auto max-w-[1280px] space-y-6">
-      {/* Sprint 8.8 — Front Desk is now a guide, not a static dashboard:
-       * until the three setup steps are all real, it shows the journey
-       * instead of pretending there's a normal operational day to
-       * summarise. Sprint 7.6's "Greeting and Priority sit close
-       * together" arrival beat still holds once the journey is done. */}
       {journeyComplete ? (
         <div className="space-y-3">
           <GreetingCard
@@ -282,23 +374,15 @@ export default async function HomePage() {
 
       {journeyComplete && (
         <div className="space-y-6">
-          <AISummaryCard bullets={summaryBullets} />
-          <UrgentItems items={needsYou} />
-          <TodaysDiary
-            rightNow={rightNow}
-            allCaughtUp={needsYou.length === 0}
-            upNext={upNext}
-            completed={completedToday}
-            waiting={needsYou.length}
-            remaining={remainingToday}
-          />
+          <AttentionQueue items={attentionQueue} />
+          <TodaysWork items={todaysWorkItems} />
+          <WaitingForCustomer items={waitingForCustomerItems} />
+          <RecentlyCompleted items={recentlyCompletedItems} />
           <Recommendations gaps={brain.gaps} />
-          <BusinessHealth jobsToday={jobsToday.length} completedToday={completedToday} waitingCount={needsYou.length} />
-          <RecentLearning observations={brain.observations} />
+          <ReceptionistActivity events={receptionistActivity} />
         </div>
       )}
 
-      {/* A deliberate extra beat of air before the closing action zone. */}
       <div className="pt-2">
         <QuickActions businessId={businessId} initialAvailability={availability} />
       </div>

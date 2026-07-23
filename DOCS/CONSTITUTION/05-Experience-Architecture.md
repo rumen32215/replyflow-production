@@ -8,19 +8,19 @@ Not "wrong eventually." Wrong today, regardless of how much real data is on it. 
 
 ---
 
-## 1. Front Desk — from dashboard to office
+## 1. Front Desk — from dashboard to office — implemented (Owner Experience 01)
 
-**What exists today:** real bones (`mission-control` in the codebase, nav-labelled "Front Desk" — the folder name is a leftover from before that rename) — an operational overview, urgent work, active conversations/today's jobs, waiting-customer stats, a "business health" breakdown, recent activity. What it isn't yet is *alive.*
+**Built.** The codebase-level split this section originally described — two pages, one nav-labelled "Front Desk" (calm, single-priority) and one literally named `mission-control` (broader, operational, not nav-visible) — is gone. There is now one real Front Desk at `/dashboard`; `mission-control` is a redirect, kept only so a bookmarked link never 404s. That split was real duplication (three of its four top-line numbers were independently computed twice) rather than two genuinely different concerns, so unifying them was the actual fix, not a compromise between them.
 
-**The reframe:** stop building a dashboard — something you *analyse*. Build an office — a place you *walk into.* "3 conversations open" is a dashboard. "You're mid-conversation with two customers, and one of them is waiting on you specifically" is an office. Same fact, completely different cognitive load.
+**What it answers today, in the same order this section specified:**
+1. **Needs Your Attention** — one urgency-sorted queue (never several competing lists): waiting conversations, draft Work Cards, and pending AI-drafted replies, merged. Emergencies (a linked conversation's real Conversation State goal — never inferred from text) and escalations sort first; everything else by how long it's actually been waiting.
+2. **Receptionist Activity** — real, timestamped events ("Booked X for tomorrow at 9:00," "Escalated: gas leak reported") — the "reporting in" framing this section called for, built from `lib/front-desk-signals.ts`'s `buildReceptionistActivity`, never a generated summary.
+3. **Today's Work** — every Work Card scheduled today, each with a real state (Booked / Waiting for address / Needs approval / Emergency / Customer replied), not a bare status word.
+4. **Waiting For Customer** and **Recently Completed** round out the picture — what's confirmed and ahead, what's actually finished.
 
-**What it should answer, in order of urgency:**
-1. Is anything actually wrong right now? If yes, this is the only thing visible above the fold. If no, say so plainly — "Nothing needs you right now" is a complete, valuable answer.
-2. What has she done since I last looked? — phrased as a person reporting in, not a log: "Booked 2 jobs, answered 11 questions, flagged 1 for you." The Learn → Work → Escalate → Improve loop (document 00), finally shipped as the primary surface rather than a secondary card.
-3. What does my day look like? — today's jobs, in order, each answerable at a glance (§2).
-4. What's waiting on me specifically? — the Approvals queue (§6), framed as "your decisions," not "pending items."
+**Cut, as specified:** "Business Health" as owner-facing language is gone entirely — no tile grid anywhere on the page. The counts it used to show now live implicitly in each section's own count (e.g. "Needs your attention (3)"), never a separate block competing for attention.
 
-**What to cut:** "Business Health" as owner-facing language — it reads like a report to interpret. Fold its real signal into the narrative above rather than keeping it as a competing block.
+**Not fully done — see §7:** the Approvals queue described in §7 as its own dedicated page still doesn't exist as a nav destination; approvals are aggregated business-wide for the first time (a real gap this closed — pending reply drafts were never counted anywhere before), but they live inside Front Desk's attention queue, not a separate screen. Left open deliberately, not guessed at.
 
 ---
 
@@ -85,6 +85,8 @@ No page currently shows every pending decision across the business in one place 
 
 This is the interruption-budget principle (document 00) made literal: **the fewer things land here, the better the product is working.** A long queue isn't a sign this page needs better design — it's a signal the receptionist isn't yet trusted with enough, and should point the owner toward autonomy expansion (document 07), not toward a better inbox. Each item should carry the same Work-Card discipline as §2 — full context to decide in one glance, never a bare message requiring the owner to go find the conversation to understand what's even being asked.
 
+**Partially built (Owner Experience 01):** the aggregation problem is solved — draft Work Cards and pending AI-drafted replies are now counted and ranked business-wide for the first time, inside Front Desk's Needs Your Attention queue (§1). What's still missing is this as its own dedicated nav destination, separate from Front Desk's daily view — left open deliberately rather than built ahead of a real need for it.
+
 ---
 
 ## 8. Onboarding — the concrete sequence
@@ -103,7 +105,7 @@ The load-bearing structural change: **Test real conversations** and **See exactl
 
 | Nav item | The one question | Current reality | Verdict |
 |---|---|---|---|
-| **Front Desk** | What do I need to know right now? | Exists, strong bones, too analytical in tone | Keep, reframe tone (§1) |
+| **Front Desk** | What do I need to know right now? | Rebuilt as one unified page (§1) | Done — Owner Experience 01 |
 | **Work Cards** | What work do I have? | Doesn't exist; data model too thin | **Build** — highest-impact gap (§2) |
 | **Diary** | Where am I going? | Exists, calendar-shaped | Keep plumbing, redesign framing (§3) |
 | **Customers** | Who are these people? | Detail page strong, list is a placeholder | Fix the list, extend the detail (§4) |

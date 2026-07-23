@@ -3,20 +3,20 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { ArrowRight, CalendarDays, Check, Headset, MapPin, MessageCircle } from "lucide-react";
-import { SettleCard, ScrollReveal, GentleSwap, Reveal, press, EASE } from "@/components/shared/motion";
+import { ArrowRight, Check, Headset } from "lucide-react";
+import { SettleCard, GentleSwap, press } from "@/components/shared/motion";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { formatWaitingTime, calmStatusMessages } from "@/lib/dashboard-signals";
+import { calmStatusMessages } from "@/lib/dashboard-signals";
 import type { TodaysPriority } from "@/lib/brain";
 import { cn } from "@/lib/utils";
 
 /**
- * Front Desk (Sprint 3 rebuild) — the canonical hierarchy from
- * Feature 01: Greeting -> Today's Priority -> AI Summary -> Urgent
- * Items -> Today's Diary -> AI Recommendations -> Business Health ->
- * Recent Learning -> Quick Actions. Every section answers exactly one
- * question and renders nothing at all when it has nothing true to say
- * (never an empty widget, never filler).
+ * Front Desk (Owner Experience 01) — Greeting and Today's Priority are
+ * the only two sections still homed here; everything else (the
+ * urgency-ordered work sections) moved to their own components under
+ * components/dashboard/home/ so each one can be reasoned about on its
+ * own (attention-queue.tsx, todays-work.tsx, waiting-for-customer.tsx,
+ * recently-completed.tsx, receptionist-activity.tsx).
  */
 
 /* ---------------------------------- Greeting --------------------------------- */
@@ -188,222 +188,6 @@ export function TodaysPriorityCard({ priority }: { priority: TodaysPriority }) {
           <ArrowRight className="h-4 w-4" />
         </motion.span>
       </Link>
-    </SettleCard>
-  );
-}
-
-/* -------------------------------- AI Summary ----------------------------------- */
-
-/**
- * Section 3 — up to four bullets, never paragraphs. `bullets` is
- * already-filtered, real-facts-only text from `buildDailySummaryBullets`
- * — this component only renders it.
- */
-export function AISummaryCard({ bullets }: { bullets: readonly string[] }) {
-  if (bullets.length === 0) return null;
-  return (
-    <ScrollReveal className="rounded-2xl border border-border bg-card p-6 shadow-sm">
-      <h2 className="mb-3 text-[11px] font-bold uppercase tracking-widest text-muted-foreground">Today so far</h2>
-      <ul className="space-y-2">
-        {bullets.map((bullet, i) => (
-          <li key={i} className="flex items-start gap-2.5 text-[14px] leading-relaxed">
-            <span className="mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />
-            <span>{bullet}</span>
-          </li>
-        ))}
-      </ul>
-    </ScrollReveal>
-  );
-}
-
-/* -------------------------------- Urgent Items --------------------------------- */
-
-export interface UrgentItem {
-  conversationId: string;
-  name: string;
-  reason: string;
-  minutes: number;
-}
-
-/**
- * Section 4 — only appears when required (spec: "if nothing is
- * urgent, hide this section completely"). Left accent strip per the
- * UI spec's "Urgent Section" styling.
- */
-export function UrgentItems({ items }: { items: UrgentItem[] }) {
-  if (items.length === 0) return null;
-  return (
-    <SettleCard delay={0.11}>
-      <h2 className="mb-2.5 text-[15px] font-bold tracking-tight">Urgent</h2>
-      <div className="space-y-2">
-        {items.map((item, i) => (
-          <Reveal key={item.conversationId} index={i}>
-            <Link href={`/dashboard/conversations/${item.conversationId}`} className="group block">
-              <motion.div
-                {...press}
-                className="flex items-center gap-3 rounded-2xl border-l-4 border-attention bg-attention/[0.06] p-4 pl-3.5 transition-shadow group-hover:shadow-sm"
-              >
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-attention/15 text-[13px] font-bold text-attention">
-                  {item.name.slice(0, 1).toUpperCase()}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-[14px] font-semibold">{item.name}</p>
-                  <p className="truncate text-[12.5px] text-muted-foreground">
-                    {item.reason} · waiting {formatWaitingTime(item.minutes)}
-                  </p>
-                </div>
-                <ArrowRight className="h-4 w-4 shrink-0 text-attention transition-transform group-hover:translate-x-0.5" />
-              </motion.div>
-            </Link>
-          </Reveal>
-        ))}
-      </div>
-    </SettleCard>
-  );
-}
-
-/* -------------------------------- Today's Diary -------------------------------- */
-
-export interface RightNowJob {
-  id: string;
-  customerName: string;
-  jobTitle: string;
-  scheduledFor: string | null;
-  notes: string | null;
-  isCurrent: boolean;
-}
-
-function timeLabel(iso: string | null): string | null {
-  if (!iso) return null;
-  return new Date(iso).toLocaleTimeString("en-GB", { hour: "numeric", minute: "2-digit" });
-}
-
-/** Internal — used only inside `TodaysDiary` below. */
-function RightNowSection({ job, allCaughtUp }: { job: RightNowJob | null; allCaughtUp: boolean }) {
-  if (!job) {
-    if (!allCaughtUp) return null;
-    return (
-      <div>
-        <p className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground">Right now</p>
-        <p className="mt-2 text-[17px] font-bold tracking-tight">You&apos;re all caught up.</p>
-        <p className="mt-1 text-[13.5px] leading-relaxed text-muted-foreground">
-          Nothing needs you at the moment — I&apos;ll bring anything new straight here.
-        </p>
-      </div>
-    );
-  }
-
-  const time = timeLabel(job.scheduledFor);
-  return (
-    <div className="relative overflow-hidden">
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-0"
-        style={{ background: "radial-gradient(circle at 100% 0%, rgba(34,197,94,0.07), transparent 55%)" }}
-      />
-      <p className="relative text-[11px] font-bold uppercase tracking-widest text-success">
-        {job.isCurrent ? "Right now" : "Next job"}
-      </p>
-      <p className="relative mt-2 text-[18px] font-bold tracking-tight">{job.jobTitle}</p>
-      <p className="relative mt-0.5 text-[13.5px] text-muted-foreground">
-        {job.customerName}
-        {time && <> · {time}</>}
-      </p>
-      {job.notes && (
-        <p className="relative mt-2 flex items-start gap-1.5 text-[13px] leading-relaxed text-muted-foreground">
-          <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-          {job.notes}
-        </p>
-      )}
-    </div>
-  );
-}
-
-/**
- * Section 5 — compact, not calendar mode. Spec: "the owner wants
- * confidence, not administration... answers 'can I relax today?'"
- * Right Now, Up Next, and Today's Progress share one card since all
- * three are really one concern (today's schedule).
- */
-export function TodaysDiary({
-  rightNow,
-  allCaughtUp,
-  upNext,
-  completed,
-  waiting,
-  remaining,
-}: {
-  rightNow: RightNowJob | null;
-  allCaughtUp: boolean;
-  upNext: RightNowJob | null;
-  completed: number;
-  waiting: number;
-  remaining: number;
-}) {
-  const showRightNow = Boolean(rightNow) || allCaughtUp;
-  const progressRows = [
-    { icon: <Check className="h-3.5 w-3.5 text-success" />, label: `${completed} ${completed === 1 ? "job" : "jobs"} completed`, show: completed > 0 },
-    { icon: <MessageCircle className="h-3.5 w-3.5 text-attention" />, label: `${waiting} waiting for you`, show: waiting > 0 },
-    { icon: <CalendarDays className="h-3.5 w-3.5 text-success" />, label: `${remaining} remaining today`, show: remaining > 0 },
-  ].filter((r) => r.show);
-  const showProgress = progressRows.length > 0;
-
-  if (!showRightNow && !upNext && !showProgress) return null;
-
-  const upNextDate = upNext?.scheduledFor ? new Date(upNext.scheduledFor) : null;
-
-  return (
-    <SettleCard delay={0.14} className="rounded-2xl border border-border bg-card p-6 shadow-sm">
-      <h2 className="mb-4 text-[11px] font-bold uppercase tracking-widest text-muted-foreground">Today&apos;s diary</h2>
-
-      {showRightNow && <RightNowSection job={rightNow} allCaughtUp={allCaughtUp} />}
-
-      {upNext && (
-        <>
-          {showRightNow && <div className="my-4 h-px bg-border/70" />}
-          <div>
-            <h3 className="mb-2 text-[11px] font-bold uppercase tracking-widest text-muted-foreground">Up next</h3>
-            <div className="flex items-center gap-3 rounded-xl bg-muted/30 p-3">
-              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-success/10 text-success">
-                <CalendarDays className="h-4 w-4" />
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-[14px] font-semibold">{upNext.jobTitle}</p>
-                <p className="truncate text-[12.5px] text-muted-foreground">
-                  {upNext.customerName}
-                  {upNextDate && (
-                    <>
-                      {" · "}
-                      {upNextDate.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" })}
-                      {" · "}
-                      {upNextDate.toLocaleTimeString("en-GB", { hour: "numeric", minute: "2-digit" })}
-                    </>
-                  )}
-                </p>
-              </div>
-            </div>
-          </div>
-        </>
-      )}
-
-      {showProgress && (
-        <>
-          {(showRightNow || upNext) && <div className="my-4 h-px bg-border/70" />}
-          <div>
-            <h3 className="mb-2 text-[11px] font-bold uppercase tracking-widest text-muted-foreground">
-              Today&apos;s progress
-            </h3>
-            <div className="space-y-2.5">
-              {progressRows.map((row) => (
-                <div key={row.label} className="flex items-center gap-2.5 text-[13.5px]">
-                  {row.icon}
-                  <span>{row.label}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </>
-      )}
     </SettleCard>
   );
 }

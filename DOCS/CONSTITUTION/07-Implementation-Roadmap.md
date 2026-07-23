@@ -47,11 +47,12 @@ They don't block each other because they touch different parts of the system —
 **Depends on:** nothing. The one genuinely foundational item in this track.
 **Unlocks:** B2, B3, and materially enriches B4 and B5. Front Desk, Diary, and Customers are all currently pointing at a thin data model — this is what makes them real.
 
-### B2. Front Desk retone
+### B2. Front Desk retone — implemented
 **Why it exists:** the current screen already has the right data; it doesn't yet read like an office, it reads like a report.
 **Principles supported:** 3, 4, 5.
 **Depends on:** B1 — "today's work" needs real Work Cards to summarise, not thin rows.
 **Unlocks:** the daily "Routine" feeling described in document 04 §2 becomes buildable, not just describable.
+**Built as:** one unified Front Desk at `/dashboard`, replacing what used to be two independently-queried pages (`/dashboard` and `/dashboard/mission-control`, the latter now a redirect) — see `DOCS/CONSTITUTION/05-Experience-Architecture.md` §1 for the full account, including what's still deliberately left for the Approvals item (§7 there) to pick up.
 
 ### B3. Diary reframe
 **Why it exists:** a calendar answers "what's on this date." An owner needs "what does my day look like, and what changed since I checked." The diary is *made of* Work Cards.

@@ -1,33 +1,39 @@
-import { Check, MessageCircle, Plus, type LucideIcon } from "lucide-react";
+import { AlertTriangle, Briefcase, Check, MessageCircle, type LucideIcon } from "lucide-react";
 import { SettleCard, Reveal } from "@/components/shared/motion";
 import { minutesSince, formatWaitingTime } from "@/lib/dashboard-signals";
-import type { ActivityEvent, ActivityKind } from "@/lib/mission-control-signals";
+import type { ActivityEvent, ActivityKind } from "@/lib/front-desk-signals";
 import { cn } from "@/lib/utils";
 
 /**
- * "What just happened?" — a chronological feed of real, already-timestamped
- * events (lib/mission-control-signals.ts's buildRecentActivity). No
- * summarising, no interpretation — just what the data actually says,
- * newest first.
+ * Receptionist Activity (Owner Experience 01) — "what has my
+ * receptionist already handled?" answered as a real, chronological
+ * feed, not a summary she generated about herself. Every line comes
+ * from lib/front-desk-signals.ts's buildReceptionistActivity, which
+ * only ever turns real stored timestamps into sentences — never a
+ * fabricated or paraphrased account of what happened.
  */
 const KIND_ICON: Record<ActivityKind, LucideIcon> = {
-  job_completed: Check,
-  job_created: Plus,
+  work_card_started: Briefcase,
+  work_card_booked: Check,
+  work_card_completed: Check,
   conversation_started: MessageCircle,
+  escalated: AlertTriangle,
 };
 
 const KIND_STYLE: Record<ActivityKind, string> = {
-  job_completed: "bg-success/10 text-success",
-  job_created: "bg-primary/10 text-primary",
+  work_card_started: "bg-primary/10 text-primary",
+  work_card_booked: "bg-success/10 text-success",
+  work_card_completed: "bg-success/10 text-success",
   conversation_started: "bg-attention/10 text-attention",
+  escalated: "bg-destructive/10 text-destructive",
 };
 
-export function RecentActivity({ events }: { events: ActivityEvent[] }) {
+export function ReceptionistActivity({ events }: { events: ActivityEvent[] }) {
   if (events.length === 0) return null;
 
   return (
-    <SettleCard delay={0.18} className="rounded-2xl border border-border bg-card p-6 shadow-sm">
-      <h2 className="mb-4 text-[11px] font-bold uppercase tracking-widest text-muted-foreground">Recent activity</h2>
+    <SettleCard delay={0.22} className="rounded-2xl border border-border bg-card p-6 shadow-sm">
+      <h2 className="mb-4 text-[11px] font-bold uppercase tracking-widest text-muted-foreground">Receptionist activity</h2>
       <div className="space-y-3">
         {events.map((event, i) => {
           const Icon = KIND_ICON[event.kind];

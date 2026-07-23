@@ -79,23 +79,23 @@ export default async function HomePage() {
       .select("id", { count: "exact", head: true })
       .eq("business_id", businessId),
     supabase
-      .from("jobs")
-      .select("id, customer_name, job_title, status, scheduled_for, notes")
+      .from("work_cards")
+      .select("id, customer_name, issue, status, scheduled_for, notes")
       .eq("business_id", businessId)
       .in("status", ["booked", "in_progress", "completed"])
       .gte("scheduled_for", startOfToday.toISOString())
       .lt("scheduled_for", endOfToday.toISOString())
       .order("scheduled_for", { ascending: true }),
     supabase
-      .from("jobs")
-      .select("id, customer_name, job_title, scheduled_for, notes")
+      .from("work_cards")
+      .select("id, customer_name, issue, scheduled_for, notes")
       .eq("business_id", businessId)
       .eq("status", "booked")
       .gte("scheduled_for", endOfToday.toISOString())
       .order("scheduled_for", { ascending: true })
       .limit(1),
     supabase
-      .from("jobs")
+      .from("work_cards")
       .select("id", { count: "exact", head: true })
       .eq("business_id", businessId)
       .eq("status", "completed"),
@@ -126,7 +126,7 @@ export default async function HomePage() {
     ? {
         id: currentSource.id,
         customerName: currentSource.customer_name,
-        jobTitle: currentSource.job_title,
+        jobTitle: currentSource.issue,
         scheduledFor: currentSource.scheduled_for,
         notes: currentSource.notes,
         isCurrent: Boolean(inProgress),
@@ -148,7 +148,7 @@ export default async function HomePage() {
     ? {
         id: upNextSource.id,
         customerName: upNextSource.customer_name,
-        jobTitle: upNextSource.job_title,
+        jobTitle: upNextSource.issue,
         scheduledFor: upNextSource.scheduled_for,
         notes: upNextSource.notes ?? null,
         isCurrent: false,

@@ -35,7 +35,7 @@ export default async function CustomersLayout({ children }: { children: React.Re
       .select("id, customer_name, customer_phone, status, last_message_at")
       .eq("business_id", business.id)
       .order("last_message_at", { ascending: false, nullsFirst: false }),
-    supabase.from("jobs").select("conversation_id, status").eq("business_id", business.id),
+    supabase.from("work_cards").select("conversation_id, status").eq("business_id", business.id),
   ]);
 
   const completedCountByConversation = new Map<string, number>();

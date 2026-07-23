@@ -46,8 +46,8 @@ export default async function CustomerDetailPage({ params }: { params: { id: str
 
   const [{ data: jobRows }, { data: business }, { data: config }] = await Promise.all([
     supabase
-      .from("jobs")
-      .select("id, job_title, status, scheduled_for, completed_at, notes, created_at")
+      .from("work_cards")
+      .select("id, issue, status, scheduled_for, completed_at, notes, created_at")
       .eq("conversation_id", conversation.id)
       .order("created_at", { ascending: true }),
     supabase
@@ -64,7 +64,7 @@ export default async function CustomerDetailPage({ params }: { params: { id: str
 
   const jobs: CustomerJob[] = (jobRows ?? []).map((j) => ({
     id: j.id,
-    jobTitle: j.job_title,
+    jobTitle: j.issue,
     status: j.status,
     scheduledFor: j.scheduled_for,
     completedAt: j.completed_at,

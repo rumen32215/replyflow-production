@@ -39,7 +39,7 @@ export default async function ConversationsLayout({ children }: { children: Reac
         // Which conversations have a booking waiting on the owner's
         // decision — an orthogonal signal to conversation status, so
         // the list can surface it without a 5th status group.
-        supabase.from("jobs").select("conversation_id").eq("business_id", business.id).eq("status", "draft"),
+        supabase.from("work_cards").select("conversation_id").eq("business_id", business.id).eq("status", "draft"),
       ])
     : [{ data: [] }, { data: [] }];
 

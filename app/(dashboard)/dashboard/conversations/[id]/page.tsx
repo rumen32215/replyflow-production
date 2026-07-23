@@ -6,6 +6,8 @@ import { createClient } from "@/lib/supabase/server";
 import { ConversationStory } from "@/components/dashboard/conversations/conversation-story";
 import { statusLabel, groupForStatus } from "@/lib/conversations";
 import { parseAvailability, nextAvailableSlot, toDateString } from "@/lib/availability";
+import { toConversationState } from "@/lib/reply-engine/understanding/state";
+import { buildWorkCardDraft } from "@/lib/work-card";
 import { cn } from "@/lib/utils";
 
 export const metadata: Metadata = { title: "Conversation — ReplyFlow" };
@@ -26,28 +28,28 @@ export default async function ConversationDetailPage({ params }: { params: { id:
   // RLS (0003) scopes this to the signed-in owner's business.
   const { data: conversation } = await supabase
     .from("conversations")
-    .select("id, business_id, customer_name, customer_phone, status")
+    .select("id, business_id, customer_name, customer_phone, status, ai_state")
     .eq("id", params.id)
     .maybeSingle();
 
   if (!conversation) notFound();
 
-  const [{ data: messages }, { data: existingJobs }, { data: business }, { data: pendingDrafts }] = await Promise.all([
+  const [{ data: existingWorkCards }, { data: messages }, { data: business }, { data: pendingDrafts }] = await Promise.all([
+    // A rejected draft can be followed by a fresh one on the same
+    // conversation — most-recent-first + limit(1) so this never
+    // breaks once more than one Work Card row exists here
+    // (maybeSingle() errors on ambiguous multiple rows).
+    supabase
+      .from("work_cards")
+      .select("id, issue, scheduled_for, status, notes")
+      .eq("conversation_id", conversation.id)
+      .order("created_at", { ascending: false })
+      .limit(1),
     supabase
       .from("messages")
       .select("id, direction, body, message_type, created_at")
       .eq("conversation_id", conversation.id)
       .order("created_at", { ascending: true }),
-    // A rejected draft can be followed by a fresh one on the same
-    // conversation — most-recent-first + limit(1) so this never
-    // breaks once more than one job row exists here (maybeSingle()
-    // errors on ambiguous multiple rows).
-    supabase
-      .from("jobs")
-      .select("id, job_title, scheduled_for, status, notes")
-      .eq("conversation_id", conversation.id)
-      .order("created_at", { ascending: false })
-      .limit(1),
     supabase
       .from("businesses")
       .select("business_name, availability, opening_time, closing_time")
@@ -55,7 +57,7 @@ export default async function ConversationDetailPage({ params }: { params: { id:
       .maybeSingle(),
     // The Reply Engine's most recent still-open draft for this
     // conversation (Sprint 10A) — same most-recent-first + limit(1)
-    // pattern as jobs above, for the same reason.
+    // pattern as Work Cards above, for the same reason.
     supabase
       .from("reply_drafts")
       .select(
@@ -81,6 +83,12 @@ export default async function ConversationDetailPage({ params }: { params: { id:
         new Date()
       )
     : null;
+
+  // The Work Card pipeline (DOCS/SPECS/Work-Card-Object.md) — a
+  // deterministic draft of the automatic fields, assembled from this
+  // conversation's real Conversation State. Never shown as fact until
+  // the owner creates and reviews the Work Card; only pre-fills it.
+  const workCardDraft = buildWorkCardDraft(toConversationState(conversation.ai_state));
 
   return (
     <div className="flex h-full flex-col">
@@ -121,7 +129,8 @@ export default async function ConversationDetailPage({ params }: { params: { id:
         customerPhone={conversation.customer_phone}
         messageCount={allMessages.length}
         photoCount={photoCount}
-        existingJob={existingJobs?.[0] ?? null}
+        existingWorkCard={existingWorkCards?.[0] ?? null}
+        workCardDraft={workCardDraft}
         latestCustomerMessage={latestCustomerMessage}
         suggestedSlotDate={suggestedSlot ? toDateString(suggestedSlot.date) : null}
         suggestedSlotLabel={suggestedSlot?.label ?? null}

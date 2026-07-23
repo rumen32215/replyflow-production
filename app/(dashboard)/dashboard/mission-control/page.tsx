@@ -79,30 +79,30 @@ async function getMissionControlData(supabase: SupabaseClient, businessId: strin
       .order("last_message_at", { ascending: false, nullsFirst: false })
       .limit(50),
     supabase
-      .from("jobs")
-      .select("id, customer_name, job_title, status, scheduled_for")
+      .from("work_cards")
+      .select("id, customer_name, issue, status, scheduled_for")
       .eq("business_id", businessId)
       .gte("scheduled_for", startOfToday.toISOString())
       .lt("scheduled_for", endOfToday.toISOString())
       .order("scheduled_for", { ascending: true }),
     supabase
-      .from("jobs")
-      .select("id, customer_name, job_title, completed_at")
+      .from("work_cards")
+      .select("id, customer_name, issue, completed_at")
       .eq("business_id", businessId)
       .not("completed_at", "is", null)
       .gte("completed_at", sevenDaysAgo.toISOString())
       .order("completed_at", { ascending: false })
       .limit(5),
     supabase
-      .from("jobs")
-      .select("id, customer_name, job_title, created_at")
+      .from("work_cards")
+      .select("id, customer_name, issue, created_at")
       .eq("business_id", businessId)
       .gte("created_at", sevenDaysAgo.toISOString())
       .order("created_at", { ascending: false })
       .limit(5),
     supabase
-      .from("jobs")
-      .select("id, customer_name, job_title, conversation_id")
+      .from("work_cards")
+      .select("id, customer_name, issue, conversation_id")
       .eq("business_id", businessId)
       .eq("status", "draft"),
   ]);
@@ -136,7 +136,7 @@ async function getMissionControlData(supabase: SupabaseClient, businessId: strin
         kind: "draft_job",
         jobId: j.id,
         conversationId: j.conversation_id,
-        jobTitle: j.job_title,
+        jobTitle: j.issue,
         customerName: j.customer_name,
       })
     ),
@@ -152,7 +152,7 @@ async function getMissionControlData(supabase: SupabaseClient, businessId: strin
   const todaysJobs: TodaysJobItem[] = (jobsToday ?? []).map((j) => ({
     id: j.id,
     customerName: j.customer_name,
-    jobTitle: j.job_title,
+    jobTitle: j.issue,
     status: j.status,
     scheduledFor: j.scheduled_for,
   }));
@@ -180,13 +180,13 @@ async function getMissionControlData(supabase: SupabaseClient, businessId: strin
   const recentActivity = buildRecentActivity({
     completedJobs: (recentCompletedJobs ?? []).map((j) => ({
       id: j.id,
-      jobTitle: j.job_title,
+      jobTitle: j.issue,
       customerName: j.customer_name,
       completedAt: j.completed_at as string,
     })),
     createdJobs: (recentCreatedJobs ?? []).map((j) => ({
       id: j.id,
-      jobTitle: j.job_title,
+      jobTitle: j.issue,
       customerName: j.customer_name,
       createdAt: j.created_at,
     })),

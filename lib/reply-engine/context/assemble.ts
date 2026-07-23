@@ -34,12 +34,12 @@ export async function assembleContext(input: AssembleContextInput): Promise<Repl
   const displayName = customerName || customerPhone;
 
   // customerMemory and customerJobs both derive from the same real
-  // `jobs` rows — fetched once and shared, never queried twice.
+  // `work_cards` rows — fetched once and shared, never queried twice.
   const needsJobRows = needs.customerMemory || needs.customerJobs;
   const jobRowsPromise = needsJobRows
     ? supabase
-        .from("jobs")
-        .select("id, job_title, status, scheduled_for, completed_at, notes, created_at")
+        .from("work_cards")
+        .select("id, issue, status, scheduled_for, completed_at, notes, created_at")
         .eq("business_id", businessId)
         .eq("customer_name", displayName)
         .order("created_at", { ascending: true })
@@ -74,8 +74,8 @@ export async function assembleContext(input: AssembleContextInput): Promise<Repl
 
   // Always fetched, regardless of needs — see CurrentBookingContext.
   const currentJobPromise = supabase
-    .from("jobs")
-    .select("job_title, status, scheduled_for")
+    .from("work_cards")
+    .select("issue, status, scheduled_for")
     .eq("conversation_id", conversationId)
     .order("created_at", { ascending: false })
     .limit(1)
@@ -86,7 +86,7 @@ export async function assembleContext(input: AssembleContextInput): Promise<Repl
 
   const jobs: CustomerJob[] = (jobRows ?? []).map((j) => ({
     id: j.id,
-    jobTitle: j.job_title,
+    jobTitle: j.issue,
     status: j.status,
     scheduledFor: j.scheduled_for,
     completedAt: j.completed_at,
@@ -102,7 +102,7 @@ export async function assembleContext(input: AssembleContextInput): Promise<Repl
     conversationHistory: null,
     customerJobs: null,
     currentBooking: currentJobRow
-      ? { jobTitle: currentJobRow.job_title, status: currentJobRow.status, scheduledFor: currentJobRow.scheduled_for }
+      ? { jobTitle: currentJobRow.issue, status: currentJobRow.status, scheduledFor: currentJobRow.scheduled_for }
       : null,
     newMessage: { body: input.messageBody, customerName, customerPhone },
   };

@@ -50,7 +50,7 @@ export default async function EverythingIKnowPage() {
       .eq("business_id", businessId)
       .maybeSingle(),
     supabase.from("conversations").select("id").eq("business_id", businessId),
-    supabase.from("jobs").select("conversation_id, status").eq("business_id", businessId),
+    supabase.from("work_cards").select("conversation_id, status").eq("business_id", businessId),
   ]);
 
   const availability = parseAvailability(business.availability, business.opening_time, business.closing_time);

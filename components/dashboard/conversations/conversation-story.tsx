@@ -10,11 +10,12 @@ import { TypingDots } from "@/components/shared/typed-message";
 import { createClient } from "@/lib/supabase/client";
 import { buildStory, groupForStatus } from "@/lib/conversations";
 import { joinList } from "@/lib/knowledge";
+import type { WorkCardDraftFields } from "@/lib/work-card";
 import { cn } from "@/lib/utils";
 
-interface ExistingJob {
+interface ExistingWorkCard {
   id: string;
-  job_title: string;
+  issue: string;
   scheduled_for: string | null;
   status: string;
   notes: string | null;
@@ -106,17 +107,19 @@ function formatScheduled(iso: string | null): string | null {
 /**
  * Opening a conversation tells the story, not just the messages
  * (Conversations Experience V2): what's been collected, where things
- * stand, and the obvious next action — Call, Create a job, or Mark
- * complete. The owner understands the entire journey in seconds.
+ * stand, and the obvious next action — Call, Create a Work Card, or
+ * Mark complete. The owner understands the entire journey in seconds.
  *
- * "Create a job" fixes a confirmed gap: the `jobs` table had full
+ * "Create a Work Card" fixes a confirmed gap: the `work_cards` table
+ * (DOCS/SPECS/Work-Card-Object.md — renamed from `jobs`) had full
  * schema and RLS but no write path anywhere in the app. It never
- * auto-finalises, though — a job created here starts as a draft the
- * owner must approve, edit, or reject, exactly like every other
+ * auto-finalises, though — a Work Card created here starts as a draft
+ * the owner must approve, edit, or reject, exactly like every other
  * booking-adjacent decision in the product (never guess, never
- * decide alone). job_title is never inferred from message content —
- * guessing what the job actually is would be exactly the overclaim
- * ReplyFlow never makes.
+ * decide alone). The issue field is pre-filled from the Work Card
+ * pipeline's deterministic read of Conversation State (`workCardDraft`)
+ * when available, but never silently trusted — the owner sees it in
+ * the form and can change it before anything is saved.
  *
  * Approving shows a clearly-labeled preview of what would be sent to
  * the customer — a simulation, not a real message, since outbound
@@ -131,7 +134,8 @@ export function ConversationStory({
   customerPhone,
   messageCount,
   photoCount,
-  existingJob,
+  existingWorkCard,
+  workCardDraft,
   latestCustomerMessage,
   suggestedSlotDate,
   suggestedSlotLabel,
@@ -145,7 +149,8 @@ export function ConversationStory({
   customerPhone: string;
   messageCount: number;
   photoCount: number;
-  existingJob: ExistingJob | null;
+  existingWorkCard: ExistingWorkCard | null;
+  workCardDraft: WorkCardDraftFields | null;
   latestCustomerMessage: string | null;
   suggestedSlotDate: string | null;
   suggestedSlotLabel: string | null;
@@ -156,10 +161,12 @@ export function ConversationStory({
   const { message, isError, acknowledge, softError } = useAcknowledgement();
   const [saving, setSaving] = useState(false);
 
-  const [job, setJob] = useState<ExistingJob | null>(existingJob);
+  const [job, setJob] = useState<ExistingWorkCard | null>(existingWorkCard);
   const [showJobForm, setShowJobForm] = useState(false);
   const [editingDraft, setEditingDraft] = useState(false);
-  const [jobTitle, setJobTitle] = useState(`Enquiry from ${customerName || customerPhone}`);
+  const [jobTitle, setJobTitle] = useState(
+    workCardDraft?.issue || `Enquiry from ${customerName || customerPhone}`
+  );
   const [notes, setNotes] = useState(latestCustomerMessage ?? "");
   const [scheduledDate, setScheduledDate] = useState(suggestedSlotDate ?? "");
   const [savingJob, setSavingJob] = useState(false);
@@ -198,7 +205,7 @@ export function ConversationStory({
 
   function startEdit() {
     if (!job) return;
-    setJobTitle(job.job_title);
+    setJobTitle(job.issue);
     setNotes(job.notes ?? "");
     setScheduledDate(job.scheduled_for ? job.scheduled_for.slice(0, 10) : "");
     setEditingDraft(true);
@@ -211,9 +218,9 @@ export function ConversationStory({
 
     if (editingDraft && job) {
       const { error } = await supabase
-        .from("jobs")
+        .from("work_cards")
         .update({
-          job_title: jobTitle.trim(),
+          issue: jobTitle.trim(),
           scheduled_for: scheduledDate ? new Date(scheduledDate).toISOString() : null,
           notes: notes.trim() || null,
         })
@@ -225,7 +232,7 @@ export function ConversationStory({
       }
       setJob({
         ...job,
-        job_title: jobTitle.trim(),
+        issue: jobTitle.trim(),
         scheduled_for: scheduledDate ? new Date(scheduledDate).toISOString() : null,
         notes: notes.trim() || null,
       });
@@ -236,20 +243,28 @@ export function ConversationStory({
       return;
     }
 
-    // A brand-new job always starts as a draft — never auto-finalised.
-    // The owner approves, edits, or rejects it below.
+    // A brand-new Work Card always starts as a draft — never
+    // auto-finalised. The owner approves, edits, or rejects it below.
+    // Address/collected details/summary come from the deterministic
+    // pipeline (lib/work-card.ts) when the conversation produced any —
+    // address_confirmed stays false (its DB default) until the owner
+    // confirms it, per the soft-warning decision
+    // (DOCS/SPECS/Work-Card-Object.md §5).
     const { data: inserted, error: insertError } = await supabase
-      .from("jobs")
+      .from("work_cards")
       .insert({
         business_id: businessId,
         conversation_id: conversationId,
         customer_name: customerName || customerPhone,
-        job_title: jobTitle.trim(),
+        issue: jobTitle.trim(),
         status: "draft",
         scheduled_for: scheduledDate ? new Date(scheduledDate).toISOString() : null,
         notes: notes.trim() || null,
+        address: workCardDraft?.address ?? null,
+        collected_details: workCardDraft?.collectedDetails ?? null,
+        conversation_summary: workCardDraft?.conversationSummary ?? null,
       })
-      .select("id, job_title, scheduled_for, status, notes")
+      .select("id, issue, scheduled_for, status, notes")
       .single();
 
     setSavingJob(false);
@@ -269,7 +284,7 @@ export function ConversationStory({
     setSentPreviewText(null);
     setSendFailedReason(null);
     try {
-      const res = await fetch(`/api/jobs/${job.id}/approve`, { method: "POST" });
+      const res = await fetch(`/api/work-cards/${job.id}/approve`, { method: "POST" });
       const payload = await res.json();
       setDecidingJob(false);
       if (!res.ok) {
@@ -291,7 +306,7 @@ export function ConversationStory({
   async function rejectJob() {
     if (!job || decidingJob) return;
     setDecidingJob(true);
-    const { error } = await supabase.from("jobs").update({ status: "cancelled" }).eq("id", job.id);
+    const { error } = await supabase.from("work_cards").update({ status: "cancelled" }).eq("id", job.id);
     setDecidingJob(false);
     if (error) {
       softError();
@@ -356,7 +371,7 @@ export function ConversationStory({
 
   const scheduledLabel = job ? formatScheduled(job.scheduled_for) : null;
   const confirmationPreview = job
-    ? `Hi ${customerName || "there"}! ${businessName} here — your booking for ${job.job_title} is confirmed${
+    ? `Hi ${customerName || "there"}! ${businessName} here — your booking for ${job.issue} is confirmed${
         scheduledLabel ? ` for ${scheduledLabel}` : ""
       }. See you then!`
     : "";
@@ -409,10 +424,10 @@ export function ConversationStory({
                 )}
               >
                 {isDraft
-                  ? `Draft ready for your review — ${job.job_title}`
+                  ? `Draft ready for your review — ${job.issue}`
                   : job.status === "cancelled"
-                    ? `Draft rejected — ${job.job_title}`
-                    : `Job booked — ${job.job_title}`}
+                    ? `Draft rejected — ${job.issue}`
+                    : `Job booked — ${job.issue}`}
               </span>
             </div>
           </Reveal>
@@ -437,7 +452,7 @@ export function ConversationStory({
               // A rejected draft never blocks a fresh one — reset the
               // form back to sensible defaults rather than reopening
               // whatever was last typed into the rejected draft.
-              setJobTitle(`Enquiry from ${customerName || customerPhone}`);
+              setJobTitle(workCardDraft?.issue || `Enquiry from ${customerName || customerPhone}`);
               setNotes(latestCustomerMessage ?? "");
               setScheduledDate(suggestedSlotDate ?? "");
               setEditingDraft(false);
@@ -663,7 +678,7 @@ export function ConversationStory({
       </AnimatePresence>
 
       {/* The real booking confirmation — actually sent via WhatsApp on
-       * approve (app/api/jobs/[id]/approve/route.ts), not a preview.
+       * approve (app/api/work-cards/[id]/approve/route.ts), not a preview.
        * An honest failure state if the send itself didn't go through —
        * the booking still stands either way, only the message failed. */}
       <AnimatePresence initial={false}>

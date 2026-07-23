@@ -108,7 +108,7 @@ export function MeetYourReceptionist({
         )}
 
         <Bubble delay={0.32}>
-          <strong>Have I understood you correctly?</strong>
+          <strong>Have I understood your business correctly?</strong>
         </Bubble>
 
         <AnimatePresence mode="wait">

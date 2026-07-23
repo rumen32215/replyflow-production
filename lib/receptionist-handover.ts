@@ -1,4 +1,5 @@
 import type { BusinessKnowledge } from "@/lib/knowledge";
+import { describeWeeklyHours, hasCustomizedHours, type Availability } from "@/lib/availability";
 
 /**
  * Meet Your Receptionist (Trust Track, DOCS/CONSTITUTION/03 §2) — the
@@ -10,6 +11,12 @@ import type { BusinessKnowledge } from "@/lib/knowledge";
  * applies to a customer message, applied instead to the very first
  * thing she ever says to the owner — the one moment in the product
  * where "never invent" matters more than anywhere else.
+ *
+ * Reads from the same deterministic knowledge sources the rest of the
+ * product already uses — `lib/availability.ts` for real weekly hours
+ * (Diary, Trust Track 01 sprint) and `BusinessKnowledge`'s full shape
+ * (the same fields `lib/reply-engine/prompt/facts.ts` grounds replies
+ * in) — deliberately not a second, narrower interpretation of either.
  */
 
 export interface HandoverInput {
@@ -20,6 +27,7 @@ export interface HandoverInput {
   serviceAreas: string[];
   openingTime: string;
   closingTime: string;
+  availability: Availability;
   offersEmergencyCallouts: boolean;
   chargesCalloutFee: boolean;
   calloutFeeAmount: string | null;
@@ -64,7 +72,12 @@ export function buildHandoverRecap(input: HandoverInput): HandoverRecap {
     gaps.push("I don't know which areas you cover yet.");
   }
 
-  understood.push(`You're open ${input.openingTime}–${input.closingTime}.`);
+  if (hasCustomizedHours(input.availability.hours, input.openingTime, input.closingTime)) {
+    for (const line of describeWeeklyHours(input.availability.hours)) understood.push(line);
+  } else {
+    understood.push(`You're open ${input.openingTime}–${input.closingTime}, Monday to Friday.`);
+    gaps.push("I don't yet know your weekend availability.");
+  }
 
   if (input.offersEmergencyCallouts) {
     understood.push("You take on emergency call-outs.");
@@ -83,6 +96,10 @@ export function buildHandoverRecap(input: HandoverInput): HandoverRecap {
     understood.push("You don't charge a call-out fee.");
   }
 
+  if (input.knowledge.personality.length > 0) {
+    understood.push(`A bit about you: ${listJoin(input.knowledge.personality)}.`);
+  }
+
   if (input.knowledge.jobsDeclined.length > 0) {
     understood.push(`You don't take on: ${listJoin(input.knowledge.jobsDeclined)}.`);
   }
@@ -95,8 +112,16 @@ export function buildHandoverRecap(input: HandoverInput): HandoverRecap {
     understood.push(`You take payment by ${listJoin(input.knowledge.paymentMethods)}.`);
   }
 
+  if (input.knowledge.certifications.length > 0) {
+    understood.push(`You're certified in: ${listJoin(input.knowledge.certifications)}.`);
+  }
+
   if (input.knowledge.parkingAccess.trim()) {
     understood.push(`On parking: ${input.knowledge.parkingAccess.trim()}`);
+  }
+
+  if (input.knowledge.emergencyNotes.trim()) {
+    understood.push(`On emergencies: ${input.knowledge.emergencyNotes.trim()}`);
   }
 
   if (input.businessRules.trim()) {

@@ -182,6 +182,43 @@ export function hasCustomizedBookingRules(rules: BookingRules): boolean {
   return JSON.stringify(rules) !== JSON.stringify(base);
 }
 
+/** Same "touched vs. untouched default" signal as
+ * `hasCustomizedBookingRules`, for the weekly hours grid instead of
+ * booking rules — Meet Your Receptionist needs to know whether
+ * weekend hours are real taught knowledge or just the untouched
+ * Mon–Fri/weekends-closed default, so it can say honestly "I don't
+ * yet know your weekend availability" rather than presenting a guess
+ * as a fact. */
+export function hasCustomizedHours(hours: Availability["hours"], opening?: string, closing?: string): boolean {
+  const base = defaultAvailability(opening, closing).hours;
+  return JSON.stringify(hours) !== JSON.stringify(base);
+}
+
+function sameHours(a: DayHours, b: DayHours): boolean {
+  return a.closed === b.closed && a.open === b.open && a.close === b.close;
+}
+
+/** A compact, human weekly-hours summary — consecutive days with
+ * identical hours collapse into one line ("Monday–Friday: 8:00–17:30")
+ * instead of seven separate ones. Used by Meet Your Receptionist so
+ * real diary data reads the same way there as it does everywhere else
+ * this file already describes hours. */
+export function describeWeeklyHours(hours: Availability["hours"]): string[] {
+  const lines: string[] = [];
+  let i = 0;
+  while (i < DAY_KEYS.length) {
+    const start = i;
+    const day = hours[DAY_KEYS[i]!]!;
+    let end = i;
+    while (end + 1 < DAY_KEYS.length && sameHours(hours[DAY_KEYS[end + 1]!]!, day)) end++;
+    const label =
+      start === end ? DAY_LABELS[DAY_KEYS[start]!] : `${DAY_LABELS[DAY_KEYS[start]!]}–${DAY_LABELS[DAY_KEYS[end]!]}`;
+    lines.push(`${label}: ${day.closed ? "Closed" : `${day.open}–${day.close}`}`);
+    i = end + 1;
+  }
+  return lines;
+}
+
 /**
  * The first real day she could offer, forward-searching up to two
  * weeks using the same rules standingForDate already applies (day

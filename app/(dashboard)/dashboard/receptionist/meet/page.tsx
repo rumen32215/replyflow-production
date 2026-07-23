@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { parseKnowledge } from "@/lib/knowledge";
+import { parseAvailability } from "@/lib/availability";
 import { buildHandoverRecap } from "@/lib/receptionist-handover";
 import { MeetYourReceptionist } from "@/components/dashboard/receptionist/meet-your-receptionist";
 
@@ -24,7 +25,7 @@ export default async function MeetYourReceptionistPage() {
   const { data: business, error: businessError } = await supabase
     .from("businesses")
     .select(
-      "id, business_name, trade, services, service_areas, opening_time, closing_time, offers_emergency_callouts, charges_callout_fee, callout_fee_amount, receptionist_name, business_knowledge"
+      "id, business_name, trade, services, service_areas, opening_time, closing_time, availability, offers_emergency_callouts, charges_callout_fee, callout_fee_amount, receptionist_name, business_knowledge"
     )
     .eq("owner_id", user.id)
     .maybeSingle();
@@ -45,6 +46,7 @@ export default async function MeetYourReceptionistPage() {
     serviceAreas: business.service_areas ?? [],
     openingTime: business.opening_time,
     closingTime: business.closing_time,
+    availability: parseAvailability(business.availability, business.opening_time, business.closing_time),
     offersEmergencyCallouts: business.offers_emergency_callouts,
     chargesCalloutFee: business.charges_callout_fee,
     calloutFeeAmount: business.callout_fee_amount,

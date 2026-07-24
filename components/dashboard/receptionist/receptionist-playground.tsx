@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { AlertTriangle, ArrowRight, Briefcase, Check, Headset, ListChecks, Sparkles, ShieldCheck, Smile, Zap, type LucideIcon } from "lucide-react";
 import { SettleCard, GentleSwap, press } from "@/components/shared/motion";
+import { KnowledgeTabs } from "@/components/dashboard/knowledge-tabs";
 import { Acknowledgement, ACK, randomAck, useAcknowledgement } from "@/components/shared/acknowledgement";
 import { PhonePreview } from "@/components/shared/phone-preview";
 import { TeachingCard } from "@/components/shared/teaching-card";
@@ -359,6 +360,7 @@ export function ReceptionistPlayground({
 
   return (
     <div className="mx-auto max-w-5xl">
+      <KnowledgeTabs />
       {/* Arrival — one calm sentence, no technical language. */}
       <SettleCard className="mb-6">
         <h1 className="text-[24px] font-extrabold tracking-tight md:text-[26px]" suppressHydrationWarning>

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { SettleCard } from "@/components/shared/motion";
+import { KnowledgeTabs } from "@/components/dashboard/knowledge-tabs";
 import { ConfidenceBar } from "@/components/shared/confidence-bar";
 import { KnownTopics } from "@/components/dashboard/everything-i-know/known-topics";
 import { LearningTopics } from "@/components/dashboard/everything-i-know/learning-topics";
@@ -96,6 +97,7 @@ export default async function EverythingIKnowPage() {
 
   return (
     <div className="mx-auto max-w-[900px] space-y-6">
+      <KnowledgeTabs />
       <SettleCard className="rounded-2xl border border-border bg-card p-6 shadow-sm">
         <h1 className="text-[24px] font-extrabold tracking-tight">Everything I know</h1>
         <p className="mt-1 text-[14px] text-muted-foreground">

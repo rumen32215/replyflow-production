@@ -53,6 +53,14 @@ import { cn } from "@/lib/utils";
 
 type TopicId = "behaviours" | "rules" | "escalation";
 
+/** Hiring Experience redesign — named out loud when a topic advances,
+ * instead of a silent auto-open. */
+const NEXT_TOPIC_PROMPT: Record<TopicId, string> = {
+  behaviours: "I'll ask what I should always do when someone gets in touch.",
+  rules: "I'll ask about your house rules.",
+  escalation: "I'll ask when you want me to bring you in.",
+};
+
 /** One-line collapsed summary in her voice — labels she's already
  * ticked, plus any free-text notes, never the raw persisted string. */
 function summariseTopic(selected: Set<string>, notes: string, options: readonly TeachingOption[]): string | null {
@@ -228,7 +236,18 @@ export function ReceptionistPlayground({
     if (prevNextTopicId.current === undefined) {
       if (!initialTopic) setOpen(nextTopicId);
     } else if (nextTopicId !== prevNextTopicId.current && !typingRef.current) {
-      setOpen((current) => (current === prevNextTopicId.current ? nextTopicId : current));
+      const justCompleted = prevNextTopicId.current;
+      setOpen((current) => {
+        if (current !== justCompleted) return current;
+        // Hiring Experience redesign: name what's next, in her voice,
+        // the moment a topic genuinely advances — same "she leads the
+        // interview" idea Business teaching's group-completion
+        // acknowledgement already uses, applied here too.
+        if (justCompleted && nextTopicId) {
+          ackRef.current = `Got it. Next, ${NEXT_TOPIC_PROMPT[nextTopicId]}`;
+        }
+        return nextTopicId;
+      });
     }
     prevNextTopicId.current = nextTopicId;
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -509,11 +528,23 @@ export function ReceptionistPlayground({
             </p>
           </SettleCard>
 
-          <TeachingTurn delay={0.05} question="How should I sound when I answer?" learned>
-            <div className="flex flex-wrap gap-2">
+          <TeachingTurn delay={0.05} question="Which of these sounds most like you?" learned>
+            {/* Hiring Experience redesign: choosing IS the demonstration
+             * — the same customer message, answered in each real tone,
+             * using whatever's actually been taught so far (never a
+             * hardcoded example line). Replaces picking a pill and then
+             * separately scrolling to the phone preview to see what it
+             * meant — one tap instead of two moments. */}
+            <div className="space-y-2">
               {TONES.map((t) => {
                 const on = tone === t.value;
                 const Icon = t.icon;
+                const preview = buildPreviewConversation(
+                  { businessName, tone: t.value, behaviours, rules, escalation, offersEmergency, chargesCalloutFee, calloutFeeAmount },
+                  scenario,
+                  { availability }
+                );
+                const exampleReply = preview.turns[2]?.text ?? "";
                 return (
                   <motion.button
                     key={t.value}
@@ -525,23 +556,29 @@ export function ReceptionistPlayground({
                     }}
                     aria-pressed={on}
                     className={cn(
-                      "flex items-center gap-1.5 rounded-full px-4 py-2 text-[12.5px] transition-all",
-                      on
-                        ? cn("text-white shadow-sm", t.accent)
-                        : "border border-border bg-card text-muted-foreground hover:text-foreground"
+                      "block w-full rounded-xl border p-3 text-left transition-all",
+                      on ? "border-primary/40 bg-primary/5 shadow-sm" : "border-border bg-card hover:border-primary/20"
                     )}
                   >
-                    <Icon className="h-3 w-3" />
-                    <span className={on ? "font-semibold" : "font-medium"}>{t.label}</span>
+                    <div className="mb-1.5 flex items-center gap-1.5">
+                      <span
+                        className={cn(
+                          "flex h-5 w-5 shrink-0 items-center justify-center rounded-full",
+                          on ? cn("text-white", t.accent) : "bg-muted text-muted-foreground"
+                        )}
+                      >
+                        <Icon className="h-2.5 w-2.5" />
+                      </span>
+                      <span className={cn("text-[12.5px]", on ? "font-semibold text-foreground" : "font-medium text-muted-foreground")}>
+                        {t.label}
+                      </span>
+                      {on && <Check className="h-3 w-3 text-primary" strokeWidth={3} />}
+                    </div>
+                    <p className="text-[12.5px] italic leading-relaxed text-muted-foreground">&ldquo;{exampleReply}&rdquo;</p>
                   </motion.button>
                 );
               })}
             </div>
-            <p className="text-[11.5px] italic text-muted-foreground">
-              {tone === "professional" && "“Hello, thanks for contacting your business. How can we help today?”"}
-              {tone === "concise" && "“Your business here — what's the issue?”"}
-              {tone === "friendly" && "“Hi there! Thanks for getting in touch. How can I help?”"}
-            </p>
             <OwnWordsInput
               value={toneNotes}
               onChange={(v) => {
@@ -628,7 +665,7 @@ export function ReceptionistPlayground({
                 which situations are still serious enough to bring you in personally.
               </p>
             )}
-            <OptionChips options={ESCALATION_OPTIONS} selected={escalation} onToggle={(id) => toggle(escalation, setEscalation, id, randomAck())} accent="amber" />
+            <RuleList options={ESCALATION_OPTIONS} selected={escalation} onToggle={(id) => toggle(escalation, setEscalation, id, randomAck())} accent="amber" />
             <OwnWordsInput
               value={escalationNotes}
               onChange={(v) => {
@@ -809,19 +846,41 @@ function OptionChips({
 /**
  * House rules get a different rhythm on purpose — a checklist, not a
  * row of chips. Rules are firmer than a casual preference, so tapping
- * feels like ticking a policy, not picking a vibe.
+ * feels like ticking a policy, not picking a vibe. `accent` (Hiring
+ * Experience redesign) lets escalation reuse this exact list — each
+ * option is a real "should I always get you for this?" decision, not
+ * a casual preference either, so the same firmer rhythm fits — while
+ * keeping its own amber identity instead of borrowing slate's.
  */
+const RULE_LIST_ACCENT: Record<"slate" | "amber", { border: string; onBg: string; onText: string; indicator: string }> = {
+  slate: {
+    border: "border-slate-200",
+    onBg: "bg-slate-100",
+    onText: "text-slate-800",
+    indicator: "border-slate-600 bg-slate-600",
+  },
+  amber: {
+    border: "border-amber-200",
+    onBg: "bg-amber-100",
+    onText: "text-amber-800",
+    indicator: "border-amber-600 bg-amber-600",
+  },
+};
+
 function RuleList({
   options,
   selected,
   onToggle,
+  accent = "slate",
 }: {
   options: readonly TeachingOption[];
   selected: Set<string>;
   onToggle: (id: string) => void;
+  accent?: "slate" | "amber";
 }) {
+  const palette = RULE_LIST_ACCENT[accent];
   return (
-    <div className="overflow-hidden rounded-xl border border-slate-200">
+    <div className={cn("overflow-hidden rounded-xl border", palette.border)}>
       {options.map((option, i) => {
         const on = selected.has(option.id);
         return (
@@ -833,19 +892,19 @@ function RuleList({
             onClick={() => onToggle(option.id)}
             className={cn(
               "flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left text-[12.5px] transition-colors",
-              i > 0 && "border-t border-slate-200",
-              on ? "bg-slate-100 font-semibold text-slate-800" : "bg-card text-muted-foreground hover:bg-slate-50"
+              i > 0 && cn("border-t", palette.border),
+              on ? cn(palette.onBg, "font-semibold", palette.onText) : "bg-card text-muted-foreground hover:bg-slate-50"
             )}
           >
             <span
               className={cn(
                 "flex h-4 w-4 shrink-0 items-center justify-center rounded-full border transition-colors",
-                on ? "border-slate-600 bg-slate-600 text-white" : "border-border"
+                on ? cn(palette.indicator, "text-white") : "border-border"
               )}
             >
               {on && <Check className="h-2.5 w-2.5" strokeWidth={3.5} />}
             </span>
-            {option.label}
+            {option.question ?? option.label}
           </motion.button>
         );
       })}

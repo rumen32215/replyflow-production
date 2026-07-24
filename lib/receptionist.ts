@@ -21,8 +21,18 @@ export type Tone = "professional" | "friendly" | "concise";
 
 export interface TeachingOption {
   id: string;
+  /** Short chip/summary text — used in collapsed one-line summaries
+   * (summariseTopic) and anywhere space is tight. Kept short even when
+   * `question` exists. */
   label: string;
+  /** The exact string persisted/parsed (see parseOptions/composeOptions)
+   * — never changes without a real migration of already-saved data. */
   text: string;
+  /** Hiring Experience redesign: the same option, phrased as the real
+   * scenario a receptionist would face — shown in the full teaching
+   * row instead of `label`, where there's room for it. Falls back to
+   * `label` when absent. */
+  question?: string;
 }
 
 export const BEHAVIOUR_OPTIONS: readonly TeachingOption[] = [
@@ -41,11 +51,36 @@ export const RULE_OPTIONS: readonly TeachingOption[] = [
   { id: "always-ask-photos", label: "Always ask for photos", text: "Always ask for a photo of the issue before finishing the conversation." },
 ] as const;
 
+// Hiring Experience redesign: `question` reframes each option as the
+// real scenario a receptionist would actually face, not an abstract
+// category name — "a decision, not a setting." `label` (short, used in
+// collapsed summaries) and `text` (the persisted string) are both
+// untouched, so nothing already saved for a real business changes.
 export const ESCALATION_OPTIONS: readonly TeachingOption[] = [
-  { id: "gas-leak", label: "A gas leak is mentioned", text: "Hand off immediately if the customer mentions a gas leak." },
-  { id: "flooding", label: "There's flooding", text: "Hand off immediately if there's flooding or major water damage." },
-  { id: "wants-person", label: "They ask for a person", text: "Hand off if the customer directly asks to speak to a person." },
-  { id: "complaint", label: "They're unhappy", text: "Hand off if the customer is making a complaint." },
+  {
+    id: "gas-leak",
+    label: "A gas leak is mentioned",
+    question: "Someone messages smelling gas — should I always get you immediately, no matter what?",
+    text: "Hand off immediately if the customer mentions a gas leak.",
+  },
+  {
+    id: "flooding",
+    label: "There's flooding",
+    question: "There's flooding or serious water damage — should I always get you immediately?",
+    text: "Hand off immediately if there's flooding or major water damage.",
+  },
+  {
+    id: "wants-person",
+    label: "They ask for a person",
+    question: "They directly ask to speak to a real person — should I always get you?",
+    text: "Hand off if the customer directly asks to speak to a person.",
+  },
+  {
+    id: "complaint",
+    label: "They're unhappy",
+    question: "They're making a complaint — should I always get you?",
+    text: "Hand off if the customer is making a complaint.",
+  },
 ] as const;
 
 /** Reverse-detects which options are "on" inside a saved plain-text

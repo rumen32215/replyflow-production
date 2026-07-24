@@ -458,18 +458,37 @@ export function BusinessMemory({
       title: "Emergency call-outs",
       content: (
         <div className="space-y-1">
+          {/* Hiring Experience redesign: a real scenario, not a settings
+           * label — "would you go out for something like that" is the
+           * actual question a receptionist would need answered, and the
+           * call-out fee only follows naturally once the answer is yes,
+           * the same way a real conversation would raise it. */}
           <ToggleRow
-            label="Emergency call-outs"
-            description="Accept urgent jobs when customers need help fast"
+            label="Would you go out for something like that?"
+            description="It's 11pm and someone messages saying their boiler's leaking badly — I'll only ever offer this once you've said yes."
             checked={offersEmergency === true}
             onChange={(v) => learn(() => setOffersEmergency(v), ACK.updated)}
           />
-          <ToggleRow
-            label="Call-out fee"
-            description="I'll mention it upfront so there are no surprises"
-            checked={chargesCalloutFee === true}
-            onChange={(v) => learn(() => setChargesCalloutFee(v), ACK.updated)}
-          />
+          <AnimatePresence initial={false}>
+            {offersEmergency === true && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: "auto" }}
+                exit={{ opacity: 0, height: 0 }}
+                transition={{ duration: 0.28, ease: EASE }}
+                className="overflow-hidden"
+              >
+                <div className="pt-1">
+                  <ToggleRow
+                    label="Is there a call-out fee on top?"
+                    description="So I can mention it upfront, before they're surprised by it."
+                    checked={chargesCalloutFee === true}
+                    onChange={(v) => learn(() => setChargesCalloutFee(v), ACK.updated)}
+                  />
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
           <AnimatePresence initial={false}>
             {chargesCalloutFee && (
               <motion.div
@@ -518,8 +537,8 @@ export function BusinessMemory({
     {
       id: "faqs",
       group: "goodToKnow",
-      title: "Questions customers often ask",
-      content: <FaqEditor faqs={faqs} onChange={(next) => learn(() => setFaqs(next))} />,
+      title: "What's something customers ask you almost every day?",
+      content: <FaqEditor faqs={faqs} onChange={(next, ack) => learn(() => setFaqs(next), ack)} />,
     },
   ];
 
@@ -563,7 +582,7 @@ export function BusinessMemory({
       const justCompleted = prevFirstIncomplete.current;
       setOpenGroup((current) => (current === justCompleted ? firstIncompleteGroup : current));
       if (justCompleted) {
-        ackRef.current =
+        const base =
           justCompleted === "identity"
             ? "Perfect. I can now introduce your business."
             : justCompleted === "scope"
@@ -571,6 +590,10 @@ export function BusinessMemory({
               : justCompleted === "commercial"
                 ? "Noted. I know how you like to be paid."
                 : "Thanks. That's everything I need for now.";
+        // Hiring Experience redesign: name what's next, in her voice,
+        // instead of a silent auto-advance — "she leads the interview"
+        // said out loud, not just implied by which card opens.
+        ackRef.current = firstIncompleteGroup ? `${base} Next, let's cover ${GROUP_LABEL[firstIncompleteGroup].toLowerCase()}.` : base;
       }
     }
     prevFirstIncomplete.current = firstIncompleteGroup;
@@ -1053,9 +1076,26 @@ function ChipEditor({
   );
 }
 
-function FaqEditor({ faqs, onChange }: { faqs: Faq[]; onChange: (faqs: Faq[]) => void }) {
+function FaqEditor({ faqs, onChange }: { faqs: Faq[]; onChange: (faqs: Faq[], ack?: string) => void }) {
   function update(index: number, patch: Partial<Faq>) {
     onChange(faqs.map((f, i) => (i === index ? { ...f, ...patch } : f)));
+  }
+
+  // Hiring Experience redesign: reflect the specific answer back
+  // ("next time someone asks about X, I'll say exactly that") instead
+  // of a generic "Saved" — proof the answer landed somewhere real, not
+  // just a table row. Computed from the current field values on every
+  // keystroke (not a one-off "just transitioned" flag), so whatever
+  // the state is when the debounced save actually fires, the
+  // acknowledgement it shows is still accurate.
+  function updateAnswer(index: number, answer: string) {
+    const next = faqs.map((f, i) => (i === index ? { ...f, answer } : f));
+    const question = faqs[index]?.question.trim();
+    const ack =
+      answer.trim() && question
+        ? `Got it — next time someone asks ${question.replace(/\?+$/, "").toLowerCase()}, I'll say exactly that.`
+        : undefined;
+    onChange(next, ack);
   }
 
   const askedAlready = new Set(faqs.map((f) => f.question.trim()));
@@ -1064,7 +1104,7 @@ function FaqEditor({ faqs, onChange }: { faqs: Faq[]; onChange: (faqs: Faq[]) =>
   return (
     <div className="space-y-3">
       <p className="text-[12.5px] leading-relaxed text-muted-foreground">
-        Add an answer once and I&apos;ll use it whenever a customer asks.
+        Teach me the answer once, and I&apos;ll give it every time — word for word, never a guess.
       </p>
 
       {/* Suggested before asking the owner to write their own. */}
@@ -1113,7 +1153,7 @@ function FaqEditor({ faqs, onChange }: { faqs: Faq[]; onChange: (faqs: Faq[]) =>
             </div>
             <textarea
               value={faq.answer}
-              onChange={(e) => update(index, { answer: e.target.value })}
+              onChange={(e) => updateAnswer(index, e.target.value)}
               placeholder="How should I answer?"
               rows={2}
               className="w-full resize-none rounded-lg border border-border bg-background px-3 py-2 text-[13px] leading-relaxed outline-none transition-colors placeholder:text-muted-foreground/60 focus:border-primary"
@@ -1128,7 +1168,7 @@ function FaqEditor({ faqs, onChange }: { faqs: Faq[]; onChange: (faqs: Faq[]) =>
         className="flex items-center gap-1.5 rounded-xl border border-dashed border-border px-4 py-2.5 text-[13px] font-semibold text-muted-foreground transition-colors hover:border-blue-300 hover:text-blue-600"
       >
         <Plus className="h-3.5 w-3.5" />
-        Add a question
+        Something else customers ask
       </motion.button>
     </div>
   );

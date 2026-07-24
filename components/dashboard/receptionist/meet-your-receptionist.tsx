@@ -66,11 +66,17 @@ export function MeetYourReceptionist({
   async function confirm() {
     if (isSaving) return;
     startSaving();
-    const { error } = await supabase
+    // .select() and checking the returned row matters here, not just
+    // the error field — an update that matches zero rows (a stale or
+    // invalid session, an RLS mismatch) returns no error either, and
+    // this is the one confirmation in the product that must never
+    // show as accepted unless it genuinely was.
+    const { data, error } = await supabase
       .from("businesses")
       .update({ handover_confirmed_at: new Date().toISOString() })
-      .eq("id", businessId);
-    if (error) {
+      .eq("id", businessId)
+      .select("id");
+    if (error || !data || data.length === 0) {
       softError();
       return;
     }

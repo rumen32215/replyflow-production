@@ -786,8 +786,32 @@ function BusinessProfileCard({
   serviceAreas: string[];
   offersEmergency: boolean | null;
 }) {
+  // Hiring Experience redesign: this card is the Business page's own
+  // "proof" surface (no chat/phone preview here — see the Sprint 8.7
+  // note above on why that's deliberate). A brief highlight whenever
+  // its real, rendered content changes is how "she's getting it" stays
+  // visible here too, without reintroducing the preview that already
+  // tested badly on this exact page.
+  const signature = JSON.stringify([businessName, description, services, serviceAreas, offersEmergency]);
+  const firstSignature = useRef(signature);
+  const [justUpdated, setJustUpdated] = useState(false);
+  useEffect(() => {
+    if (signature === firstSignature.current) return;
+    firstSignature.current = signature;
+    setJustUpdated(true);
+    const t = setTimeout(() => setJustUpdated(false), 900);
+    return () => clearTimeout(t);
+  }, [signature]);
+
+  const restShadow = "0 1px 2px 0 rgba(0,0,0,0.05)";
   return (
-    <div className="rounded-2xl border border-border bg-card p-5 shadow-sm">
+    <motion.div
+      animate={{
+        boxShadow: justUpdated ? `${restShadow}, 0 0 0 3px rgba(37,99,235,0.18)` : `${restShadow}, 0 0 0 0px rgba(37,99,235,0)`,
+      }}
+      transition={{ duration: justUpdated ? 0.15 : 0.7, ease: EASE }}
+      className="rounded-2xl border border-border bg-card p-5"
+    >
       <div className="flex items-center gap-3">
         <Avatar className="h-11 w-11 border border-border">
           {logoUrl && <AvatarImage src={logoUrl} alt="" />}
@@ -829,7 +853,7 @@ function BusinessProfileCard({
           </div>
         </div>
       )}
-    </div>
+    </motion.div>
   );
 }
 

@@ -5,6 +5,26 @@
  * testable and reviewable in one place, not scattered through JSX.
  */
 
+/**
+ * Release polish (ReplyFlow v1 Polish Pass): a step's own `done` signal
+ * is real and independent — e.g. WhatsApp can genuinely get connected
+ * before the receptionist is taught, since nothing blocks that page
+ * from being reached directly — but a checklist showing a later step
+ * checked off while an earlier one still isn't reads as broken, not
+ * honest. `steps` is already declared in its intended order by the
+ * caller; this only decides what's DISPLAYED as complete (a real
+ * prefix of consecutively-done steps), never the real done flags
+ * themselves.
+ */
+export function sequentialSetupSteps<T extends { done: boolean }>(steps: readonly T[]): (T & { displayDone: boolean })[] {
+  let allPriorDone = true;
+  return steps.map((step) => {
+    const displayDone = step.done && allPriorDone;
+    allPriorDone = allPriorDone && step.done;
+    return { ...step, displayDone };
+  });
+}
+
 export function minutesSince(iso: string): number {
   return Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60000));
 }

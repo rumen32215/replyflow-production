@@ -6,7 +6,7 @@ import { motion } from "framer-motion";
 import { ArrowRight, Check, Headset } from "lucide-react";
 import { SettleCard, GentleSwap, press } from "@/components/shared/motion";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { calmStatusMessages } from "@/lib/dashboard-signals";
+import { calmStatusMessages, sequentialSetupSteps } from "@/lib/dashboard-signals";
 import type { TodaysPriority } from "@/lib/brain";
 import { cn } from "@/lib/utils";
 
@@ -218,7 +218,13 @@ export interface JourneyStep {
  * say that this doesn't already cover.
  */
 export function SetupJourney({ name, steps }: { name: string; steps: readonly JourneyStep[] }) {
-  const doneCount = steps.filter((s) => s.done).length;
+  // Release polish (ReplyFlow v1 Polish Pass): steps are already
+  // declared in their intended order in app/(dashboard)/dashboard/
+  // page.tsx ("always before WhatsApp, never after") — see
+  // sequentialSetupSteps for why a later step's real `done` shouldn't
+  // display as checked ahead of an earlier one.
+  const displaySteps = sequentialSetupSteps(steps);
+  const doneCount = displaySteps.filter((s) => s.displayDone).length;
   const nextStep = steps.find((s) => !s.done) ?? null;
 
   return (
@@ -239,7 +245,7 @@ export function SetupJourney({ name, steps }: { name: string; steps: readonly Jo
         <p className="mt-1 text-[14px] leading-relaxed text-muted-foreground">Let&apos;s get your office ready.</p>
 
         <div className="mt-5 space-y-1">
-          {steps.map((step) => {
+          {displaySteps.map((step) => {
             const isNext = nextStep?.id === step.id;
             return (
               <Link
@@ -253,12 +259,12 @@ export function SetupJourney({ name, steps }: { name: string; steps: readonly Jo
                 <span
                   className={cn(
                     "flex h-5 w-5 shrink-0 items-center justify-center rounded-full",
-                    step.done ? "bg-success text-success-foreground" : "border border-border"
+                    step.displayDone ? "bg-success text-success-foreground" : "border border-border"
                   )}
                 >
-                  {step.done && <Check className="h-3 w-3" strokeWidth={3} />}
+                  {step.displayDone && <Check className="h-3 w-3" strokeWidth={3} />}
                 </span>
-                <span className={cn("text-[14px]", step.done ? "text-muted-foreground" : "font-semibold text-foreground")}>
+                <span className={cn("text-[14px]", step.displayDone ? "text-muted-foreground" : "font-semibold text-foreground")}>
                   {step.label}
                 </span>
               </Link>

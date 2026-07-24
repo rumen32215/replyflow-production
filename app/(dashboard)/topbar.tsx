@@ -1,12 +1,14 @@
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { SignOutButton } from "@/app/(dashboard)/sign-out-button";
 import { Logo } from "@/components/shared/logo";
-import { TopbarNav } from "@/app/(dashboard)/topbar-nav";
+import { MobileSecondaryNav } from "@/app/(dashboard)/mobile-secondary-nav";
 
 /**
- * Settings lives here — genuine account preferences don't earn a
- * primary tab (Dashboard Map: five destinations only). On mobile the
- * topbar also carries the logo, since the sidebar is hidden.
+ * On mobile the topbar also carries the logo (sidebar is hidden) and
+ * the two secondary destinations that don't fit the bottom tab bar
+ * (Hours, Settings — see mobile-secondary-nav.tsx). Desktop's sidebar
+ * already shows all six destinations, so the secondary nav hides
+ * there entirely rather than repeating them.
  */
 export function Topbar({
   businessName,
@@ -22,11 +24,9 @@ export function Topbar({
       </div>
       <div className="hidden md:block" />
       <div className="flex items-center gap-2 md:gap-3">
-        {/* Mission Control, Customers, Everything I Know, Settings —
-         * reachable from here rather than as primary tabs (Dashboard
-         * Map decision). Sprint 8.5 gave this row a real active state;
-         * see topbar-nav.tsx. */}
-        <TopbarNav />
+        <div className="flex items-center gap-1 md:hidden">
+          <MobileSecondaryNav />
+        </div>
         <Avatar className="h-9 w-9 border border-border">
           {logoUrl && <AvatarImage src={logoUrl} alt={businessName} />}
           <AvatarFallback className="text-xs">{businessName.slice(0, 1).toUpperCase()}</AvatarFallback>

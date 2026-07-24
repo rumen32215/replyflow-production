@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { motion } from "framer-motion";
-import { Home, MessagesSquare, Headset, CalendarDays, type LucideIcon } from "lucide-react";
+import { Home, MessagesSquare, Users, Brain, type LucideIcon } from "lucide-react";
 import { DASHBOARD_NAV } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 
@@ -11,22 +11,30 @@ import { cn } from "@/lib/utils";
  * The mobile tab bar — the primary way a tradesperson holds ReplyFlow.
  * Thumb-first: four large targets, instant touch acknowledgement, the
  * active indicator slides rather than flashes so the owner always
- * understands where they came from and where they are.
+ * understands where they came from and where they are. Only the four
+ * `primary` destinations from DASHBOARD_NAV — Hours and Settings are
+ * one tap further, via the topbar's secondary nav (a thumb-reachable
+ * bar tops out around four large targets before it gets cramped).
  */
 
-const ICONS: Record<(typeof DASHBOARD_NAV)[number]["icon"], LucideIcon> = {
+const ICONS: Record<"Home" | "MessagesSquare" | "Users" | "Brain", LucideIcon> = {
   Home,
   MessagesSquare,
-  Headset,
-  CalendarDays,
+  Users,
+  Brain,
 };
+
+const PRIMARY_NAV = DASHBOARD_NAV.filter(
+  (item): item is (typeof DASHBOARD_NAV)[number] & { icon: "Home" | "MessagesSquare" | "Users" | "Brain" } =>
+    item.primary
+);
 
 function isActive(pathname: string, href: string) {
   if (href === "/dashboard") return pathname === "/dashboard";
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-export function BottomNav({ receptionistName = null }: { receptionistName?: string | null }) {
+export function BottomNav() {
   const pathname = usePathname();
 
   return (
@@ -36,11 +44,9 @@ export function BottomNav({ receptionistName = null }: { receptionistName?: stri
       style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
     >
       <div className="mx-auto flex max-w-lg items-stretch justify-around">
-        {DASHBOARD_NAV.map((item) => {
+        {PRIMARY_NAV.map((item) => {
           const Icon = ICONS[item.icon];
           const active = isActive(pathname, item.href);
-          // The chosen name, not the role — same pattern as the sidebar.
-          const label = item.href === "/dashboard/receptionist" && receptionistName ? receptionistName : item.label;
           return (
             <Link
               key={item.href}
@@ -60,7 +66,7 @@ export function BottomNav({ receptionistName = null }: { receptionistName?: stri
               <motion.span whileTap={{ scale: 0.9 }} className="flex flex-col items-center gap-0.5">
                 <Icon className="h-[21px] w-[21px]" strokeWidth={active ? 2.4 : 2} />
                 <span className={cn("truncate text-[10.5px] leading-tight", active ? "font-semibold" : "font-medium")}>
-                  {label}
+                  {item.label}
                 </span>
               </motion.span>
             </Link>

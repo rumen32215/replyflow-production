@@ -3,23 +3,26 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { motion } from "framer-motion";
-import { Home, MessagesSquare, Headset, CalendarDays, type LucideIcon } from "lucide-react";
+import { Home, MessagesSquare, Users, Brain, CalendarDays, Settings, type LucideIcon } from "lucide-react";
 import { Logo } from "@/components/shared/logo";
 import { DASHBOARD_NAV } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 
 /**
- * Desktop-only sidebar. The same four destinations as the mobile
- * bottom nav — desktop gains space, never different functionality.
- * Navigation never flashes: the active highlight gently slides
- * between items via a shared layoutId.
+ * Desktop-only sidebar. All six destinations (ReplyFlow v1 Product
+ * Blueprint) — desktop has room for the complete navigation; mobile's
+ * bottom bar shows only the four `primary` ones. Navigation never
+ * flashes: the active highlight gently slides between items via a
+ * shared layoutId.
  */
 
 const ICONS: Record<(typeof DASHBOARD_NAV)[number]["icon"], LucideIcon> = {
   Home,
   MessagesSquare,
-  Headset,
+  Users,
+  Brain,
   CalendarDays,
+  Settings,
 };
 
 function isActive(pathname: string, href: string) {
@@ -27,7 +30,7 @@ function isActive(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-export function Sidebar({ receptionistName = null }: { receptionistName?: string | null }) {
+export function Sidebar() {
   const pathname = usePathname();
 
   return (
@@ -40,9 +43,6 @@ export function Sidebar({ receptionistName = null }: { receptionistName?: string
         {DASHBOARD_NAV.map((item) => {
           const Icon = ICONS[item.icon];
           const active = isActive(pathname, item.href);
-          // The chosen name, not the role — a character, not a
-          // database field — wherever it fits naturally in the chrome.
-          const label = item.href === "/dashboard/receptionist" && receptionistName ? receptionistName : item.label;
 
           return (
             <Link
@@ -61,7 +61,7 @@ export function Sidebar({ receptionistName = null }: { receptionistName?: string
                 />
               )}
               <Icon className="relative h-4 w-4" />
-              <span className="relative truncate">{label}</span>
+              <span className="relative truncate">{item.label}</span>
             </Link>
           );
         })}

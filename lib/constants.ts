@@ -6,22 +6,29 @@
  */
 
 /**
- * The four primary destinations (ReplyFlow V3 — Front Desk). Rendered
- * as the bottom tab bar on mobile and the sidebar on desktop, from
- * this one list. Business ("her profile") is reached from a link on
- * Front Desk rather than the tab bar — a profile is something you tap
- * into from the relationship, not a fifth destination competing with
- * it. Settings lives in the topbar (genuine account preferences, not
- * a place of work); WhatsApp connection is reached from Front Desk's
- * fast lane and Settings, never from primary navigation.
+ * The complete v1 navigation (ReplyFlow v1 Product Blueprint) — six
+ * destinations, one list, single source of truth for the desktop
+ * sidebar (all six, desktop has room) and the mobile bottom tab bar
+ * (the four `primary` ones only — a thumb-reachable bar tops out
+ * around four large targets; Hours and Settings are one tap further
+ * on mobile, via the topbar's secondary nav).
+ *
+ * Receptionist and Business no longer have their own nav entries —
+ * both fold into Knowledge (checklist 2.5), which is what
+ * "/dashboard/everything-i-know" now serves as the entry point to.
+ * WhatsApp connection is reached from Settings and from Front Desk
+ * when its health actually needs attention (checklist 3.2), never
+ * from primary navigation.
  *
  * No AI terminology anywhere in labels (Decision 001).
  */
 export const DASHBOARD_NAV = [
-  { href: "/dashboard", label: "Front Desk", icon: "Home" },
-  { href: "/dashboard/conversations", label: "Conversations", icon: "MessagesSquare" },
-  { href: "/dashboard/receptionist", label: "Receptionist", icon: "Headset" },
-  { href: "/dashboard/availability", label: "Hours", icon: "CalendarDays" },
+  { href: "/dashboard", label: "Front Desk", icon: "Home", primary: true },
+  { href: "/dashboard/conversations", label: "Conversations", icon: "MessagesSquare", primary: true },
+  { href: "/dashboard/customers", label: "Customers", icon: "Users", primary: true },
+  { href: "/dashboard/everything-i-know", label: "Knowledge", icon: "Brain", primary: true },
+  { href: "/dashboard/availability", label: "Hours", icon: "CalendarDays", primary: false },
+  { href: "/dashboard/settings", label: "Settings", icon: "Settings", primary: false },
 ] as const;
 
 export const BRAND = {

@@ -677,8 +677,15 @@ export function BusinessMemory({
             </AnimatePresence>
           </SettleCard>
 
+          {/* Release polish (ReplyFlow v1 Polish Pass): "Business profile"
+           * was a leftover from before this page was renamed to "Your
+           * business" (Sprint 8.7) — the old name surviving right next
+           * to the new one read as a real inconsistency, not just a
+           * label. "Preview" names what the card actually is (a live
+           * "how this looks to someone new" summary), matching its own
+           * doc comment on BusinessProfileCard below. */}
           <p className="mb-2 mt-5 px-1 text-[11px] font-bold uppercase tracking-widest text-muted-foreground">
-            Business profile
+            Preview
           </p>
           <BusinessProfileCard
             businessName={businessName || initial.businessName}

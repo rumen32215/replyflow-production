@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { AlertTriangle, ArrowRight, Briefcase, Check, Headset, ListChecks, Sparkles, ShieldCheck, Smile, Zap, type LucideIcon } from "lucide-react";
 import { SettleCard, GentleSwap, press } from "@/components/shared/motion";
@@ -133,6 +134,7 @@ export function ReceptionistPlayground({
   initialTopic?: string | null;
 }) {
   const supabase = createClient();
+  const router = useRouter();
   const scenarios = useMemo(() => scenariosForTrade(trade), [trade]);
   const { message, isError, isSaving, startSaving, acknowledge, softError } = useAcknowledgement();
 
@@ -156,6 +158,42 @@ export function ReceptionistPlayground({
   const [autoReplyGeneral, setAutoReplyGeneral] = useState<boolean>(initial.autoReplyGeneralEnabled);
   const [savingAutoReply, setSavingAutoReply] = useState(false);
   const [scenarioId, setScenarioId] = useState<string>(scenarios[0]?.id ?? "problem");
+  const [nameInput, setNameInput] = useState(receptionistName ?? "");
+
+  /* Her name — moved here from Settings (Blueprint 2.4): who she is
+   * belongs where she's taught, not in account preferences. Same
+   * debounced, no-Save-button pattern as everywhere else; router.refresh()
+   * re-runs the dashboard layout's server fetch so the sidebar/bottom-nav
+   * label updates immediately, same fix this had when it lived in Settings. */
+  const nameFirstRender = useRef(true);
+  const nameRequestId = useRef(0);
+  useEffect(() => {
+    if (nameFirstRender.current) {
+      nameFirstRender.current = false;
+      return;
+    }
+    const t = setTimeout(async () => {
+      const thisRequest = ++nameRequestId.current;
+      startSaving();
+      try {
+        const { error } = await supabase
+          .from("businesses")
+          .update({ receptionist_name: nameInput.trim() || null })
+          .eq("id", businessId);
+        if (thisRequest !== nameRequestId.current) return;
+        if (error) {
+          softError();
+        } else {
+          acknowledge(nameInput.trim() ? `Got it — I'll go by ${nameInput.trim()}.` : "Got it.");
+          router.refresh();
+        }
+      } catch {
+        if (thisRequest === nameRequestId.current) softError();
+      }
+    }, 700);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nameInput]);
 
   // She leads the interview: only the next thing she doesn't know yet
   // is open. Behaviours, rules, and escalation are asked one at a
@@ -334,6 +372,15 @@ export function ReceptionistPlayground({
           Meet {receptionistName || "your receptionist"}
           <ArrowRight className="h-3.5 w-3.5" />
         </Link>
+        <label className="mt-4 block max-w-xs">
+          <span className="mb-1.5 block text-[12.5px] font-semibold text-muted-foreground">What would you like to call me?</span>
+          <input
+            value={nameInput}
+            onChange={(e) => setNameInput(e.target.value)}
+            placeholder="Optional — e.g. Sarah, Office, Assistant"
+            className="w-full rounded-xl border border-border bg-background px-3.5 py-2.5 text-[13.5px] outline-none transition-colors placeholder:text-muted-foreground/60 focus:border-primary"
+          />
+        </label>
       </SettleCard>
 
       <div className="flex flex-col gap-6 lg:grid lg:grid-cols-[1fr_360px] lg:items-start">

@@ -37,7 +37,7 @@ export default async function BusinessPage({ searchParams }: { searchParams: { t
   const { data: business } = await supabase
     .from("businesses")
     .select(
-      "id, business_name, trade, phone, business_description, services, service_areas, offers_emergency_callouts, charges_callout_fee, callout_fee_amount, business_knowledge"
+      "id, business_name, trade, phone, business_description, services, service_areas, offers_emergency_callouts, charges_callout_fee, callout_fee_amount, business_knowledge, logo_url"
     )
     .eq("owner_id", user.id)
     .maybeSingle();
@@ -70,6 +70,7 @@ export default async function BusinessPage({ searchParams }: { searchParams: { t
       initialTopic={initialTopic}
       initial={{
         businessName: business.business_name ?? "",
+        logoUrl: business.logo_url,
         phone: business.phone ?? "",
         description: business.business_description ?? "",
         services: business.services ?? [],

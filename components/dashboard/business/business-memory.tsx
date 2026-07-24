@@ -2,10 +2,11 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Check, ChevronDown, Plus, X } from "lucide-react";
+import { Camera, Check, ChevronDown, Plus, X } from "lucide-react";
 import { SettleCard, EASE, press } from "@/components/shared/motion";
 import { Acknowledgement, ACK, randomAck, useAcknowledgement } from "@/components/shared/acknowledgement";
 import { ConfidenceBar } from "@/components/shared/confidence-bar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Switch } from "@/components/ui/switch";
 import { createClient } from "@/lib/supabase/client";
 import {
@@ -57,6 +58,7 @@ export interface Faq {
 
 export interface BusinessMemoryInitial {
   businessName: string;
+  logoUrl: string | null;
   phone: string;
   description: string;
   services: string[];
@@ -109,6 +111,9 @@ export function BusinessMemory({
   const { message, isError, isSaving, startSaving, acknowledge, softError } = useAcknowledgement();
 
   const [businessName, setBusinessName] = useState(initial.businessName);
+  const [logoUrl, setLogoUrl] = useState(initial.logoUrl);
+  const [logoUploading, setLogoUploading] = useState(false);
+  const logoInputRef = useRef<HTMLInputElement>(null);
   const [phone, setPhone] = useState(initial.phone);
   const [description, setDescription] = useState(initial.description);
   const [services, setServices] = useState<string[]>(initial.services);
@@ -187,6 +192,46 @@ export function BusinessMemory({
     setKnowledge((k) => ({ ...k, ...patch }));
   }
 
+  /* Immediate upload, same as every other logo-adjacent flow this
+   * project has had (this project's first-ever Supabase Storage
+   * upload, originally on Settings — Blueprint moved the field here,
+   * not the upload logic, which is unchanged). */
+  async function handleLogoSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      softError();
+      return;
+    }
+    setLogoUploading(true);
+    try {
+      const ext = file.name.split(".").pop()?.toLowerCase() || "png";
+      const path = `${businessId}/logo.${ext}`;
+      const { error: uploadError } = await supabase.storage
+        .from("business-assets")
+        .upload(path, file, { upsert: true, cacheControl: "3600" });
+      if (uploadError) {
+        setLogoUploading(false);
+        softError();
+        return;
+      }
+      const { data } = supabase.storage.from("business-assets").getPublicUrl(path);
+      const freshUrl = `${data.publicUrl}?v=${Date.now()}`;
+      const { error: updateError } = await supabase.from("businesses").update({ logo_url: freshUrl }).eq("id", businessId);
+      setLogoUploading(false);
+      if (updateError) {
+        softError();
+        return;
+      }
+      setLogoUrl(freshUrl);
+      acknowledge("Nice. That's how customers will see you.");
+    } catch {
+      setLogoUploading(false);
+      softError();
+    }
+  }
+
   /* --------------------------- profile completeness --------------------- */
 
   // The shared Brain (lib/intelligence.ts) — this page only feeds its
@@ -252,6 +297,35 @@ export function BusinessMemory({
       title: "Business details",
       content: (
         <div className="space-y-3">
+          <div className="flex items-center gap-3.5 pb-1">
+            <button
+              type="button"
+              onClick={() => logoInputRef.current?.click()}
+              disabled={logoUploading}
+              aria-label="Upload business logo"
+              className="group relative flex h-14 w-14 shrink-0 items-center justify-center rounded-full disabled:opacity-60"
+            >
+              <Avatar className="h-14 w-14 border border-border">
+                {logoUrl && <AvatarImage src={logoUrl} alt={businessName} />}
+                <AvatarFallback className="text-[15px]">{(businessName || "?").slice(0, 1).toUpperCase()}</AvatarFallback>
+              </Avatar>
+              <span className="absolute inset-0 flex items-center justify-center rounded-full bg-black/0 text-transparent transition-all group-hover:bg-black/40 group-hover:text-white">
+                <Camera className="h-4 w-4" />
+              </span>
+            </button>
+            <div className="min-w-0">
+              <p className="text-[13.5px] font-semibold">Business logo</p>
+              <p className="text-[12px] text-muted-foreground">{logoUploading ? "Uploading…" : "Shown throughout your dashboard"}</p>
+            </div>
+            <input
+              ref={logoInputRef}
+              type="file"
+              accept="image/*"
+              onChange={handleLogoSelect}
+              className="hidden"
+              aria-hidden
+            />
+          </div>
           <MemoryField
             label="Business name"
             value={businessName}
@@ -602,6 +676,7 @@ export function BusinessMemory({
           </p>
           <BusinessProfileCard
             businessName={businessName || initial.businessName}
+            logoUrl={logoUrl}
             description={description}
             services={services}
             serviceAreas={serviceAreas}
@@ -640,12 +715,14 @@ export function BusinessMemory({
  */
 function BusinessProfileCard({
   businessName,
+  logoUrl,
   description,
   services,
   serviceAreas,
   offersEmergency,
 }: {
   businessName: string;
+  logoUrl: string | null;
   description: string;
   services: string[];
   serviceAreas: string[];
@@ -654,9 +731,12 @@ function BusinessProfileCard({
   return (
     <div className="rounded-2xl border border-border bg-card p-5 shadow-sm">
       <div className="flex items-center gap-3">
-        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-accent text-[15px] font-bold text-primary">
-          {(businessName || "?").slice(0, 1).toUpperCase()}
-        </div>
+        <Avatar className="h-11 w-11 border border-border">
+          {logoUrl && <AvatarImage src={logoUrl} alt="" />}
+          <AvatarFallback className="bg-accent text-[15px] font-bold text-primary">
+            {(businessName || "?").slice(0, 1).toUpperCase()}
+          </AvatarFallback>
+        </Avatar>
         <div className="min-w-0">
           <p className="truncate text-[15px] font-bold">{businessName || "Your business"}</p>
           {offersEmergency && <p className="text-[11.5px] text-success">Emergency call-outs available</p>}

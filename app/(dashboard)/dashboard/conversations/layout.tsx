@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { ConversationsShell } from "@/components/dashboard/conversations/conversations-shell";
+import { TEST_CONVERSATION_PHONE } from "@/lib/test-conversation";
 
 /**
  * Sprint 8.5 IA review: this layout used to also build a full Shared
@@ -35,6 +36,9 @@ export default async function ConversationsLayout({ children }: { children: Reac
           .from("conversations")
           .select("id, customer_name, customer_phone, last_message_preview, last_message_at, status")
           .eq("business_id", business.id)
+          // Test Conversations ("Try to break me") never appears
+          // alongside real customer history — lib/test-conversation.ts.
+          .neq("customer_phone", TEST_CONVERSATION_PHONE)
           .order("last_message_at", { ascending: false, nullsFirst: false }),
         // Which conversations have a booking waiting on the owner's
         // decision — an orthogonal signal to conversation status, so

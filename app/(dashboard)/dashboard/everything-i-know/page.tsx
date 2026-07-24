@@ -11,6 +11,7 @@ import { formatRecentChange } from "@/lib/everything-i-know-signals";
 import { parseAvailability } from "@/lib/availability";
 import { parseKnowledge } from "@/lib/knowledge";
 import { getBrainContext } from "@/lib/brain";
+import { TEST_CONVERSATION_PHONE } from "@/lib/test-conversation";
 
 export const metadata: Metadata = { title: "Everything I Know — ReplyFlow" };
 
@@ -49,7 +50,7 @@ export default async function EverythingIKnowPage() {
       .select("system_prompt, business_rules, escalation_rules, faqs, created_at, updated_at")
       .eq("business_id", businessId)
       .maybeSingle(),
-    supabase.from("conversations").select("id").eq("business_id", businessId),
+    supabase.from("conversations").select("id").eq("business_id", businessId).neq("customer_phone", TEST_CONVERSATION_PHONE),
     supabase.from("work_cards").select("conversation_id, status").eq("business_id", businessId),
   ]);
 

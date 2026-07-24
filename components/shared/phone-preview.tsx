@@ -19,7 +19,11 @@ export interface PreviewTurn {
   text: string;
 }
 
-function Bubble({
+/** Exported for reuse by Test Conversations
+ * (components/dashboard/receptionist/test-conversation.tsx) — a real
+ * scrolling thread, not a single fixed preview, but the same bubble
+ * language should read as one product either way. */
+export function Bubble({
   from,
   children,
   className,

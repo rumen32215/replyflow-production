@@ -199,9 +199,14 @@ export function MeetYourReceptionist({
                 For now, everything I do goes through you first — you&apos;ll see every reply before it sends. As you
                 get to know how I work, you can hand me more.
               </Bubble>
+              <Bubble>Want to see how I&apos;d actually handle something? Try me.</Bubble>
               <div className={cn("mt-2")}>
-                <Button onClick={() => router.push("/dashboard")} variant="primary" size="lg">
-                  Sounds good — take me to Front Desk
+                {/* Hiring Experience redesign (roadmap A2/A3): straight
+                 * into Test Conversations, in the same breath — before
+                 * WhatsApp is ever mentioned, per 03-Trust-Experience.md
+                 * §3-4. */}
+                <Button onClick={() => router.push("/dashboard/receptionist/try")} variant="primary" size="lg">
+                  Try to break me
                 </Button>
               </div>
             </motion.div>

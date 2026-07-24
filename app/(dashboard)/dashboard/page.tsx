@@ -28,6 +28,7 @@ import { parseAvailability } from "@/lib/availability";
 import { parseKnowledge } from "@/lib/knowledge";
 import { getBrainContext, selectTodaysPriority } from "@/lib/brain";
 import { groupForStatus, type ConversationGroup } from "@/lib/conversations";
+import { TEST_CONVERSATION_PHONE } from "@/lib/test-conversation";
 import { toConversationState } from "@/lib/reply-engine/understanding/state";
 
 export const metadata: Metadata = { title: "Front Desk — ReplyFlow" };
@@ -63,6 +64,19 @@ export default async function HomePage() {
   if (!business) redirect("/welcome");
 
   const businessId = business.id;
+  // Test Conversations ("Try to break me") writes real reply_drafts
+  // rows via the real pipeline (lib/test-conversation.ts) — those
+  // aren't reachable through the conversations list already filtered
+  // above (reply_drafts is queried by business_id directly, not
+  // joined), so its conversation id is looked up once here and
+  // excluded from both reply_drafts queries below.
+  const { data: testConversation } = await supabase
+    .from("conversations")
+    .select("id")
+    .eq("business_id", businessId)
+    .eq("customer_phone", TEST_CONVERSATION_PHONE)
+    .maybeSingle();
+  const testConversationId = testConversation?.id ?? null;
   const startOfToday = new Date();
   startOfToday.setHours(0, 0, 0, 0);
   const endOfToday = new Date(startOfToday);
@@ -90,13 +104,20 @@ export default async function HomePage() {
     // conversation — the one fetch every section below reads from for
     // "is this waiting, and is it actually an emergency" (Conversation
     // State's real goal type, never inferred from message text).
+    // Test Conversations ("Try to break me") never appears on Front
+    // Desk alongside real customer activity — lib/test-conversation.ts.
     supabase
       .from("conversations")
       .select("id, customer_name, customer_phone, last_message_preview, last_message_at, status, ai_state")
       .eq("business_id", businessId)
+      .neq("customer_phone", TEST_CONVERSATION_PHONE)
       .order("last_message_at", { ascending: false, nullsFirst: false })
       .limit(50),
-    supabase.from("conversations").select("id", { count: "exact", head: true }).eq("business_id", businessId),
+    supabase
+      .from("conversations")
+      .select("id", { count: "exact", head: true })
+      .eq("business_id", businessId)
+      .neq("customer_phone", TEST_CONVERSATION_PHONE),
     supabase
       .from("work_cards")
       .select("id, conversation_id, customer_name, issue, created_at")
@@ -142,21 +163,26 @@ export default async function HomePage() {
       .gte("approved_at", sevenDaysAgo.toISOString())
       .order("approved_at", { ascending: false })
       .limit(5),
-    supabase
-      .from("reply_drafts")
-      .select("id, conversation_id, requires_escalation, created_at")
-      .eq("business_id", businessId)
-      .eq("status", "pending")
-      .order("created_at", { ascending: true }),
-    supabase
-      .from("reply_drafts")
-      .select("id, escalation_reason, created_at")
-      .eq("business_id", businessId)
-      .eq("requires_escalation", true)
-      .not("escalation_reason", "is", null)
-      .gte("created_at", sevenDaysAgo.toISOString())
-      .order("created_at", { ascending: false })
-      .limit(5),
+    (() => {
+      let q = supabase
+        .from("reply_drafts")
+        .select("id, conversation_id, requires_escalation, created_at")
+        .eq("business_id", businessId)
+        .eq("status", "pending");
+      if (testConversationId) q = q.neq("conversation_id", testConversationId);
+      return q.order("created_at", { ascending: true });
+    })(),
+    (() => {
+      let q = supabase
+        .from("reply_drafts")
+        .select("id, escalation_reason, created_at")
+        .eq("business_id", businessId)
+        .eq("requires_escalation", true)
+        .not("escalation_reason", "is", null)
+        .gte("created_at", sevenDaysAgo.toISOString());
+      if (testConversationId) q = q.neq("conversation_id", testConversationId);
+      return q.order("created_at", { ascending: false }).limit(5);
+    })(),
     supabase
       .from("ai_configurations")
       .select("tone_notes, system_prompt, business_rules, escalation_rules, faqs")

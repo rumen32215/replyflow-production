@@ -52,14 +52,18 @@ const INTENT_LABELS: Record<string, string> = {
   SOCIAL: "Just saying hello",
   UNCLEAR: "Not sure what they need",
 };
-function intentLabel(intent: string): string {
+/** Exported for reuse by Test Conversations
+ * (app/(dashboard)/dashboard/receptionist/try) — the same "why she
+ * said that" / confidence language should read identically whether
+ * the owner is watching a real customer or trying to break her. */
+export function intentLabel(intent: string): string {
   return INTENT_LABELS[intent] ?? intent.toLowerCase().replace(/_/g, " ");
 }
 
 /** A calm, human read on how sure the draft is — never a raw
  * percentage (Shared Brain precedent: "the user receives High
  * confidence / Needs review, not raw probabilities"). */
-function ConfidenceTag({ confidence }: { confidence: string }) {
+export function ConfidenceTag({ confidence }: { confidence: string }) {
   if (confidence === "high" || confidence === "verified") {
     return (
       <span className="flex shrink-0 items-center gap-1 rounded-full bg-success/10 px-2 py-1 text-[10.5px] font-bold text-success">
@@ -93,7 +97,7 @@ const FACT_SOURCE_LABELS: Record<string, string> = {
   diary: "your diary",
   customer: "this customer's history",
 };
-function factSourceSummary(factsUsed: string[] | null | undefined): string | null {
+export function factSourceSummary(factsUsed: string[] | null | undefined): string | null {
   if (!Array.isArray(factsUsed) || factsUsed.length === 0) return null;
   const prefixes = Array.from(new Set(factsUsed.map((id) => id.split(".")[0])));
   const labels = prefixes.map((p) => (p ? FACT_SOURCE_LABELS[p] : undefined)).filter((l): l is string => Boolean(l));

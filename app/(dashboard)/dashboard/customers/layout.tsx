@@ -4,6 +4,7 @@ import { CustomersShell } from "@/components/dashboard/customers/customers-shell
 import { relationshipStrengthFor } from "@/lib/customer-memory-signals";
 import { minutesSince, formatWaitingTime } from "@/lib/dashboard-signals";
 import type { CustomerListItem } from "@/components/dashboard/customers/customer-list";
+import { TEST_CONVERSATION_PHONE } from "@/lib/test-conversation";
 
 /**
  * Customer Memory (Sprint 7) — there is no dedicated "customers"
@@ -30,10 +31,13 @@ export default async function CustomersLayout({ children }: { children: React.Re
   if (!business) redirect("/welcome");
 
   const [{ data: conversations }, { data: jobs }] = await Promise.all([
+    // Test Conversations ("Try to break me") never appears in
+    // Customers alongside real relationships — lib/test-conversation.ts.
     supabase
       .from("conversations")
       .select("id, customer_name, customer_phone, status, last_message_at")
       .eq("business_id", business.id)
+      .neq("customer_phone", TEST_CONVERSATION_PHONE)
       .order("last_message_at", { ascending: false, nullsFirst: false }),
     supabase.from("work_cards").select("conversation_id, status").eq("business_id", business.id),
   ]);

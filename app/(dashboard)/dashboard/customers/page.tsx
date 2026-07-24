@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { Sparkles, Users } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import { TEST_CONVERSATION_PHONE } from "@/lib/test-conversation";
 
 export const metadata: Metadata = { title: "Customers — ReplyFlow" };
 
@@ -31,7 +32,8 @@ export default async function CustomersIndexPage() {
   const { count } = await supabase
     .from("conversations")
     .select("id", { count: "exact", head: true })
-    .eq("business_id", business.id);
+    .eq("business_id", business.id)
+    .neq("customer_phone", TEST_CONVERSATION_PHONE);
   const hasCustomers = (count ?? 0) > 0;
 
   return (

@@ -183,6 +183,10 @@ export default async function HomePage() {
 
   /* ------------------------------ Attention queue ------------------------------ */
 
+  // `conversations` is fetched newest-first (needed for the activity
+  // feed and the emergency/group lookup map) — re-sorted here so
+  // "oldest waiting" below is actually the longest wait, not whichever
+  // waiting conversation happens to be most recent.
   const waitingConversationItems: AttentionWaitingConversation[] = (conversations ?? [])
     .filter((c) => groupForStatus(c.status) === "waiting" && c.last_message_at)
     .map((c) => {
@@ -195,7 +199,8 @@ export default async function HomePage() {
         minutes: minutesSince(c.last_message_at as string),
         isEmergency: entry.isEmergency,
       };
-    });
+    })
+    .sort((a, b) => b.minutes - a.minutes);
 
   const draftWorkCardItems: AttentionDraftWorkCard[] = (draftWorkCards ?? []).map((j) => ({
     kind: "draft_work_card" as const,

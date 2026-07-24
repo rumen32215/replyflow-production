@@ -18,7 +18,7 @@ export default async function SettingsPage() {
 
   const { data: business, error: businessError } = await supabase
     .from("businesses")
-    .select("id, business_name, notify_new_enquiry, notify_daily_summary")
+    .select("id, business_name")
     .eq("owner_id", user.id)
     .maybeSingle();
   // A real query error is not "onboarding incomplete" — see the
@@ -67,11 +67,7 @@ export default async function SettingsPage() {
           <h2 className="text-[15px] font-bold">Notifications</h2>
         </div>
         <p className="mb-2 text-[13px] text-muted-foreground">Choose what ReplyFlow keeps you posted on.</p>
-        <SettingsNotifications
-          businessId={business.id}
-          initialNewEnquiry={business.notify_new_enquiry}
-          initialDailySummary={business.notify_daily_summary}
-        />
+        <SettingsNotifications />
       </SettleCard>
 
       <SettleCard delay={0.17}>

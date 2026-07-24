@@ -1,6 +1,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { buildAttentionQueue, buildReceptionistActivity, attentionReason, type AttentionItem } from "./front-desk-signals";
+import {
+  buildAttentionQueue,
+  buildReceptionistActivity,
+  attentionReason,
+  groupPendingRepliesByConversation,
+  type AttentionItem,
+} from "./front-desk-signals";
 
 test("buildAttentionQueue: emergencies and escalations sort before everything else", () => {
   const items = buildAttentionQueue({
@@ -26,7 +32,7 @@ test("buildAttentionQueue: among non-urgent items, the longest-waiting sorts fir
       { kind: "draft_work_card", workCardId: "w1", conversationId: null, issue: "Radiator", customerName: "Alex", minutes: 500 },
     ],
     pendingReplies: [
-      { kind: "pending_reply", draftId: "d1", conversationId: "c2", customerName: "Jo", minutes: 50, requiresEscalation: false },
+      { kind: "pending_reply", draftId: "d1", conversationId: "c2", customerName: "Jo", minutes: 50, requiresEscalation: false, count: 1 },
     ],
   });
   assert.equal(items[0]!.kind, "draft_work_card");
@@ -45,6 +51,47 @@ test("buildAttentionQueue: respects the limit", () => {
   }));
   const items = buildAttentionQueue({ waitingConversations: waiting, draftWorkCards: [], pendingReplies: [], limit: 3 });
   assert.equal(items.length, 3);
+});
+
+test("groupPendingRepliesByConversation: three drafts on one conversation become one item with count 3", () => {
+  const grouped = groupPendingRepliesByConversation([
+    { draftId: "d1", conversationId: "c1", customerName: "Rumen", minutes: 100, requiresEscalation: false },
+    { draftId: "d2", conversationId: "c1", customerName: "Rumen", minutes: 50, requiresEscalation: false },
+    { draftId: "d3", conversationId: "c1", customerName: "Rumen", minutes: 10, requiresEscalation: false },
+  ]);
+  assert.equal(grouped.length, 1);
+  assert.equal(grouped[0]!.count, 3);
+  // Anchored to the oldest draft's wait time, not reset by newer ones.
+  assert.equal(grouped[0]!.minutes, 100);
+});
+
+test("groupPendingRepliesByConversation: escalation flag is true if any draft in the group needs it", () => {
+  const grouped = groupPendingRepliesByConversation([
+    { draftId: "d1", conversationId: "c1", customerName: "Rumen", minutes: 10, requiresEscalation: false },
+    { draftId: "d2", conversationId: "c1", customerName: "Rumen", minutes: 5, requiresEscalation: true },
+  ]);
+  assert.equal(grouped[0]!.requiresEscalation, true);
+});
+
+test("groupPendingRepliesByConversation: different conversations stay separate", () => {
+  const grouped = groupPendingRepliesByConversation([
+    { draftId: "d1", conversationId: "c1", customerName: "Rumen", minutes: 10, requiresEscalation: false },
+    { draftId: "d2", conversationId: "c2", customerName: "Priya", minutes: 5, requiresEscalation: false },
+  ]);
+  assert.equal(grouped.length, 2);
+});
+
+test("attentionReason: multiple pending replies in one conversation read as a count, not a duplicate row", () => {
+  const item: AttentionItem = {
+    kind: "pending_reply",
+    draftId: "d1",
+    conversationId: "c1",
+    customerName: "Rumen",
+    minutes: 100,
+    requiresEscalation: false,
+    count: 3,
+  };
+  assert.equal(attentionReason(item), "3 replies ready for your OK");
 });
 
 test("attentionReason: an emergency conversation reads as Emergency, not its generic reason", () => {

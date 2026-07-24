@@ -41,8 +41,50 @@ export interface AttentionPendingReply {
   draftId: string;
   conversationId: string;
   customerName: string;
+  /** Minutes since the *oldest* still-pending draft in this
+   * conversation — how long the customer has actually been waiting,
+   * not reset by a later message arriving on top of an earlier one. */
   minutes: number;
   requiresEscalation: boolean;
+  /** How many separate drafts are pending in this one conversation —
+   * a customer who messaged three times before anyone looked is one
+   * real backlog, not three identical-looking rows. */
+  count: number;
+}
+
+/**
+ * Real production data surfaced this: a customer who sends several
+ * messages before the owner ever looks generates one pending
+ * reply_draft per message, so a naive per-row list would show the
+ * same name three times in a row — technically accurate, but reads
+ * like a bug ("prefer clarity over cleverness"). Groups by
+ * conversation before the queue is built; `requiresEscalation` is true
+ * if any drafts in the group need it.
+ */
+export function groupPendingRepliesByConversation(
+  drafts: readonly { draftId: string; conversationId: string; customerName: string; minutes: number; requiresEscalation: boolean }[]
+): AttentionPendingReply[] {
+  const byConversation = new Map<string, typeof drafts[number][]>();
+  for (const draft of drafts) {
+    const existing = byConversation.get(draft.conversationId) ?? [];
+    existing.push(draft);
+    byConversation.set(draft.conversationId, existing);
+  }
+  return Array.from(byConversation.values()).map((group) => {
+    // The oldest draft (largest minutes) anchors the wait time — how
+    // long the customer has actually been waiting, not reset by a
+    // more recent message on top of an unanswered earlier one.
+    const oldest = group.reduce((a, b) => (b.minutes > a.minutes ? b : a));
+    return {
+      kind: "pending_reply" as const,
+      draftId: oldest.draftId,
+      conversationId: oldest.conversationId,
+      customerName: oldest.customerName,
+      minutes: oldest.minutes,
+      requiresEscalation: group.some((d) => d.requiresEscalation),
+      count: group.length,
+    };
+  });
 }
 
 export type AttentionItem = AttentionWaitingConversation | AttentionDraftWorkCard | AttentionPendingReply;
@@ -86,8 +128,10 @@ export function attentionReason(item: AttentionItem): string {
       return item.isEmergency ? "Emergency" : item.reason;
     case "draft_work_card":
       return `${item.issue} · awaiting your approval`;
-    case "pending_reply":
-      return item.requiresEscalation ? "Reply needs your OK — flagged for you" : "Reply ready for your OK";
+    case "pending_reply": {
+      const subject = item.count > 1 ? `${item.count} replies` : "Reply";
+      return item.requiresEscalation ? `${subject} flagged for you` : `${subject} ready for your OK`;
+    }
   }
 }
 

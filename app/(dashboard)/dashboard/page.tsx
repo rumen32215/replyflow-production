@@ -18,9 +18,9 @@ import { minutesSince, buildPresenceLine } from "@/lib/dashboard-signals";
 import {
   buildAttentionQueue,
   buildReceptionistActivity,
+  groupPendingRepliesByConversation,
   type AttentionWaitingConversation,
   type AttentionDraftWorkCard,
-  type AttentionPendingReply,
 } from "@/lib/front-desk-signals";
 import { parseAvailability } from "@/lib/availability";
 import { parseKnowledge } from "@/lib/knowledge";
@@ -206,14 +206,15 @@ export default async function HomePage() {
     minutes: minutesSince(j.created_at),
   }));
 
-  const pendingReplyItems: AttentionPendingReply[] = (pendingReplyDrafts ?? []).map((d) => ({
-    kind: "pending_reply" as const,
-    draftId: d.id,
-    conversationId: d.conversation_id,
-    customerName: conversationById.get(d.conversation_id)?.name ?? "A customer",
-    minutes: minutesSince(d.created_at),
-    requiresEscalation: d.requires_escalation,
-  }));
+  const pendingReplyItems = groupPendingRepliesByConversation(
+    (pendingReplyDrafts ?? []).map((d) => ({
+      draftId: d.id,
+      conversationId: d.conversation_id,
+      customerName: conversationById.get(d.conversation_id)?.name ?? "A customer",
+      minutes: minutesSince(d.created_at),
+      requiresEscalation: d.requires_escalation,
+    }))
+  );
 
   const attentionQueue = buildAttentionQueue({
     waitingConversations: waitingConversationItems,

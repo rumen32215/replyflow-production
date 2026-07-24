@@ -9,15 +9,16 @@ export const metadata: Metadata = { title: "Receptionist — ReplyFlow" };
 
 /**
  * The heart of ReplyFlow — the teaching playground (Receptionist
- * Experience V2). Onboarding ends here (?welcome=1): the owner meets
- * their new employee the moment they've hired them.
+ * Experience V2). Reached from Front Desk's Setup Journey checklist
+ * or primary nav, not as onboarding's landing page (ReplyFlow v1
+ * Product Blueprint — onboarding now hands over to Front Desk).
  */
 const VALID_TOPICS = new Set(["behaviours", "rules", "escalation"]);
 
 export default async function ReceptionistPage({
   searchParams,
 }: {
-  searchParams: { welcome?: string; topic?: string };
+  searchParams: { topic?: string };
 }) {
   const supabase = createClient();
   const {
@@ -66,7 +67,6 @@ export default async function ReceptionistPage({
         escalationRules: config?.escalation_rules ?? "",
         autoReplyGeneralEnabled: config?.auto_reply_general_enabled ?? false,
       }}
-      justHired={searchParams.welcome === "1"}
       initialTopic={VALID_TOPICS.has(searchParams.topic ?? "") ? (searchParams.topic as string) : null}
     />
   );

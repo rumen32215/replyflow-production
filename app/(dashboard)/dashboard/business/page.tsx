@@ -4,7 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { BusinessMemory, type Faq } from "@/components/dashboard/business/business-memory";
 import { parseKnowledge } from "@/lib/knowledge";
 
-export const metadata: Metadata = { title: "Business Profile — ReplyFlow" };
+export const metadata: Metadata = { title: "Your Business — ReplyFlow" };
 
 /**
  * Business memory — the living profile (Business Experience V2). The

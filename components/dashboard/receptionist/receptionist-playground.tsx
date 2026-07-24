@@ -116,7 +116,6 @@ export function ReceptionistPlayground({
   availability,
   receptionistName,
   initial,
-  justHired,
   initialTopic = null,
 }: {
   businessId: string;
@@ -128,7 +127,6 @@ export function ReceptionistPlayground({
   availability: Availability;
   receptionistName: string | null;
   initial: SavedConfig;
-  justHired: boolean;
   /** Sprint 8.6: set when arriving from a Recommendations "Teach me"
    * link (?topic=) — see the identical pattern and rationale in
    * business-memory.tsx. Already validated by the Server Component page. */
@@ -326,15 +324,9 @@ export function ReceptionistPlayground({
       {/* Arrival — one calm sentence, no technical language. */}
       <SettleCard className="mb-6">
         <h1 className="text-[24px] font-extrabold tracking-tight md:text-[26px]" suppressHydrationWarning>
-          {justHired ? `Hello, ${businessName}.` : `${greetingForNow()}, ${businessName}.`}
+          {greetingForNow()}, {businessName}.
         </h1>
-        <p className="mt-1 text-[14px] leading-relaxed text-muted-foreground">
-          {justHired
-            ? receptionistName
-              ? `I'm ${receptionistName}, your new receptionist. Teach me how you like things done — I'll show you exactly how I'll speak to your customers.`
-              : "I'm your new receptionist. Teach me how you like things done — I'll show you exactly how I'll speak to your customers."
-            : "Let's make sure I'm ready for today's customers."}
-        </p>
+        <p className="mt-1 text-[14px] leading-relaxed text-muted-foreground">Let&apos;s make sure I&apos;m ready for today&apos;s customers.</p>
         <Link
           href="/dashboard/receptionist/meet"
           className="mt-3 inline-flex items-center gap-1.5 text-[13px] font-semibold text-primary hover:underline"

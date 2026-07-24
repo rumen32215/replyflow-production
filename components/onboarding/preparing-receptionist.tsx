@@ -94,16 +94,20 @@ export function PreparingReceptionist() {
 
   const ready = sequenceDone && serverDone && !failed;
 
-  // The premium ending: no button. One beat after "ready", onboarding
-  // hands over naturally to the Receptionist — the owner meets their
-  // new employee, they don't land on a dashboard. (Final Brief:
-  // "The onboarding should end naturally by introducing the
-  // Receptionist. Not simply redirecting to the dashboard.")
+  // ReplyFlow v1 Product Blueprint: onboarding now hands over to Front
+  // Desk, not the Receptionist teaching tool. Only name and trade have
+  // been captured at this point — nothing is actually taught yet — so
+  // landing on Receptionist stranded the owner with no sense of what's
+  // next. Front Desk already has its own incomplete-setup state (the
+  // Setup Journey checklist), built for exactly this moment: it shows
+  // the whole shape of what's left (Business, Receptionist, Meet Your
+  // Receptionist, Connect WhatsApp) instead of a single teaching page
+  // with no visible next step.
   useEffect(() => {
     if (!ready) return;
     const t = setTimeout(() => {
       resetStore(); // onboarding is over — clear the persisted draft
-      router.replace("/dashboard/receptionist?welcome=1");
+      router.replace("/dashboard");
     }, READY_HOLD_MS);
     return () => clearTimeout(t);
   }, [ready, resetStore, router]);

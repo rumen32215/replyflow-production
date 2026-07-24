@@ -153,7 +153,7 @@ export function AvailabilityDiary({
   return (
     <div className="mx-auto max-w-2xl space-y-6">
       <SettleCard>
-        <h1 className="text-[24px] font-extrabold tracking-tight md:text-[26px]">The diary</h1>
+        <h1 className="text-[24px] font-extrabold tracking-tight md:text-[26px]">Your hours</h1>
         <p className="mt-1 text-[14px] text-muted-foreground">
           I&apos;ll only ever offer customers times that genuinely work for you.
         </p>

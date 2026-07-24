@@ -87,7 +87,7 @@ export function WelcomeGreeting() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, ease: EASE, delay: 1.35 }}
         >
-          <Link href="/onboarding/demo" className="group block">
+          <Link href="/onboarding/business-name" className="group block">
             <motion.span
               whileHover={{ y: -2 }}
               whileTap={{ scale: 0.985 }}

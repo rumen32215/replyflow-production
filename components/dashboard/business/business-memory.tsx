@@ -492,7 +492,7 @@ export function BusinessMemory({
   return (
     <div className="mx-auto max-w-5xl">
       <SettleCard className="mb-6">
-        <h1 className="text-[24px] font-extrabold tracking-tight md:text-[26px]">Business Profile</h1>
+        <h1 className="text-[24px] font-extrabold tracking-tight md:text-[26px]">Your business</h1>
         <p className="mt-1 text-[14px] leading-relaxed text-muted-foreground">
           This is what I&apos;ll use to introduce your business and answer your customers accurately. Update
           it any time — there&apos;s no finish line.

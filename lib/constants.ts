@@ -21,7 +21,7 @@ export const DASHBOARD_NAV = [
   { href: "/dashboard", label: "Front Desk", icon: "Home" },
   { href: "/dashboard/conversations", label: "Conversations", icon: "MessagesSquare" },
   { href: "/dashboard/receptionist", label: "Receptionist", icon: "Headset" },
-  { href: "/dashboard/availability", label: "Diary", icon: "CalendarDays" },
+  { href: "/dashboard/availability", label: "Hours", icon: "CalendarDays" },
 ] as const;
 
 export const BRAND = {

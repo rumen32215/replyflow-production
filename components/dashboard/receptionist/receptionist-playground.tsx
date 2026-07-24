@@ -262,6 +262,12 @@ export function ReceptionistPlayground({
   }
 
   const scenario = scenarios.find((s) => s.id === scenarioId) ?? scenarios[0]!;
+  // A "standard" scenario always opens with toneOpener() and so always
+  // genuinely differs by tone — an emergency scenario's reply is
+  // entirely tone-independent (buildPreviewConversation), which would
+  // otherwise make all three example cards below render identical
+  // text for whatever scenario tab the owner happens to have open.
+  const toneExampleScenario = scenarios.find((s) => s.kind === "standard") ?? scenario;
   const { turns, liveReply } = buildPreviewConversation(
     {
       businessName,
@@ -541,7 +547,7 @@ export function ReceptionistPlayground({
                 const Icon = t.icon;
                 const preview = buildPreviewConversation(
                   { businessName, tone: t.value, behaviours, rules, escalation, offersEmergency, chargesCalloutFee, calloutFeeAmount },
-                  scenario,
+                  toneExampleScenario,
                   { availability }
                 );
                 const exampleReply = preview.turns[2]?.text ?? "";

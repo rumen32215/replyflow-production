@@ -214,3 +214,52 @@ function formatBookedTime(iso: string): string {
   if (isTomorrow) return `tomorrow at ${time}`;
   return `${date.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" })} at ${time}`;
 }
+
+/* ---------------------------- Connection health ---------------------------------- */
+
+export type ConnectionHealthStatus = "connected" | "expiring_soon" | "expired" | "not_connected";
+
+export interface ConnectionHealth {
+  status: ConnectionHealthStatus;
+  /** Only set for expiring_soon/expired — nothing to say when the
+   * connection is fine or was never made (Front Desk's Setup Journey
+   * already covers "not connected yet"; this is specifically about an
+   * existing connection going bad). */
+  message: string | null;
+}
+
+const EXPIRY_WARNING_DAYS = 3;
+
+/**
+ * Real incident this closes: `whatsapp_connections.token_expires_at`
+ * was written at connect time and never read anywhere afterward — the
+ * token this project actually had expire mid-engagement broke sends
+ * silently, with `businesses.whatsapp_connected` still reading `true`
+ * forever (that boolean is only ever set once, at connect time; it's
+ * never re-checked). This reads the real column instead of trusting
+ * the stale flag.
+ */
+export function describeConnectionHealth(input: { connected: boolean; tokenExpiresAt: string | null; now: Date }): ConnectionHealth {
+  if (!input.connected || !input.tokenExpiresAt) {
+    return { status: input.connected ? "connected" : "not_connected", message: null };
+  }
+
+  const daysUntilExpiry = (new Date(input.tokenExpiresAt).getTime() - input.now.getTime()) / (1000 * 60 * 60 * 24);
+
+  if (daysUntilExpiry < 0) {
+    return {
+      status: "expired",
+      message: "Your WhatsApp connection has expired — customer messages may not be reaching me. Reconnect to fix this.",
+    };
+  }
+
+  if (daysUntilExpiry <= EXPIRY_WARNING_DAYS) {
+    const days = Math.max(1, Math.ceil(daysUntilExpiry));
+    return {
+      status: "expiring_soon",
+      message: `Your WhatsApp connection expires in ${days} day${days === 1 ? "" : "s"} — reconnect soon so nothing gets missed.`,
+    };
+  }
+
+  return { status: "connected", message: null };
+}

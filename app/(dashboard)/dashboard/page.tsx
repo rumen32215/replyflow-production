@@ -8,6 +8,7 @@ import {
   type JourneyStep,
 } from "@/components/dashboard/home/home-experience";
 import { AttentionQueue } from "@/components/dashboard/home/attention-queue";
+import { ConnectionAlert } from "@/components/dashboard/home/connection-alert";
 import { TodaysWork, type TodaysWorkItem } from "@/components/dashboard/home/todays-work";
 import { WaitingForCustomer, type WaitingForCustomerItem } from "@/components/dashboard/home/waiting-for-customer";
 import { RecentlyCompleted, type RecentlyCompletedItem } from "@/components/dashboard/home/recently-completed";
@@ -19,6 +20,7 @@ import {
   buildAttentionQueue,
   buildReceptionistActivity,
   groupPendingRepliesByConversation,
+  describeConnectionHealth,
   type AttentionWaitingConversation,
   type AttentionDraftWorkCard,
 } from "@/lib/front-desk-signals";
@@ -82,6 +84,7 @@ export default async function HomePage() {
     { data: pendingReplyDrafts },
     { data: recentEscalations },
     { data: config },
+    { data: whatsappConnection },
   ] = await Promise.all([
     // Real, already-live conversation state for every recent
     // conversation — the one fetch every section below reads from for
@@ -157,6 +160,15 @@ export default async function HomePage() {
     supabase
       .from("ai_configurations")
       .select("tone_notes, system_prompt, business_rules, escalation_rules, faqs")
+      .eq("business_id", businessId)
+      .maybeSingle(),
+    // Real connection health (checklist 3.2) — token_expires_at is
+    // written at connect time and was never read anywhere afterward
+    // until now; businesses.whatsapp_connected is a one-time flag that
+    // never reflects a token going bad later.
+    supabase
+      .from("whatsapp_connections")
+      .select("token_expires_at")
       .eq("business_id", businessId)
       .maybeSingle(),
   ]);
@@ -301,6 +313,11 @@ export default async function HomePage() {
   /* ------------------------------------------------------------------------------- */
 
   const whatsappConnected = business.whatsapp_connected ?? false;
+  const connectionHealth = describeConnectionHealth({
+    connected: whatsappConnected,
+    tokenExpiresAt: whatsappConnection?.token_expires_at ?? null,
+    now,
+  });
   const noActivityYet = (conversationCount ?? 0) === 0 && (completedEver ?? 0) === 0;
   const availability = parseAvailability(business.availability, business.opening_time, business.closing_time);
 
@@ -388,6 +405,8 @@ export default async function HomePage() {
       ) : (
         <SetupJourney name={business.business_name} steps={journeySteps} />
       )}
+
+      <ConnectionAlert health={connectionHealth} />
 
       {journeyComplete && (
         <div className="space-y-6">

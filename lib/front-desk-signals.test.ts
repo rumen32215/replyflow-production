@@ -5,6 +5,7 @@ import {
   buildReceptionistActivity,
   attentionReason,
   groupPendingRepliesByConversation,
+  describeConnectionHealth,
   type AttentionItem,
 } from "./front-desk-signals";
 
@@ -143,4 +144,46 @@ test("buildReceptionistActivity: respects the limit", () => {
     limit: 4,
   });
   assert.equal(events.length, 4);
+});
+
+test("describeConnectionHealth: never connected has nothing to say", () => {
+  const health = describeConnectionHealth({ connected: false, tokenExpiresAt: null, now: new Date("2026-07-24T12:00:00Z") });
+  assert.equal(health.status, "not_connected");
+  assert.equal(health.message, null);
+});
+
+test("describeConnectionHealth: connected with no known expiry is fine", () => {
+  const health = describeConnectionHealth({ connected: true, tokenExpiresAt: null, now: new Date("2026-07-24T12:00:00Z") });
+  assert.equal(health.status, "connected");
+  assert.equal(health.message, null);
+});
+
+test("describeConnectionHealth: connected, expiry weeks away is fine", () => {
+  const health = describeConnectionHealth({
+    connected: true,
+    tokenExpiresAt: "2026-08-24T12:00:00Z",
+    now: new Date("2026-07-24T12:00:00Z"),
+  });
+  assert.equal(health.status, "connected");
+  assert.equal(health.message, null);
+});
+
+test("describeConnectionHealth: expiring within the warning window flags it", () => {
+  const health = describeConnectionHealth({
+    connected: true,
+    tokenExpiresAt: "2026-07-26T12:00:00Z",
+    now: new Date("2026-07-24T12:00:00Z"),
+  });
+  assert.equal(health.status, "expiring_soon");
+  assert.ok(health.message?.includes("2 days"));
+});
+
+test("describeConnectionHealth: already expired is the urgent case", () => {
+  const health = describeConnectionHealth({
+    connected: true,
+    tokenExpiresAt: "2026-07-20T12:00:00Z",
+    now: new Date("2026-07-24T12:00:00Z"),
+  });
+  assert.equal(health.status, "expired");
+  assert.ok(health.message?.includes("expired"));
 });

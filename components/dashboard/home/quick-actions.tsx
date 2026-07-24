@@ -30,11 +30,16 @@ interface QuickActionsProps {
 
 const ACTIONS = [
   { href: "/dashboard/receptionist", icon: Headset, label: "Receptionist" },
-  { href: "/dashboard/availability", icon: CalendarClock, label: "Diary" },
-  // Sprint 8.7: "Teach me" renamed — this destination is now the
-  // Business Profile page, so the action names where it actually goes,
-  // the same way "Receptionist" and "Diary" already do.
-  { href: "/dashboard/business", icon: BookOpen, label: "Business Profile" },
+  // Release polish (ReplyFlow v1 Polish Pass): these two labels had
+  // drifted from what the destination page actually calls itself
+  // ("Diary" landed on a page headed "Your hours"; "Business Profile"
+  // landed on one headed "Your business") — a small but real trust gap
+  // (Principle 5: a mismatch here is exactly the kind of thing that
+  // makes an owner hesitate and re-read). Now they match the real H1
+  // on each page, the same way "Receptionist" and "Conversations"
+  // already do.
+  { href: "/dashboard/availability", icon: CalendarClock, label: "Your hours" },
+  { href: "/dashboard/business", icon: BookOpen, label: "Your business" },
   { href: "/dashboard/conversations", icon: MessagesSquare, label: "Conversations" },
 ] as const;
 

@@ -10,7 +10,6 @@ import { KnowledgeTabs } from "@/components/dashboard/knowledge-tabs";
 import { Acknowledgement, ACK, randomAck, useAcknowledgement } from "@/components/shared/acknowledgement";
 import { PhonePreview } from "@/components/shared/phone-preview";
 import { TeachingCard } from "@/components/shared/teaching-card";
-import { ConfidenceBar } from "@/components/shared/confidence-bar";
 import { InsightList } from "@/components/shared/insight";
 import { Switch } from "@/components/ui/switch";
 import { buildBrain } from "@/lib/intelligence";
@@ -314,17 +313,28 @@ export function ReceptionistPlayground({
   // fires, so setting it here (synchronously, in the same render pass
   // as the edit that crossed the threshold) reliably overrides that
   // save's routine acknowledgement for this one milestone moment.
-  const receptionistPercent = brain.percentFor("receptionist");
-  const celebratedPercentRef = useRef(receptionistPercent);
+  //
+  // Release polish (Hiring Experience redesign): re-keyed off the real
+  // gap list emptying rather than a percentage crossing a threshold —
+  // 03-Trust-Experience.md §7 already forbids percentage-based
+  // confidence display; that law had just never been checked against
+  // this screen. Same real signal (every receptionist topic actually
+  // taught), no percentage involved.
+  const receptionistGaps = brain.gaps.filter((g) => g.domain === "receptionist");
+  const hadReceptionistGapsRef = useRef(receptionistGaps.length > 0);
+  const celebratedReceptionistHalfwayRef = useRef(false);
   useEffect(() => {
-    const prev = celebratedPercentRef.current;
-    if (prev < 100 && receptionistPercent >= 100) {
+    const totalReceptionistTopics = receptionistTopics.length;
+    const doneCount = totalReceptionistTopics - receptionistGaps.length;
+    if (hadReceptionistGapsRef.current && receptionistGaps.length === 0) {
       ackRef.current = "I know exactly how you like things run.";
-    } else if (prev < 50 && receptionistPercent >= 50) {
+    } else if (!celebratedReceptionistHalfwayRef.current && totalReceptionistTopics > 0 && doneCount / totalReceptionistTopics >= 0.5) {
       ackRef.current = "Getting there — I'm learning how you like things run.";
+      celebratedReceptionistHalfwayRef.current = true;
     }
-    celebratedPercentRef.current = receptionistPercent;
-  }, [receptionistPercent]);
+    hadReceptionistGapsRef.current = receptionistGaps.length > 0;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [receptionistGaps.length]);
 
   function toggle(set: Set<string>, apply: (s: Set<string>) => void, id: string, ack: string) {
     const next = new Set(set);
@@ -430,11 +440,23 @@ export function ReceptionistPlayground({
            * claims to know its own domain — never Business Knowledge's
            * or the diary's. */}
           <SettleCard delay={0.03} className="rounded-2xl border border-border bg-card p-5 shadow-sm">
-            <ConfidenceBar
-              title="How well I know your style"
-              percent={receptionistPercent}
-              caption={`${receptionistPercent}% of how you like things run`}
-            />
+            <p className="text-[13.5px] font-bold">How well I know your style</p>
+            {receptionistGaps.length === 0 ? (
+              <p className="mt-2 text-[13px] leading-relaxed text-muted-foreground">
+                I know exactly how you like things run.
+              </p>
+            ) : (
+              <div className="mt-2">
+                <p className="mb-1.5 text-[13px] leading-relaxed text-muted-foreground">Still worth teaching me:</p>
+                <ul className="space-y-1">
+                  {receptionistGaps.map((gap) => (
+                    <li key={gap.id} className="text-[13px] leading-relaxed text-muted-foreground">
+                      · {gap.label}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
             <InsightList observations={brain.observations} limit={1} className="mt-3.5" />
           </SettleCard>
 

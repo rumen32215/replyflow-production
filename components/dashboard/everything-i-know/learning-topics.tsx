@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { AlertTriangle } from "lucide-react";
 import { SettleCard, Reveal } from "@/components/shared/motion";
-import { ConfidenceBar } from "@/components/shared/confidence-bar";
 import { DOMAIN_META, groupTopicsByDomain } from "@/lib/everything-i-know-signals";
 import { joinList } from "@/lib/knowledge";
 import type { BrainDomain, BrainTopic } from "@/lib/brain";
@@ -18,21 +17,17 @@ const DOMAIN_HREF: Record<BrainDomain, string> = {
  * its own card with its own "Teach me" button, up to a dozen identical
  * blue buttons in a row. That read as a survey, not the Shared Brain —
  * exactly what this sprint asked to fix. Now it's a calm, per-domain
- * progress summary (reusing `ConfidenceBar`, not inventing a second
- * progress visual) plus one plain-language sentence naming what's
- * still unknown, and exactly one link per domain — never a link per
- * topic. The actual teaching still only happens on the pages that
- * already own it (Business Knowledge, Receptionist, Diary) and via
- * Front Desk's single ranked Recommendations — this page reports
- * understanding, it doesn't duplicate the nudge.
+ * summary — a plain-language sentence naming what's still unknown, no
+ * percentage (Hiring Experience redesign — 03-Trust-Experience.md §7
+ * already forbids percentage-based confidence display; this screen
+ * had just never been checked against that law) — and exactly one
+ * link per domain — never a link per topic. The actual teaching still
+ * only happens on the pages that already own it (Business Knowledge,
+ * Receptionist, Diary) and via Front Desk's single ranked
+ * Recommendations — this page reports understanding, it doesn't
+ * duplicate the nudge.
  */
-export function LearningTopics({
-  gaps,
-  percentByDomain,
-}: {
-  gaps: readonly BrainTopic[];
-  percentByDomain: Record<BrainDomain, number>;
-}) {
+export function LearningTopics({ gaps }: { gaps: readonly BrainTopic[] }) {
   if (gaps.length === 0) {
     return (
       <SettleCard delay={0.1} className="rounded-2xl border border-success/25 bg-success/5 p-6 shadow-sm">
@@ -60,11 +55,10 @@ export function LearningTopics({
           return (
             <Reveal key={domain} index={i}>
               <div>
-                <ConfidenceBar
-                  title={DOMAIN_META[domain].heading}
-                  percent={percentByDomain[domain] ?? 0}
-                  caption={`${list.length} ${list.length === 1 ? "thing" : "things"} still to learn`}
-                />
+                <p className="text-[13.5px] font-bold">{DOMAIN_META[domain].heading}</p>
+                <p className="mt-1 text-[12px] text-muted-foreground">
+                  {list.length} {list.length === 1 ? "thing" : "things"} still to learn
+                </p>
                 <p className="mt-2.5 flex items-start gap-1.5 text-[13px] leading-relaxed text-muted-foreground">
                   {important && <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-attention" />}
                   <span>Still to learn: {summary}.</span>

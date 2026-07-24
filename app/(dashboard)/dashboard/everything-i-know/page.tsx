@@ -3,7 +3,6 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { SettleCard } from "@/components/shared/motion";
 import { KnowledgeTabs } from "@/components/dashboard/knowledge-tabs";
-import { ConfidenceBar } from "@/components/shared/confidence-bar";
 import { KnownTopics } from "@/components/dashboard/everything-i-know/known-topics";
 import { LearningTopics } from "@/components/dashboard/everything-i-know/learning-topics";
 import { RecentChanges } from "@/components/dashboard/everything-i-know/recent-changes";
@@ -74,11 +73,6 @@ export default async function EverythingIKnowPage() {
   });
 
   const knownTopics = brain.topics.filter((t) => t.done);
-  const percentByDomain = {
-    knowledge: brain.percentFor("knowledge"),
-    receptionist: brain.percentFor("receptionist"),
-    diary: brain.percentFor("diary"),
-  };
 
   const completedConversationIds = new Set(
     (jobs ?? []).filter((j) => j.status === "completed" && j.conversation_id).map((j) => j.conversation_id as string)
@@ -103,16 +97,13 @@ export default async function EverythingIKnowPage() {
         <p className="mt-1 text-[14px] text-muted-foreground">
           A transparent look at what I currently understand about your business — and what I&apos;m still learning.
         </p>
-        <div className="mt-5">
-          <ConfidenceBar title="Overall understanding" percent={brain.percent} />
-        </div>
         <p className="mt-4 text-[12.5px] leading-relaxed text-muted-foreground">
           Everything below comes directly from what you&apos;ve taught me. Nothing here is guessed.
         </p>
       </SettleCard>
 
       <KnownTopics topics={knownTopics} />
-      <LearningTopics gaps={brain.gaps} percentByDomain={percentByDomain} />
+      <LearningTopics gaps={brain.gaps} />
       <RecentChanges changes={recentChanges} />
       <CustomerSnapshot totalCustomers={totalCustomers} returningCustomers={returningCustomers} />
     </div>

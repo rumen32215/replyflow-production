@@ -6,7 +6,6 @@ import { Camera, Check, ChevronDown, Plus, X } from "lucide-react";
 import { SettleCard, EASE, press } from "@/components/shared/motion";
 import { KnowledgeTabs } from "@/components/dashboard/knowledge-tabs";
 import { Acknowledgement, ACK, randomAck, useAcknowledgement } from "@/components/shared/acknowledgement";
-import { ConfidenceBar } from "@/components/shared/confidence-bar";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Switch } from "@/components/ui/switch";
 import { createClient } from "@/lib/supabase/client";
@@ -258,19 +257,31 @@ export function BusinessMemory({
     [description, services, serviceAreas, knowledge, faqs]
   );
   const knownById = new Map(brain.topics.filter((t) => t.domain === "knowledge").map((t) => [t.id, t.done]));
-  const profilePercent = brain.percentFor("knowledge");
+  // Release polish (Hiring Experience redesign): a percentage here is
+  // exactly what 03-Trust-Experience.md §7 already forbids for the
+  // Confidence Timeline ("not a score, not a percentage") — that law
+  // was never checked against this screen. `knowledgeGaps` (the same
+  // real, honest facts the old percent bar was quietly summarising)
+  // replaces it: what's actually still unknown, stated as sentences.
+  const knowledgeGaps = brain.gaps.filter((g) => g.domain === "knowledge");
 
   // A real, rare celebration — not another reassurance on every edit.
-  const celebratedPercentRef = useRef(profilePercent);
+  // Re-keyed off the gap list emptying rather than a percent crossing
+  // a threshold — same real signal, no percentage involved.
+  const hadGapsRef = useRef(knowledgeGaps.length > 0);
+  const celebratedHalfwayRef = useRef(false);
   useEffect(() => {
-    const prev = celebratedPercentRef.current;
-    if (prev < 100 && profilePercent >= 100) {
+    const totalKnowledgeTopics = brain.topics.filter((t) => t.domain === "knowledge").length;
+    const doneCount = totalKnowledgeTopics - knowledgeGaps.length;
+    if (hadGapsRef.current && knowledgeGaps.length === 0) {
       ackRef.current = "Your business profile is complete.";
-    } else if (prev < 50 && profilePercent >= 50) {
+    } else if (!celebratedHalfwayRef.current && totalKnowledgeTopics > 0 && doneCount / totalKnowledgeTopics >= 0.5) {
       ackRef.current = "Halfway there — your profile is filling out nicely.";
+      celebratedHalfwayRef.current = true;
     }
-    celebratedPercentRef.current = profilePercent;
-  }, [profilePercent]);
+    hadGapsRef.current = knowledgeGaps.length > 0;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [knowledgeGaps.length]);
 
   /* ---------------------- scroll to a requested field -------------------- */
   const fieldRefs = useRef<Partial<Record<SectionId, HTMLDivElement | null>>>({});
@@ -662,17 +673,28 @@ export function BusinessMemory({
          * style are actually being shaped (Sprint 8.7). */}
         <div className="lg:order-2 lg:sticky lg:top-2 lg:self-start">
           <SettleCard delay={0.05} className="rounded-2xl border border-border bg-card p-5 shadow-sm">
-            <ConfidenceBar title="Profile completeness" percent={profilePercent} caption={`${profilePercent}% complete`} />
+            <p className="text-[13.5px] font-bold">Where things stand</p>
             <AnimatePresence mode="wait" initial={false}>
-              {profilePercent >= 100 && (
+              {knowledgeGaps.length === 0 ? (
                 <motion.p
                   key="complete"
                   initial={{ opacity: 0, y: 4 }}
                   animate={{ opacity: 1, y: 0 }}
-                  className="mt-3.5 text-[13px] text-muted-foreground"
+                  className="mt-2.5 text-[13px] leading-relaxed text-muted-foreground"
                 >
                   Your profile is complete. Keep it updated whenever something changes.
                 </motion.p>
+              ) : (
+                <motion.div key="gaps" initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} className="mt-2.5">
+                  <p className="mb-1.5 text-[13px] leading-relaxed text-muted-foreground">Still worth teaching me:</p>
+                  <ul className="space-y-1">
+                    {knowledgeGaps.map((gap) => (
+                      <li key={gap.id} className="text-[13px] leading-relaxed text-muted-foreground">
+                        · {gap.label}
+                      </li>
+                    ))}
+                  </ul>
+                </motion.div>
               )}
             </AnimatePresence>
           </SettleCard>

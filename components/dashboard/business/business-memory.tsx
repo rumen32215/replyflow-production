@@ -64,8 +64,12 @@ export interface BusinessMemoryInitial {
   description: string;
   services: string[];
   serviceAreas: string[];
-  offersEmergency: boolean;
-  chargesCalloutFee: boolean;
+  /** null = never confirmed either way (Product Guarantee 1) — a
+   * ToggleRow needs a boolean to render, so this only ever displays as
+   * "off" for null, but the update payload preserves the real
+   * three-way state until the owner actually touches the toggle. */
+  offersEmergency: boolean | null;
+  chargesCalloutFee: boolean | null;
   calloutFeeAmount: string;
   knowledge: BusinessKnowledge;
   faqs: Faq[];
@@ -446,13 +450,13 @@ export function BusinessMemory({
           <ToggleRow
             label="Emergency call-outs"
             description="Accept urgent jobs when customers need help fast"
-            checked={offersEmergency}
+            checked={offersEmergency === true}
             onChange={(v) => learn(() => setOffersEmergency(v), ACK.updated)}
           />
           <ToggleRow
             label="Call-out fee"
             description="I'll mention it upfront so there are no surprises"
-            checked={chargesCalloutFee}
+            checked={chargesCalloutFee === true}
             onChange={(v) => learn(() => setChargesCalloutFee(v), ACK.updated)}
           />
           <AnimatePresence initial={false}>
@@ -728,7 +732,7 @@ function BusinessProfileCard({
   description: string;
   services: string[];
   serviceAreas: string[];
-  offersEmergency: boolean;
+  offersEmergency: boolean | null;
 }) {
   return (
     <div className="rounded-2xl border border-border bg-card p-5 shadow-sm">

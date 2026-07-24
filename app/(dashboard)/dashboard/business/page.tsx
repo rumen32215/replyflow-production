@@ -75,8 +75,11 @@ export default async function BusinessPage({ searchParams }: { searchParams: { t
         description: business.business_description ?? "",
         services: business.services ?? [],
         serviceAreas: business.service_areas ?? [],
-        offersEmergency: business.offers_emergency_callouts ?? true,
-        chargesCalloutFee: business.charges_callout_fee ?? false,
+        // Product Guarantee 1: no fallback coercion — null means
+        // genuinely unconfirmed and must stay that way, not silently
+        // become a claimed fact.
+        offersEmergency: business.offers_emergency_callouts,
+        chargesCalloutFee: business.charges_callout_fee,
         calloutFeeAmount: business.callout_fee_amount ?? "",
         knowledge: parseKnowledge(business.business_knowledge),
         faqs,

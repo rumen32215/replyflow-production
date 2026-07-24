@@ -100,6 +100,34 @@ export function evaluateSafety(input: {
     reasons.push("Draft confirms a reschedule to a new date without [booking.status] reflecting that change — only the owner can actually move a booking.");
   }
 
+  // Deterministic backstop for Product Guarantee 2 (the receptionist
+  // must always use known business facts when answering customers).
+  // Reproduced in live testing: a customer asked a direct payment-
+  // method question ("do you take cash?") on a business that had
+  // actually taught a payment method (paymentMethods included "Cash"),
+  // and the draft gave a generic non-answer instead — the prompt alone
+  // didn't reliably reach for a real, known fact every time. The
+  // Understanding Engine already classifies this as PAYMENT_QUERY
+  // deterministically (Sprint 9.1's own taxonomy), so this reuses that
+  // classification rather than adding a second, parallel detector: if
+  // the business has taught real payment methods and the draft doesn't
+  // cite any of them, that's the same shape of problem as an uncited
+  // price claim above, just inverted — a known fact that should have
+  // been used, silently ignored rather than invented.
+  const isPaymentQuery =
+    understanding.primaryIntent === "PAYMENT_QUERY" || understanding.secondaryIntents.includes("PAYMENT_QUERY");
+  const taughtPaymentFactIds = facts.filter((f) => f.id.startsWith("profile.payment.")).map((f) => f.id);
+  const hasUncitedPaymentAnswer =
+    isPaymentQuery &&
+    taughtPaymentFactIds.length > 0 &&
+    !generation.factsUsed.some((id) => taughtPaymentFactIds.includes(id));
+  if (hasUncitedPaymentAnswer) {
+    groundingFailed = true;
+    reasons.push(
+      "Customer asked about payment methods and the business has taught real payment methods, but the draft doesn't answer using any of them."
+    );
+  }
+
   // Check 2 — escalation category: the Understanding Engine's safety
   // tag or category-level "always escalate" rule (e.g. Emergency,
   // Complaint) or the generation model's own judgment.
@@ -108,7 +136,8 @@ export function evaluateSafety(input: {
       decision.alwaysEscalate ||
       anySecondaryAlwaysEscalate ||
       understanding.safetyTag !== null ||
-      hasUnconfirmedRescheduleClaim
+      hasUnconfirmedRescheduleClaim ||
+      hasUncitedPaymentAnswer
   );
   if (decision.alwaysEscalate) reasons.push(`"${decision.category}" always requires the owner's review.`);
   if (anySecondaryAlwaysEscalate) {

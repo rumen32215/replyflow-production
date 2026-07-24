@@ -29,16 +29,36 @@ export function collectFacts(context: ReplyContext, understanding: Understanding
     p.services.forEach((s, i) => facts.push({ id: `profile.service.${i}`, text: `Offers: ${s}.` }));
     p.serviceAreas.forEach((a, i) => facts.push({ id: `profile.area.${i}`, text: `Covers the area: ${a}.` }));
     facts.push({ id: "profile.hours", text: `Normal opening hours are ${p.openingTime} to ${p.closingTime}.` });
-    facts.push({
-      id: "profile.emergency_callouts",
-      text: p.offersEmergencyCallouts ? "Offers emergency call-outs." : "Does not offer emergency call-outs.",
-    });
-    facts.push({
-      id: "profile.callout_fee",
-      text: p.chargesCalloutFee
-        ? `Charges a call-out fee${p.calloutFeeAmount ? ` of ${p.calloutFeeAmount}` : ""}.`
-        : "Does not charge a call-out fee.",
-    });
+    // Product Guarantee 1: never invent a business fact. `null` means
+    // genuinely unconfirmed — never told to the customer as either
+    // yes or no, and never silently escalated to "not going to
+    // engage" either. The model is instructed to say so honestly and
+    // bring the owner in, the same way a real receptionist would say
+    // "let me check and get back to you" rather than guess.
+    if (p.offersEmergencyCallouts === null) {
+      facts.push({
+        id: "profile.emergency_callouts",
+        text: "Whether emergency call-outs are offered has not been confirmed yet. Never tell the customer yes or no — if asked, say you'll need to check and bring the owner in.",
+      });
+    } else {
+      facts.push({
+        id: "profile.emergency_callouts",
+        text: p.offersEmergencyCallouts ? "Offers emergency call-outs." : "Does not offer emergency call-outs.",
+      });
+    }
+    if (p.chargesCalloutFee === null) {
+      facts.push({
+        id: "profile.callout_fee",
+        text: "Whether a call-out fee is charged has not been confirmed yet. Never tell the customer yes or no — if asked, say you'll need to check and bring the owner in.",
+      });
+    } else {
+      facts.push({
+        id: "profile.callout_fee",
+        text: p.chargesCalloutFee
+          ? `Charges a call-out fee${p.calloutFeeAmount ? ` of ${p.calloutFeeAmount}` : ""}.`
+          : "Does not charge a call-out fee.",
+      });
+    }
     p.knowledge.personality.forEach((t, i) => facts.push({ id: `profile.personality.${i}`, text: t }));
     p.knowledge.jobsDeclined.forEach((t, i) => facts.push({ id: `profile.declined.${i}`, text: `Does not take on: ${t}.` }));
     p.knowledge.guarantees.forEach((t, i) => facts.push({ id: `profile.guarantee.${i}`, text: `Guarantee: ${t}.` }));

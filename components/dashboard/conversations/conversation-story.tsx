@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
-import { AlertTriangle, Briefcase, Check, History, Loader2, Phone, Pencil, Sparkles, X } from "lucide-react";
+import { AlertTriangle, Briefcase, Check, History, Loader2, Phone, Pencil, Send, Sparkles, X } from "lucide-react";
 import { press, GrowingCheck, Reveal, EASE } from "@/components/shared/motion";
 import { Acknowledgement, useAcknowledgement } from "@/components/shared/acknowledgement";
 import { TypingDots } from "@/components/shared/typed-message";
@@ -182,6 +182,14 @@ export function ConversationStory({
   const [pendingAction, setPendingAction] = useState<"approve" | "edit" | "reject" | null>(null);
   const [justSent, setJustSent] = useState(false);
   const [replyError, setReplyError] = useState<string | null>(null);
+
+  // Product Guarantee 3: the owner must always have a way to reach
+  // their customer, even when the AI produces no draft at all — this
+  // composer is never hidden behind the AI draft's presence, unlike
+  // everything else in this file.
+  const [manualText, setManualText] = useState("");
+  const [manualSending, setManualSending] = useState(false);
+  const [manualError, setManualError] = useState<string | null>(null);
 
   const story = buildStory({ status, messageCount, photoCount });
   const group = groupForStatus(status);
@@ -370,6 +378,31 @@ export function ConversationStory({
     }
   }
 
+  async function sendManualMessage() {
+    if (manualSending || !manualText.trim()) return;
+    setManualSending(true);
+    setManualError(null);
+    try {
+      const res = await fetch(`/api/conversations/${conversationId}/send`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: manualText.trim() }),
+      });
+      const payload = await res.json();
+      setManualSending(false);
+      if (!res.ok) {
+        setManualError(payload.error ?? "Couldn't send that — try again.");
+        return;
+      }
+      setManualText("");
+      acknowledge("Sent.");
+      router.refresh();
+    } catch {
+      setManualSending(false);
+      setManualError("Couldn't reach the server — try again.");
+    }
+  }
+
   const scheduledLabel = job ? formatScheduled(job.scheduled_for) : null;
   const confirmationPreview = job
     ? `Hi ${customerName || "there"}! ${businessName} here — your booking for ${job.issue} is confirmed${
@@ -497,6 +530,36 @@ export function ConversationStory({
         )}
         <Acknowledgement message={message} isError={isError} className="ml-1" />
       </div>
+
+      {/* Product Guarantee 3: always available, regardless of whether
+       * an AI draft exists — the one reply path that never depends on
+       * the AI producing anything. */}
+      <div className="mt-3.5 flex items-end gap-2">
+        <textarea
+          value={manualText}
+          onChange={(e) => setManualText(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              sendManualMessage();
+            }
+          }}
+          rows={1}
+          placeholder="Message the customer yourself…"
+          className="min-h-[44px] flex-1 resize-none rounded-xl border border-border bg-card px-3.5 py-2.5 text-[13px] leading-relaxed outline-none transition-colors placeholder:text-muted-foreground/60 focus:border-primary"
+        />
+        <motion.button
+          {...press}
+          type="button"
+          onClick={sendManualMessage}
+          disabled={manualSending || !manualText.trim()}
+          className="flex min-h-[44px] shrink-0 items-center gap-1.5 rounded-xl bg-primary px-3.5 py-2.5 text-[12.5px] font-semibold text-primary-foreground shadow-sm disabled:opacity-60"
+        >
+          {manualSending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
+          Send
+        </motion.button>
+      </div>
+      {manualError && <p className="mt-1.5 text-[12px] text-red-600">{manualError}</p>}
 
       {/* A draft never auto-finalises — the owner decides. */}
       {isDraft && !showJobForm && (

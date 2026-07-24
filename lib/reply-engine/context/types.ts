@@ -13,8 +13,10 @@ export interface BusinessProfileContext {
   serviceAreas: string[];
   openingTime: string;
   closingTime: string;
-  offersEmergencyCallouts: boolean;
-  chargesCalloutFee: boolean;
+  /** null = never confirmed either way (Product Guarantee 1 — must
+   * never be presented as a known fact). */
+  offersEmergencyCallouts: boolean | null;
+  chargesCalloutFee: boolean | null;
   calloutFeeAmount: string | null;
   receptionistName: string | null;
   knowledge: BusinessKnowledge;

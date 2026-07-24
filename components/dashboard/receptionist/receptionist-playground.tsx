@@ -123,8 +123,9 @@ export function ReceptionistPlayground({
   businessId: string;
   businessName: string;
   trade: string | null;
-  offersEmergency: boolean;
-  chargesCalloutFee: boolean;
+  /** null = never confirmed either way (Product Guarantee 1). */
+  offersEmergency: boolean | null;
+  chargesCalloutFee: boolean | null;
   calloutFeeAmount: string | null;
   availability: Availability;
   receptionistName: string | null;
@@ -599,7 +600,7 @@ export function ReceptionistPlayground({
             open={open === "escalation"}
             onToggle={() => setOpen(open === "escalation" ? null : "escalation")}
           >
-            {!offersEmergency && (
+            {offersEmergency === false && (
               <p className="mb-3 rounded-lg bg-amber-100/60 px-3 py-2 text-[12px] leading-relaxed text-amber-800">
                 You told me you don&apos;t take emergency call-outs — I already won&apos;t promise a visit. This is just about
                 which situations are still serious enough to bring you in personally.

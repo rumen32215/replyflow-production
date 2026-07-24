@@ -76,8 +76,10 @@ export interface PreviewKnowledge {
   behaviours: Set<string>;
   rules: Set<string>;
   escalation: Set<string>;
-  offersEmergency: boolean;
-  chargesCalloutFee: boolean;
+  /** null = never confirmed either way (Product Guarantee 1 — the
+   * preview must never claim a business fact nobody has taught). */
+  offersEmergency: boolean | null;
+  chargesCalloutFee: boolean | null;
   calloutFeeAmount: string | null;
 }
 
@@ -285,7 +287,11 @@ export function buildPreviewConversation(
       parts.push("That sounds urgent — I'm letting the owner know right now, and turning off your water at the stopcock will help in the meantime.");
     } else {
       parts.push("I'm really sorry — that sounds urgent.");
-      if (k.offersEmergency || has("mention-emergency")) parts.push("We do offer emergency call-outs, so someone can get to you quickly.");
+      // Product Guarantee 1: the fact itself must be explicitly
+      // confirmed true — a behaviour toggle can shape how something
+      // true gets said, but it can never independently assert a fact
+      // nobody has taught (or override one explicitly taught as false).
+      if (k.offersEmergency === true) parts.push("We do offer emergency call-outs, so someone can get to you quickly.");
       if (has("ask-postcode")) {
         parts.push("Could I take your postcode so we can get on our way?");
         askedFor = "postcode";
@@ -337,7 +343,7 @@ export function buildPreviewConversation(
       parts.push("Could I also take your postcode?");
       askedFor = askedFor ?? "postcode";
     }
-    if (has("mention-emergency") && k.offersEmergency) {
+    if (has("mention-emergency") && k.offersEmergency === true) {
       parts.push("If it's urgent, we do offer emergency call-outs.");
     }
   }

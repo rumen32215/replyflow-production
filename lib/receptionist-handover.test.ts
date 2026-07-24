@@ -96,3 +96,28 @@ test("the Promise is fixed, three lines, never derived from business data", () =
   assert.equal(THE_PROMISE.length, 3);
   assert.ok(THE_PROMISE.every((line) => typeof line === "string" && line.length > 0));
 });
+
+/* -------- Product Guarantee 1: never invent a business fact -------- */
+
+test("unconfirmed emergency call-outs (null) is an honest gap, never a claim either way", () => {
+  const recap = buildHandoverRecap(baseInput({ offersEmergencyCallouts: null }));
+  assert.ok(!recap.understood.some((l) => /emergency call-out/i.test(l)));
+  assert.ok(recap.gaps.some((g) => /emergency call-out/i.test(g)));
+});
+
+test("unconfirmed call-out fee (null) is an honest gap, never a claim either way", () => {
+  const recap = buildHandoverRecap(baseInput({ chargesCalloutFee: null }));
+  assert.ok(!recap.understood.some((l) => /call-out fee/i.test(l)));
+  assert.ok(recap.gaps.some((g) => /call-out fee/i.test(g)));
+});
+
+test("explicitly confirmed false is stated as a real fact, not a gap", () => {
+  const recap = buildHandoverRecap(baseInput({ offersEmergencyCallouts: false, chargesCalloutFee: false }));
+  assert.ok(recap.understood.some((l) => l === "You don't take on emergency call-outs."));
+  assert.ok(recap.understood.some((l) => l === "You don't charge a call-out fee."));
+});
+
+test("explicitly confirmed true is stated as a real fact", () => {
+  const recap = buildHandoverRecap(baseInput({ offersEmergencyCallouts: true }));
+  assert.ok(recap.understood.some((l) => l === "You take on emergency call-outs."));
+});

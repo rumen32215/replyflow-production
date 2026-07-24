@@ -49,13 +49,16 @@ export default async function ReceptionistPage({
   const tone = (config?.tone ?? business.greeting_style ?? "friendly") as Tone;
   const availability = parseAvailability(business.availability, business.opening_time, business.closing_time);
 
+  // Product Guarantee 1: no fallback coercion below — null means
+  // genuinely unconfirmed and must stay that way, never silently
+  // become a claimed fact.
   return (
     <ReceptionistPlayground
       businessId={business.id}
       businessName={business.business_name}
       trade={business.trade}
-      offersEmergency={business.offers_emergency_callouts ?? true}
-      chargesCalloutFee={business.charges_callout_fee ?? false}
+      offersEmergency={business.offers_emergency_callouts}
+      chargesCalloutFee={business.charges_callout_fee}
       calloutFeeAmount={business.callout_fee_amount}
       availability={availability}
       receptionistName={business.receptionist_name}

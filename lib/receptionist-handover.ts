@@ -28,8 +28,10 @@ export interface HandoverInput {
   openingTime: string;
   closingTime: string;
   availability: Availability;
-  offersEmergencyCallouts: boolean;
-  chargesCalloutFee: boolean;
+  /** null = never confirmed either way (Product Guarantee 1 — the
+   * recap must disclose this as a gap, never state a guessed answer). */
+  offersEmergencyCallouts: boolean | null;
+  chargesCalloutFee: boolean | null;
   calloutFeeAmount: string | null;
   businessRules: string;
   escalationRules: string;
@@ -79,13 +81,17 @@ export function buildHandoverRecap(input: HandoverInput): HandoverRecap {
     gaps.push("I don't yet know your weekend availability.");
   }
 
-  if (input.offersEmergencyCallouts) {
+  if (input.offersEmergencyCallouts === null) {
+    gaps.push("I don't yet know if you take on emergency call-outs — I'll never promise one until you tell me.");
+  } else if (input.offersEmergencyCallouts) {
     understood.push("You take on emergency call-outs.");
   } else {
     understood.push("You don't take on emergency call-outs.");
   }
 
-  if (input.chargesCalloutFee) {
+  if (input.chargesCalloutFee === null) {
+    gaps.push("I don't yet know whether you charge a call-out fee — I won't mention one either way until you tell me.");
+  } else if (input.chargesCalloutFee) {
     if (input.calloutFeeAmount && input.calloutFeeAmount.trim()) {
       understood.push(`You charge a call-out fee of ${input.calloutFeeAmount.trim()}.`);
     } else {

@@ -305,6 +305,28 @@ export const scenarios = [
   },
 
   {
+    name: "REGRESSION — payment question ignoring a real taught fact (Product Guarantee 2)",
+    steps: [
+      {
+        label: "1",
+        text: "Do you take cash?",
+        expect: ({ result }) => [
+          check(
+            Boolean(result.draft) && result.draft.status !== "no_reply_needed",
+            "A direct payment question always gets a real reply, never silence",
+            result.draft?.draft_text
+          ),
+          check(
+            Boolean(result.draft?.requires_escalation) || containsAny(result.draft, ["cash"]),
+            "Either answers using the real taught payment method, or is forced to escalate rather than dodge the question",
+            JSON.stringify(result.draft)
+          ),
+        ],
+      },
+    ],
+  },
+
+  {
     name: "REGRESSION — emergency must never be tagged unsupported",
     steps: [
       {

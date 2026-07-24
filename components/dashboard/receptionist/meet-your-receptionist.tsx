@@ -5,7 +5,9 @@ import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { Check, Pencil } from "lucide-react";
 import { SettleCard, press, EASE } from "@/components/shared/motion";
+import { Acknowledgement, useAcknowledgement } from "@/components/shared/acknowledgement";
 import { Button } from "@/components/ui/button";
+import { createClient } from "@/lib/supabase/client";
 import type { HandoverRecap } from "@/lib/receptionist-handover";
 import { THE_PROMISE } from "@/lib/receptionist-handover";
 import { cn } from "@/lib/utils";
@@ -37,20 +39,44 @@ function Bubble({ children, delay = 0 }: { children: React.ReactNode; delay?: nu
 }
 
 export function MeetYourReceptionist({
+  businessId,
   businessName,
   receptionistName,
   recap,
   correctBackHref,
+  alreadyConfirmed = false,
 }: {
+  businessId: string;
   businessName: string;
   receptionistName: string | null;
   recap: HandoverRecap;
   /** Where "actually, no — let me fix something" sends the owner. */
   correctBackHref: string;
+  /** Real, persisted (businesses.handover_confirmed_at) — revisiting
+   * this page after confirming once shows the Promise straight away
+   * rather than asking the same question again. */
+  alreadyConfirmed?: boolean;
 }) {
   const router = useRouter();
-  const [confirmed, setConfirmed] = useState(false);
+  const supabase = createClient();
+  const { isError, isSaving, startSaving, acknowledge, softError } = useAcknowledgement();
+  const [confirmed, setConfirmed] = useState(alreadyConfirmed);
   const name = receptionistName || "your receptionist";
+
+  async function confirm() {
+    if (isSaving) return;
+    startSaving();
+    const { error } = await supabase
+      .from("businesses")
+      .update({ handover_confirmed_at: new Date().toISOString() })
+      .eq("id", businessId);
+    if (error) {
+      softError();
+      return;
+    }
+    acknowledge();
+    setConfirmed(true);
+  }
 
   if (recap.readiness === "empty") {
     return (
@@ -124,11 +150,12 @@ export function MeetYourReceptionist({
               <motion.button
                 {...press}
                 type="button"
-                onClick={() => setConfirmed(true)}
-                className="inline-flex items-center gap-2 rounded-full bg-primary px-5 py-2.5 text-[14px] font-semibold text-primary-foreground shadow-sm hover:bg-primary/90"
+                onClick={confirm}
+                disabled={isSaving}
+                className="inline-flex items-center gap-2 rounded-full bg-primary px-5 py-2.5 text-[14px] font-semibold text-primary-foreground shadow-sm hover:bg-primary/90 disabled:opacity-60"
               >
                 <Check className="h-4 w-4" />
-                Yes, that&apos;s right
+                {isSaving ? "One moment…" : "Yes, that's right"}
               </motion.button>
               <motion.button
                 {...press}
@@ -139,6 +166,9 @@ export function MeetYourReceptionist({
                 <Pencil className="h-4 w-4" />
                 Actually, let me fix something
               </motion.button>
+              {isError && (
+                <Acknowledgement message="I'm having trouble saving this — try again." isError className="basis-full" />
+              )}
             </motion.div>
           ) : (
             <motion.div

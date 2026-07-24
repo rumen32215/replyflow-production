@@ -54,7 +54,7 @@ export default async function HomePage() {
   const { data: business } = await supabase
     .from("businesses")
     .select(
-      "id, business_name, logo_url, whatsapp_connected, availability, opening_time, closing_time, business_description, services, service_areas, business_knowledge"
+      "id, business_name, logo_url, whatsapp_connected, availability, opening_time, closing_time, business_description, services, service_areas, business_knowledge, handover_confirmed_at"
     )
     .eq("owner_id", user.id)
     .maybeSingle();
@@ -342,12 +342,23 @@ export default async function HomePage() {
     },
   });
 
+  // Blueprint checklist 2.7 — only reachable once facts and behavior
+  // are both taught (proof before permission: meeting her only makes
+  // sense once there's something real to meet), and always before
+  // WhatsApp, never after.
   const journeySteps: JourneyStep[] = [
-    { id: "business", label: "Business Profile", done: brain.percentFor("knowledge") >= 100, href: "/dashboard/business" },
+    { id: "business", label: "Business", done: brain.percentFor("knowledge") >= 100, href: "/dashboard/business" },
     { id: "receptionist", label: "Receptionist", done: brain.percentFor("receptionist") >= 100, href: "/dashboard/receptionist" },
+    { id: "meet", label: "Meet your receptionist", done: Boolean(business.handover_confirmed_at), href: "/dashboard/receptionist/meet" },
     { id: "whatsapp", label: "Connect WhatsApp", done: whatsappConnected, href: "/dashboard/whatsapp" },
   ];
-  const journeyComplete = journeySteps.every((s) => s.done);
+  // A step's own `done` is always the honest, real signal — never
+  // fabricated. Completion gating is separate: "meet" never
+  // retroactively locks a business that was already live before this
+  // step existed (noActivityYet === false) out of its own Front Desk;
+  // it stays visible and worth doing, it just doesn't block anyone
+  // this step is new to.
+  const journeyComplete = journeySteps.every((s) => s.done || (s.id === "meet" && !noActivityYet));
 
   const currentJob = todaysWorkItems.find((j) => j.status === "in_progress");
   const nextJob = todaysWorkItems.find((j) => j.status === "booked" && j.scheduledFor && new Date(j.scheduledFor) >= now);

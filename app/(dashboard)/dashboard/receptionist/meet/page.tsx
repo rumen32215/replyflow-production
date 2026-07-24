@@ -25,7 +25,7 @@ export default async function MeetYourReceptionistPage() {
   const { data: business, error: businessError } = await supabase
     .from("businesses")
     .select(
-      "id, business_name, trade, services, service_areas, opening_time, closing_time, availability, offers_emergency_callouts, charges_callout_fee, callout_fee_amount, receptionist_name, business_knowledge"
+      "id, business_name, trade, services, service_areas, opening_time, closing_time, availability, offers_emergency_callouts, charges_callout_fee, callout_fee_amount, receptionist_name, business_knowledge, handover_confirmed_at"
     )
     .eq("owner_id", user.id)
     .maybeSingle();
@@ -58,10 +58,12 @@ export default async function MeetYourReceptionistPage() {
 
   return (
     <MeetYourReceptionist
+      businessId={business.id}
       businessName={business.business_name}
       receptionistName={business.receptionist_name}
       recap={recap}
       correctBackHref="/dashboard/receptionist"
+      alreadyConfirmed={Boolean(business.handover_confirmed_at)}
     />
   );
 }

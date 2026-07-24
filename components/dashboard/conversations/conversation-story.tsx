@@ -1,9 +1,10 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
-import { AlertTriangle, Briefcase, Check, Loader2, Phone, Pencil, Sparkles, X } from "lucide-react";
+import { AlertTriangle, Briefcase, Check, History, Loader2, Phone, Pencil, Sparkles, X } from "lucide-react";
 import { press, GrowingCheck, Reveal, EASE } from "@/components/shared/motion";
 import { Acknowledgement, useAcknowledgement } from "@/components/shared/acknowledgement";
 import { TypingDots } from "@/components/shared/typed-message";
@@ -444,6 +445,20 @@ export function ConversationStory({
           <Phone className="h-3.5 w-3.5" />
           Call customer
         </motion.a>
+        {/* Blueprint checklist 3.4 — Conversations and Customers stay
+         * separate destinations (fast triage vs. reflective lookup),
+         * connected rather than merged. Same id works for both routes:
+         * conversations are already unique per (business_id,
+         * customer_phone), so this conversation *is* the customer. */}
+        <Link href={`/dashboard/customers/${conversationId}`}>
+          <motion.span
+            {...press}
+            className="flex items-center gap-1.5 rounded-xl border border-border bg-card px-3.5 py-2 text-[12.5px] font-semibold text-foreground"
+          >
+            <History className="h-3.5 w-3.5" />
+            View full history
+          </motion.span>
+        </Link>
         {(!job || job.status === "cancelled") && (
           <motion.button
             {...press}

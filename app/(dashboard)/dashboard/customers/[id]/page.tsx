@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
-import { ChevronLeft } from "lucide-react";
+import { ChevronLeft, MessageCircle } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { RelationshipOverview } from "@/components/dashboard/customers/relationship-overview";
 import { RelationshipTimeline } from "@/components/dashboard/customers/relationship-timeline";
@@ -173,6 +173,22 @@ export default async function CustomerDetailPage({ params }: { params: { id: str
         >
           {statusLabel(conversation.status)}
         </span>
+        {/* Blueprint checklist 3.4 — the reflective view always points
+         * back to the live thread; same id, both routes (see the
+         * identical cross-link on conversation-story.tsx). Icon-only
+         * below sm: the name/phone block already loses badly to four
+         * shrink-0 siblings on a narrow screen (real mobile check
+         * caught the name truncating to a single letter) — same
+         * icon-only-on-mobile treatment this header's own back button
+         * already uses. */}
+        <Link
+          href={`/dashboard/conversations/${conversation.id}`}
+          aria-label="Reply now"
+          className="ml-1 flex shrink-0 items-center gap-1.5 rounded-xl bg-primary px-2.5 py-1.5 text-[12.5px] font-semibold text-primary-foreground shadow-sm sm:px-3"
+        >
+          <MessageCircle className="h-3.5 w-3.5" />
+          <span className="hidden sm:inline">Reply now</span>
+        </Link>
       </div>
 
       <div className="grid flex-1 grid-cols-1 gap-5 p-5 lg:grid-cols-[1fr_320px] lg:p-6">

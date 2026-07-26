@@ -3,8 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { ArrowRight } from "lucide-react";
 import { useOnboardingStore } from "@/hooks/use-onboarding-store";
+import { OnboardingCTA } from "@/components/onboarding/onboarding-cta";
 
 /**
  * Screen 3 — one question, nothing else. The title reacts to typing:
@@ -79,7 +79,7 @@ export function BusinessNameStep() {
               transition={{ duration: 0.35, ease: EASE }}
               className="text-[24px] font-extrabold leading-tight tracking-tight"
             >
-              What should I call your business?
+              What is your business called?
             </motion.h1>
           )}
         </AnimatePresence>
@@ -101,19 +101,9 @@ export function BusinessNameStep() {
         />
       </motion.div>
 
-      <motion.button
-        type="button"
-        onClick={next}
-        disabled={!hasName}
-        whileHover={hasName ? { y: -2 } : undefined}
-        whileTap={hasName ? { scale: 0.985 } : undefined}
-        transition={{ type: "spring", stiffness: 400, damping: 24 }}
-        animate={{ opacity: hasName ? 1 : 0.45 }}
-        className="group flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-7 py-3.5 text-[15px] font-semibold text-primary-foreground shadow-sm transition-shadow duration-300 enabled:hover:shadow-[0_10px_30px_-8px_rgba(37,99,235,0.55)] disabled:cursor-not-allowed"
-      >
+      <OnboardingCTA onClick={next} disabled={!hasName}>
         Continue
-        <ArrowRight className="h-4 w-4 transition-transform duration-300 ease-out group-enabled:group-hover:translate-x-1" />
-      </motion.button>
+      </OnboardingCTA>
     </motion.div>
   );
 }

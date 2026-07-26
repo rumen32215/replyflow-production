@@ -10,9 +10,14 @@ import { Logo } from "@/components/shared/logo";
  * Shared chrome for every onboarding step: topbar, gradient stage, and
  * the slide/fade transition between steps. Individual step pages only
  * render their form content
- * — this is what makes the 5 steps feel like one continuous flow
- * instead of 5 separate pages.
+ * — this is what makes the steps feel like one continuous flow
+ * instead of separate pages.
+ *
+ * EASE matches the curve every step component uses for its own card
+ * entrance and internal transitions — one motion language throughout
+ * onboarding, not a page-level easing that differs from what's inside it.
  */
+const EASE = [0.22, 1, 0.36, 1] as const;
 export default function OnboardingLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
 
@@ -42,7 +47,7 @@ export default function OnboardingLayout({ children }: { children: React.ReactNo
               initial={{ opacity: 0, x: 24 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: -24 }}
-              transition={{ duration: 0.35, ease: [0.4, 0, 0.2, 1] }}
+              transition={{ duration: 0.35, ease: EASE }}
             >
               {children}
             </motion.div>

@@ -1,8 +1,8 @@
 "use client";
 
-import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
-import { ArrowRight } from "lucide-react";
+import { OnboardingCTA } from "@/components/onboarding/onboarding-cta";
 
 /**
  * Screen 1 — the beautiful entrance. The receptionist speaks first
@@ -21,6 +21,8 @@ function greetingForNow(): string {
 }
 
 export function WelcomeGreeting() {
+  const router = useRouter();
+
   return (
     <div className="w-full max-w-[440px]">
       <motion.div
@@ -60,7 +62,7 @@ export function WelcomeGreeting() {
           className="mb-2 text-[30px] font-extrabold leading-tight tracking-tight"
           suppressHydrationWarning
         >
-          {greetingForNow()} 👋
+          {greetingForNow()}.
         </motion.h1>
 
         <motion.p
@@ -79,7 +81,7 @@ export function WelcomeGreeting() {
           transition={{ duration: 0.5, ease: EASE, delay: 1.05 }}
           className="mb-9 text-[15px] leading-relaxed text-muted-foreground"
         >
-          Let&apos;s get everything ready for your first customer.
+          Let&apos;s get you ready for your first customer.
         </motion.p>
 
         <motion.div
@@ -87,17 +89,9 @@ export function WelcomeGreeting() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, ease: EASE, delay: 1.35 }}
         >
-          <Link href="/onboarding/business-name" className="group block">
-            <motion.span
-              whileHover={{ y: -2 }}
-              whileTap={{ scale: 0.985 }}
-              transition={{ type: "spring", stiffness: 400, damping: 24 }}
-              className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-7 py-3.5 text-[15.5px] font-semibold text-primary-foreground shadow-sm transition-shadow duration-300 group-hover:shadow-[0_10px_30px_-8px_rgba(37,99,235,0.55)]"
-            >
-              Let&apos;s begin
-              <ArrowRight className="h-4 w-4 transition-transform duration-300 ease-out group-hover:translate-x-1" />
-            </motion.span>
-          </Link>
+          <OnboardingCTA onClick={() => router.push("/onboarding/business-name")}>
+            Let&apos;s begin
+          </OnboardingCTA>
         </motion.div>
       </motion.div>
     </div>

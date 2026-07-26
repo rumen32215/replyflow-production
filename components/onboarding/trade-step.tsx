@@ -3,9 +3,10 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
-import { Wrench, Zap, Paintbrush, Hammer, Home, ArrowRight, type LucideIcon } from "lucide-react";
+import { Wrench, Zap, Paintbrush, Hammer, Home, MoreHorizontal, type LucideIcon } from "lucide-react";
 import { useOnboardingStore } from "@/hooks/use-onboarding-store";
 import { ONBOARDING_TRADES, ONBOARDING_TRADE_LABELS } from "@/lib/trades";
+import { OnboardingCTA } from "@/components/onboarding/onboarding-cta";
 
 /**
  * Screen 2 — "What kind of work do you do?" V1 First-Run decision:
@@ -62,9 +63,7 @@ export function TradeStep() {
       transition={{ duration: 0.5, ease: EASE }}
       className="rounded-3xl border border-border bg-card p-9 shadow-elevated sm:p-10"
     >
-      <h1 className="mb-8 text-[24px] font-extrabold leading-tight tracking-tight">
-        What kind of work do you do?
-      </h1>
+      <h1 className="mb-8 text-[24px] font-extrabold leading-tight tracking-tight">What&apos;s your trade?</h1>
 
       <div className="mb-6 grid grid-cols-3 gap-2.5">
         {TRADE_CARDS.map((card, i) => {
@@ -99,21 +98,27 @@ export function TradeStep() {
             </motion.button>
           );
         })}
+
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, ease: EASE, delay: 0.08 + TRADE_CARDS.length * 0.05 }}
+          aria-disabled="true"
+          title="More trades coming soon"
+          className="flex cursor-not-allowed flex-col items-center gap-2.5 rounded-2xl border-2 border-dashed border-border/70 bg-background/40 p-4 opacity-55"
+        >
+          <span className="flex h-10 w-10 items-center justify-center rounded-full bg-accent/50 text-muted-foreground">
+            <MoreHorizontal className="h-[18px] w-[18px]" />
+          </span>
+          <span className="text-center text-[11px] font-semibold leading-tight text-muted-foreground">
+            More soon
+          </span>
+        </motion.div>
       </div>
 
-      <motion.button
-        type="button"
-        onClick={next}
-        disabled={!canContinue}
-        whileHover={canContinue ? { y: -2 } : undefined}
-        whileTap={canContinue ? { scale: 0.985 } : undefined}
-        transition={{ type: "spring", stiffness: 400, damping: 24 }}
-        animate={{ opacity: canContinue ? 1 : 0.45 }}
-        className="group flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-7 py-3.5 text-[15px] font-semibold text-primary-foreground shadow-sm transition-shadow duration-300 enabled:hover:shadow-[0_10px_30px_-8px_rgba(37,99,235,0.55)] disabled:cursor-not-allowed"
-      >
+      <OnboardingCTA onClick={next} disabled={!canContinue}>
         Continue
-        <ArrowRight className="h-4 w-4 transition-transform duration-300 ease-out group-enabled:group-hover:translate-x-1" />
-      </motion.button>
+      </OnboardingCTA>
     </motion.div>
   );
 }

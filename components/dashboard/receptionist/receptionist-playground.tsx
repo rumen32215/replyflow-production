@@ -297,6 +297,12 @@ export function ReceptionistPlayground({
   // fine. requestId makes only the most recent save allowed to touch
   // the acknowledgement UI; anything older is silently ignored.
   const requestId = useRef(0);
+  // Data-loss defence (RC1 fix, same reasoning and pattern as
+  // business-memory.tsx): only write the columns whose state was
+  // genuinely touched this session, so a field whose initial
+  // hydration was ever wrong can never be silently overwritten by an
+  // edit to something else entirely.
+  const touched = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     if (firstRender.current) {
@@ -307,17 +313,22 @@ export function ReceptionistPlayground({
       const thisRequest = ++requestId.current;
       startSaving();
       try {
-        const { error } = await supabase.from("ai_configurations").upsert(
-          {
-            business_id: businessId,
-            tone,
-            tone_notes: toneNotes,
-            system_prompt: composeOptions(BEHAVIOUR_OPTIONS, behaviours, behavioursNotes),
-            business_rules: composeOptions(RULE_OPTIONS, rules, rulesNotes),
-            escalation_rules: composeOptions(ESCALATION_OPTIONS, escalation, escalationNotes),
-          },
-          { onConflict: "business_id" }
-        );
+        const patch: Record<string, unknown> = {};
+        if (touched.current.has("tone")) patch.tone = tone;
+        if (touched.current.has("toneNotes")) patch.tone_notes = toneNotes;
+        if (touched.current.has("behaviours") || touched.current.has("behavioursNotes")) {
+          patch.system_prompt = composeOptions(BEHAVIOUR_OPTIONS, behaviours, behavioursNotes);
+        }
+        if (touched.current.has("rules") || touched.current.has("rulesNotes")) {
+          patch.business_rules = composeOptions(RULE_OPTIONS, rules, rulesNotes);
+        }
+        if (touched.current.has("escalation") || touched.current.has("escalationNotes")) {
+          patch.escalation_rules = composeOptions(ESCALATION_OPTIONS, escalation, escalationNotes);
+        }
+        if (Object.keys(patch).length === 0) return;
+        const { error } = await supabase
+          .from("ai_configurations")
+          .upsert({ business_id: businessId, ...patch }, { onConflict: "business_id" });
         if (thisRequest !== requestId.current) return;
         if (error) softError();
         else acknowledge(ackRef.current);
@@ -361,7 +372,8 @@ export function ReceptionistPlayground({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [receptionistGaps.length]);
 
-  function toggle(set: Set<string>, apply: (s: Set<string>) => void, id: string, ack: string) {
+  function toggle(set: Set<string>, apply: (s: Set<string>) => void, id: string, ack: string, field: string) {
+    touched.current.add(field);
     const next = new Set(set);
     if (next.has(id)) next.delete(id);
     else next.add(id);
@@ -557,6 +569,7 @@ export function ReceptionistPlayground({
                     {...press}
                     type="button"
                     onClick={() => {
+                      touched.current.add("tone");
                       ackRef.current = ACK.updated;
                       setTone(t.value);
                     }}
@@ -588,6 +601,7 @@ export function ReceptionistPlayground({
             <OwnWordsInput
               value={toneNotes}
               onChange={(v) => {
+                touched.current.add("toneNotes");
                 ackRef.current = ACK.updated;
                 setToneNotes(v);
               }}
@@ -612,10 +626,11 @@ export function ReceptionistPlayground({
             open={open === "behaviours"}
             onToggle={() => setOpen(open === "behaviours" ? null : "behaviours")}
           >
-            <OptionChips options={BEHAVIOUR_OPTIONS} selected={behaviours} onToggle={(id) => toggle(behaviours, setBehaviours, id, randomAck())} />
+            <OptionChips options={BEHAVIOUR_OPTIONS} selected={behaviours} onToggle={(id) => toggle(behaviours, setBehaviours, id, randomAck(), "behaviours")} />
             <OwnWordsInput
               value={behavioursNotes}
               onChange={(v) => {
+                touched.current.add("behavioursNotes");
                 ackRef.current = randomAck();
                 setBehavioursNotes(v);
               }}
@@ -638,10 +653,11 @@ export function ReceptionistPlayground({
             open={open === "rules"}
             onToggle={() => setOpen(open === "rules" ? null : "rules")}
           >
-            <RuleList options={RULE_OPTIONS} selected={rules} onToggle={(id) => toggle(rules, setRules, id, randomAck())} />
+            <RuleList options={RULE_OPTIONS} selected={rules} onToggle={(id) => toggle(rules, setRules, id, randomAck(), "rules")} />
             <OwnWordsInput
               value={rulesNotes}
               onChange={(v) => {
+                touched.current.add("rulesNotes");
                 ackRef.current = randomAck();
                 setRulesNotes(v);
               }}
@@ -671,10 +687,11 @@ export function ReceptionistPlayground({
                 which situations are still serious enough to bring you in personally.
               </p>
             )}
-            <RuleList options={ESCALATION_OPTIONS} selected={escalation} onToggle={(id) => toggle(escalation, setEscalation, id, randomAck())} accent="amber" />
+            <RuleList options={ESCALATION_OPTIONS} selected={escalation} onToggle={(id) => toggle(escalation, setEscalation, id, randomAck(), "escalation")} accent="amber" />
             <OwnWordsInput
               value={escalationNotes}
               onChange={(v) => {
+                touched.current.add("escalationNotes");
                 ackRef.current = randomAck();
                 setEscalationNotes(v);
               }}

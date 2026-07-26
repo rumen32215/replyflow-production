@@ -134,6 +134,17 @@ export function BusinessMemory({
   // Only the most recent save is allowed to update the acknowledgement
   // UI — see the identical fix and explanation in receptionist-playground.tsx.
   const requestId = useRef(0);
+  // Data-loss defence (RC1 fix): this page's initial state is hydrated
+  // once from the server and never guaranteed fresh (session timing,
+  // a stale read, anything). The old save always re-wrote every field
+  // from client state, so if any one field's hydration was ever wrong,
+  // an edit to a completely unrelated field (e.g. the About text)
+  // silently overwrote a real DB value with that stale one — this is
+  // exactly how a real FAQ wipe was observed. `touched` records only
+  // the fields the owner has genuinely edited this session; the save
+  // below writes ONLY those, so a field that was never touched can
+  // never be clobbered by however its initial value got hydrated.
+  const touched = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     if (firstRender.current) {
@@ -144,28 +155,31 @@ export function BusinessMemory({
       const thisRequest = ++requestId.current;
       startSaving();
       try {
-        const cleanedFaqs = faqs.filter((f) => f.question.trim() && f.answer.trim());
-        const [businessResult, faqResult] = await Promise.all([
-          supabase
-            .from("businesses")
-            .update({
-              business_name: businessName.trim() || initial.businessName,
-              phone: phone.trim(),
-              business_description: description.trim() || null,
-              services,
-              service_areas: serviceAreas,
-              offers_emergency_callouts: offersEmergency,
-              charges_callout_fee: chargesCalloutFee,
-              callout_fee_amount: chargesCalloutFee ? calloutFeeAmount.trim() || null : null,
-              business_knowledge: knowledge,
-            })
-            .eq("id", businessId),
-          supabase
-            .from("ai_configurations")
-            .upsert({ business_id: businessId, faqs: cleanedFaqs }, { onConflict: "business_id" }),
-        ]);
+        const businessPatch: Record<string, unknown> = {};
+        if (touched.current.has("businessName")) businessPatch.business_name = businessName.trim() || initial.businessName;
+        if (touched.current.has("phone")) businessPatch.phone = phone.trim();
+        if (touched.current.has("description")) businessPatch.business_description = description.trim() || null;
+        if (touched.current.has("services")) businessPatch.services = services;
+        if (touched.current.has("serviceAreas")) businessPatch.service_areas = serviceAreas;
+        if (touched.current.has("offersEmergency")) businessPatch.offers_emergency_callouts = offersEmergency;
+        if (touched.current.has("chargesCalloutFee") || touched.current.has("calloutFeeAmount")) {
+          businessPatch.charges_callout_fee = chargesCalloutFee;
+          businessPatch.callout_fee_amount = chargesCalloutFee ? calloutFeeAmount.trim() || null : null;
+        }
+        if (touched.current.has("knowledge")) businessPatch.business_knowledge = knowledge;
+
+        const writes: PromiseLike<{ error: { message: string } | null }>[] = [];
+        if (Object.keys(businessPatch).length > 0) {
+          writes.push(supabase.from("businesses").update(businessPatch).eq("id", businessId));
+        }
+        if (touched.current.has("faqs")) {
+          const cleanedFaqs = faqs.filter((f) => f.question.trim() && f.answer.trim());
+          writes.push(supabase.from("ai_configurations").upsert({ business_id: businessId, faqs: cleanedFaqs }, { onConflict: "business_id" }));
+        }
+        if (writes.length === 0) return;
+        const results = await Promise.all(writes);
         if (thisRequest !== requestId.current) return;
-        if (businessResult.error || faqResult.error) softError();
+        if (results.some((r) => r.error)) softError();
         else acknowledge(ackRef.current);
       } catch {
         if (thisRequest === requestId.current) softError();
@@ -186,12 +200,14 @@ export function BusinessMemory({
     faqs,
   ]);
 
-  function learn<T>(apply: () => T, ack?: string) {
+  function learn<T>(field: string, apply: () => T, ack?: string) {
+    touched.current.add(field);
     ackRef.current = ack ?? randomAck();
     return apply();
   }
 
   function patchKnowledge(patch: Partial<BusinessKnowledge>, ack?: string) {
+    touched.current.add("knowledge");
     ackRef.current = ack ?? randomAck();
     setKnowledge((k) => ({ ...k, ...patch }));
   }
@@ -345,20 +361,20 @@ export function BusinessMemory({
           <MemoryField
             label="Business name"
             value={businessName}
-            onChange={(v) => learn(() => setBusinessName(v))}
+            onChange={(v) => learn("businessName", () => setBusinessName(v))}
             placeholder="e.g. Dales Plumbing"
           />
           <MemoryField
             label="Phone number"
             value={phone}
-            onChange={(v) => learn(() => setPhone(v))}
+            onChange={(v) => learn("phone", () => setPhone(v))}
             placeholder="So customers can reach you directly"
             type="tel"
           />
           <MemoryTextarea
             label="About your business"
             value={description}
-            onChange={(v) => learn(() => setDescription(v))}
+            onChange={(v) => learn("description", () => setDescription(v))}
             placeholder="e.g. Family-run plumbing and heating covering North London for 15 years."
           />
         </div>
@@ -385,7 +401,7 @@ export function BusinessMemory({
         <ChipEditor
           suggestions={[...serviceSuggestions]}
           items={services}
-          onChange={(next) => learn(() => setServices(next))}
+          onChange={(next) => learn("services", () => setServices(next))}
           addPlaceholder="Add another service"
         />
       ),
@@ -402,7 +418,7 @@ export function BusinessMemory({
           <ChipEditor
             suggestions={[]}
             items={serviceAreas}
-            onChange={(next) => learn(() => setServiceAreas(next))}
+            onChange={(next) => learn("serviceAreas", () => setServiceAreas(next))}
             addPlaceholder="Add a town or postcode"
           />
         </>
@@ -467,7 +483,7 @@ export function BusinessMemory({
             label="Would you go out for something like that?"
             description="It's 11pm and someone messages saying their boiler's leaking badly — I'll only ever offer this once you've said yes."
             checked={offersEmergency === true}
-            onChange={(v) => learn(() => setOffersEmergency(v), ACK.updated)}
+            onChange={(v) => learn("offersEmergency", () => setOffersEmergency(v), ACK.updated)}
           />
           <AnimatePresence initial={false}>
             {offersEmergency === true && (
@@ -483,7 +499,7 @@ export function BusinessMemory({
                     label="Is there a call-out fee on top?"
                     description="So I can mention it upfront, before they're surprised by it."
                     checked={chargesCalloutFee === true}
-                    onChange={(v) => learn(() => setChargesCalloutFee(v), ACK.updated)}
+                    onChange={(v) => learn("chargesCalloutFee", () => setChargesCalloutFee(v), ACK.updated)}
                   />
                 </div>
               </motion.div>
@@ -502,7 +518,7 @@ export function BusinessMemory({
                   <MemoryField
                     label="How much is the call-out fee?"
                     value={calloutFeeAmount}
-                    onChange={(v) => learn(() => setCalloutFeeAmount(v))}
+                    onChange={(v) => learn("calloutFeeAmount", () => setCalloutFeeAmount(v))}
                     placeholder="e.g. £60"
                   />
                 </div>
@@ -538,7 +554,7 @@ export function BusinessMemory({
       id: "faqs",
       group: "goodToKnow",
       title: "What's something customers ask you almost every day?",
-      content: <FaqEditor faqs={faqs} onChange={(next, ack) => learn(() => setFaqs(next), ack)} />,
+      content: <FaqEditor faqs={faqs} onChange={(next, ack) => learn("faqs", () => setFaqs(next), ack)} />,
     },
   ];
 

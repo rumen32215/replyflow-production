@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { motion } from "framer-motion";
-import { Home, MessagesSquare, Users, Brain, type LucideIcon } from "lucide-react";
+import { Home, MessagesSquare, Users, Headset, type LucideIcon } from "lucide-react";
 import { DASHBOARD_NAV } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 
@@ -17,15 +17,15 @@ import { cn } from "@/lib/utils";
  * bar tops out around four large targets before it gets cramped).
  */
 
-const ICONS: Record<"Home" | "MessagesSquare" | "Users" | "Brain", LucideIcon> = {
+const ICONS: Record<"Home" | "MessagesSquare" | "Users" | "Headset", LucideIcon> = {
   Home,
   MessagesSquare,
   Users,
-  Brain,
+  Headset,
 };
 
 const PRIMARY_NAV = DASHBOARD_NAV.filter(
-  (item): item is (typeof DASHBOARD_NAV)[number] & { icon: "Home" | "MessagesSquare" | "Users" | "Brain" } =>
+  (item): item is (typeof DASHBOARD_NAV)[number] & { icon: "Home" | "MessagesSquare" | "Users" | "Headset" } =>
     item.primary
 );
 

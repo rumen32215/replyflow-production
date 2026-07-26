@@ -99,6 +99,7 @@ export default async function HomePage() {
     { data: recentEscalations },
     { data: config },
     { data: whatsappConnection },
+    { count: realTestExchangeCount },
   ] = await Promise.all([
     // Real, already-live conversation state for every recent
     // conversation — the one fetch every section below reads from for
@@ -197,6 +198,14 @@ export default async function HomePage() {
       .select("token_expires_at")
       .eq("business_id", businessId)
       .maybeSingle(),
+    // V1 First-Run redesign — the new "Test your receptionist" journey
+    // step and the WhatsApp Proof-Before-Ask gate both need the same
+    // real signal: has at least one genuine reply ever been generated
+    // against the reserved test conversation (never written for the
+    // honest "not ready" fallback, only for a real, generated reply).
+    testConversationId
+      ? supabase.from("reply_drafts").select("id", { count: "exact", head: true }).eq("conversation_id", testConversationId)
+      : Promise.resolve({ count: 0 }),
   ]);
 
   // One map, built once, every section below reads from it — a
@@ -385,14 +394,20 @@ export default async function HomePage() {
     },
   });
 
-  // Blueprint checklist 2.7 — only reachable once facts and behavior
-  // are both taught (proof before permission: meeting her only makes
-  // sense once there's something real to meet), and always before
-  // WhatsApp, never after.
+  // V1 First-Run redesign (DOCS/SPECS/ReplyFlow-V1-First-Run-Proposal.md):
+  // Meet now happens right after the one-minute setup — first, not
+  // last-but-one — with Teach (the merged Business+Receptionist
+  // surface) and Test following it, always before WhatsApp, never after.
+  const hasRealTestExchange = Boolean(realTestExchangeCount && realTestExchangeCount > 0);
   const journeySteps: JourneyStep[] = [
-    { id: "business", label: "Business", done: brain.percentFor("knowledge") >= 100, href: "/dashboard/business" },
-    { id: "receptionist", label: "Receptionist", done: brain.percentFor("receptionist") >= 100, href: "/dashboard/receptionist" },
     { id: "meet", label: "Meet your receptionist", done: Boolean(business.handover_confirmed_at), href: "/dashboard/receptionist/meet" },
+    {
+      id: "teach",
+      label: "Teach your receptionist",
+      done: brain.percentFor("knowledge") >= 100 && brain.percentFor("receptionist") >= 100,
+      href: "/dashboard/receptionist",
+    },
+    { id: "test", label: "Test your receptionist", done: hasRealTestExchange, href: "/dashboard/receptionist/try" },
     { id: "whatsapp", label: "Connect WhatsApp", done: whatsappConnected, href: "/dashboard/whatsapp" },
   ];
   // A step's own `done` is always the honest, real signal — never

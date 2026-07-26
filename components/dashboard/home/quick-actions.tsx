@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { BookOpen, CalendarClock, Headset, MessagesSquare } from "lucide-react";
+import { CalendarClock, Headset, MessageCircleQuestion, MessagesSquare } from "lucide-react";
 import { press, ScrollReveal } from "@/components/shared/motion";
 import { Acknowledgement, ACK, useAcknowledgement } from "@/components/shared/acknowledgement";
 import { SwitchVisual } from "@/components/ui/switch";
@@ -30,16 +30,13 @@ interface QuickActionsProps {
 
 const ACTIONS = [
   { href: "/dashboard/receptionist", icon: Headset, label: "Receptionist" },
-  // Release polish (ReplyFlow v1 Polish Pass): these two labels had
-  // drifted from what the destination page actually calls itself
-  // ("Diary" landed on a page headed "Your hours"; "Business Profile"
-  // landed on one headed "Your business") — a small but real trust gap
-  // (Principle 5: a mismatch here is exactly the kind of thing that
-  // makes an owner hesitate and re-read). Now they match the real H1
-  // on each page, the same way "Receptionist" and "Conversations"
-  // already do.
   { href: "/dashboard/availability", icon: CalendarClock, label: "Your hours" },
-  { href: "/dashboard/business", icon: BookOpen, label: "Your business" },
+  // V1 First-Run redesign: "Your business" retired as a quick action —
+  // Business Profile merged into Receptionist (same destination now,
+  // so the two links were duplicates). Replaced with Test, the new
+  // journey's confidence-building step, genuinely distinct from
+  // teaching or conversations.
+  { href: "/dashboard/receptionist/try", icon: MessageCircleQuestion, label: "Test your receptionist" },
   { href: "/dashboard/conversations", icon: MessagesSquare, label: "Conversations" },
 ] as const;
 

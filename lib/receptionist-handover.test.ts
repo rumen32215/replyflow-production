@@ -40,21 +40,13 @@ test("readiness: empty with nothing taught at all", () => {
   assert.equal(recap.readiness, "empty");
 });
 
-test("readiness: partial when business knowledge is taught but the receptionist hasn't been — this is exactly the gap that used to let an owner reach Test Conversations before it could actually reply", () => {
-  const recap = buildHandoverRecap(baseInput({ services: ["Boiler repair"], serviceAreas: ["Manchester"] }));
+test("readiness: partial when a service is listed but no area is set yet", () => {
+  const recap = buildHandoverRecap(baseInput({ services: ["Boiler repair"] }));
   assert.equal(recap.readiness, "partial");
 });
 
-test("readiness: ready only once business knowledge AND all three receptionist topics are taught — matching the Reply Engine's own Readiness Gate exactly", () => {
-  const recap = buildHandoverRecap(
-    baseInput({
-      services: ["Boiler repair"],
-      serviceAreas: ["Manchester"],
-      systemPrompt: "Always confirm the customer's address.",
-      businessRules: "Never agree to same-day emergency call-outs after 6pm.",
-      escalationRules: "Come get me if someone mentions an insurance claim.",
-    })
-  );
+test("readiness: ready once a service area exists — V1 First-Run redesign, Meet now happens right after the one-minute setup, before receptionist topics are ever taught (Test Conversations' own Readiness Gate, not this recap, is what keeps an early Test attempt honest)", () => {
+  const recap = buildHandoverRecap(baseInput({ serviceAreas: ["Manchester"] }));
   assert.equal(recap.readiness, "ready");
 });
 

@@ -2,46 +2,35 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { motion, AnimatePresence } from "framer-motion";
-import {
-  Wrench,
-  Zap,
-  Trees,
-  Hammer,
-  Sparkles,
-  Flame,
-  Home,
-  Paintbrush,
-  MoreHorizontal,
-  ArrowRight,
-  type LucideIcon,
-} from "lucide-react";
+import { motion } from "framer-motion";
+import { Wrench, Zap, Paintbrush, Hammer, Home, ArrowRight, type LucideIcon } from "lucide-react";
 import { useOnboardingStore } from "@/hooks/use-onboarding-store";
+import { ONBOARDING_TRADES, ONBOARDING_TRADE_LABELS } from "@/lib/trades";
 
 /**
- * Screen 4 — "What kind of work do you do?" Nine large cards, staggered
- * in, one tap to select. "Other" reveals a small animated input.
- *
- * Stored values deliberately line up with the slugs the schema and
- * dashboard already know (plumbing / electrical / roofing / landscaping
- * from lib/constants.ts TRADES); the new ones are plain lowercase
- * words — the `trade` column is free text with a default, so nothing
- * schema-side changes.
+ * Screen 2 — "What kind of work do you do?" V1 First-Run decision:
+ * five trades, not eight, and no "Other" — the best receptionist for
+ * five trades beats an average one for fifty (DOCS/SPECS/ReplyFlow-V1-
+ * First-Run-Proposal.md). Existing businesses on a trade outside this
+ * five are completely unaffected; lib/trades.ts's normalizeTrade still
+ * recognises all eight plus a generic fallback.
  */
 
 const EASE = [0.22, 1, 0.36, 1] as const;
 
-const TRADE_CARDS: { value: string; label: string; icon: LucideIcon }[] = [
-  { value: "plumbing", label: "Plumber", icon: Wrench },
-  { value: "electrical", label: "Electrician", icon: Zap },
-  { value: "landscaping", label: "Landscaper", icon: Trees },
-  { value: "building", label: "Builder", icon: Hammer },
-  { value: "cleaning", label: "Cleaning", icon: Sparkles },
-  { value: "heating", label: "Heating", icon: Flame },
-  { value: "roofing", label: "Roofing", icon: Home },
-  { value: "painting", label: "Painter", icon: Paintbrush },
-  { value: "other", label: "Other", icon: MoreHorizontal },
-];
+const TRADE_ICONS: Record<(typeof ONBOARDING_TRADES)[number], LucideIcon> = {
+  plumbing: Wrench,
+  electrical: Zap,
+  painting: Paintbrush,
+  building: Hammer,
+  roofing: Home,
+};
+
+const TRADE_CARDS = ONBOARDING_TRADES.map((value) => ({
+  value,
+  label: ONBOARDING_TRADE_LABELS[value],
+  icon: TRADE_ICONS[value],
+}));
 
 export function TradeStep() {
   const router = useRouter();
@@ -49,38 +38,21 @@ export function TradeStep() {
   const storedTrade = useOnboardingStore((s) => s.trade);
 
   const [selected, setSelected] = useState<string | null>(null);
-  const [otherText, setOtherText] = useState("");
-  const otherInputRef = useRef<HTMLInputElement>(null);
 
   // Re-hydrate a previous choice if the user came back to this screen.
   const hydratedRef = useRef(false);
   useEffect(() => {
     if (hydratedRef.current || !storedTrade) return;
     hydratedRef.current = true;
-    const known = TRADE_CARDS.some((t) => t.value === storedTrade && t.value !== "other");
-    if (known) {
-      setSelected(storedTrade);
-    } else if (storedTrade !== "plumbing") {
-      setSelected("other");
-      setOtherText(storedTrade);
-    }
+    if (TRADE_CARDS.some((t) => t.value === storedTrade)) setSelected(storedTrade);
   }, [storedTrade]);
 
-  // Focus the "Other" input the moment it finishes animating in.
-  useEffect(() => {
-    if (selected !== "other") return;
-    const t = setTimeout(() => otherInputRef.current?.focus(), 250);
-    return () => clearTimeout(t);
-  }, [selected]);
-
-  const otherTrimmed = otherText.trim();
-  const canContinue = selected !== null && (selected !== "other" || otherTrimmed.length >= 2);
+  const canContinue = selected !== null;
 
   function next() {
     if (!canContinue || !selected) return;
-    const trade = selected === "other" ? otherTrimmed.toLowerCase() : selected;
-    setField("trade", trade);
-    router.push("/onboarding/preparing");
+    setField("trade", selected);
+    router.push("/onboarding/service-area");
   }
 
   return (
@@ -128,29 +100,6 @@ export function TradeStep() {
           );
         })}
       </div>
-
-      <AnimatePresence>
-        {selected === "other" && (
-          <motion.div
-            initial={{ opacity: 0, height: 0, marginBottom: 0 }}
-            animate={{ opacity: 1, height: "auto", marginBottom: 24 }}
-            exit={{ opacity: 0, height: 0, marginBottom: 0 }}
-            transition={{ duration: 0.35, ease: EASE }}
-            className="overflow-hidden"
-          >
-            <input
-              ref={otherInputRef}
-              value={otherText}
-              onChange={(e) => setOtherText(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && next()}
-              placeholder="Tell me your trade"
-              maxLength={60}
-              aria-label="Your trade"
-              className="h-14 w-full rounded-2xl border-2 border-border bg-background px-5 text-[16px] font-semibold tracking-tight outline-none transition-all duration-300 placeholder:font-normal placeholder:text-muted-foreground/40 focus:border-primary focus:shadow-[0_0_0_4px_rgba(37,99,235,0.08),0_12px_32px_-12px_rgba(37,99,235,0.25)]"
-            />
-          </motion.div>
-        )}
-      </AnimatePresence>
 
       <motion.button
         type="button"

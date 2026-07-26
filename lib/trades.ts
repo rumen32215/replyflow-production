@@ -21,6 +21,24 @@ export const KNOWN_TRADES = [
 export type TradeKey = (typeof KNOWN_TRADES)[number];
 export type TradeOrGeneral = TradeKey | "general";
 
+/**
+ * V1 First-Run product decision: focus beats breadth. New signups only
+ * ever choose from these five — the best receptionist for five trades,
+ * not an average one for eight. This is a signup-UI restriction only:
+ * KNOWN_TRADES and normalizeTrade above are unchanged and still
+ * recognise all eight, so any existing business on a trade outside
+ * this five (e.g. "heating") keeps working exactly as it does today —
+ * nothing here is retroactive.
+ */
+export const ONBOARDING_TRADES = ["plumbing", "electrical", "painting", "building", "roofing"] as const;
+export const ONBOARDING_TRADE_LABELS: Record<(typeof ONBOARDING_TRADES)[number], string> = {
+  plumbing: "Plumber",
+  electrical: "Electrician",
+  painting: "Painter & Decorator",
+  building: "Builder",
+  roofing: "Roofer",
+};
+
 /** Free text ("Other") or anything unrecognised falls back to a
  * genuinely generic set — never guessed, never plumbing by default. */
 export function normalizeTrade(trade: string | null | undefined): TradeOrGeneral {

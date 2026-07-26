@@ -1,13 +1,16 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { ensureBusinessRow } from "@/lib/business";
+import { DAY_KEYS, defaultAvailability, type DayKey } from "@/lib/availability";
 
 export const dynamic = "force-dynamic";
 
 /**
- * "Preparing your receptionist" — the moment onboarding completes.
- * Called once from /onboarding/preparing with the business name and
- * trade collected on the two previous screens.
+ * "Preparing your receptionist" — the moment the one-minute setup
+ * completes. Called once from /onboarding/preparing with the five real
+ * facts the V1 First-Run redesign collects: business name, trade,
+ * service area, opening days, and opening hours
+ * (DOCS/SPECS/ReplyFlow-V1-First-Run-Proposal.md).
  *
  * The businesses row already exists by this point (created in
  * /auth/callback the moment the session was established — see
@@ -15,7 +18,7 @@ export const dynamic = "force-dynamic";
  *
  *   1. Re-assert the row exists (defence in depth for accounts that
  *      predate the callback guarantee).
- *   2. Write the name + trade the owner just told us — but ONLY while
+ *   2. Write the five facts the owner just told us — but ONLY while
  *      onboarding is still in progress. A business that has already
  *      completed onboarding is never overwritten: replaying this URL
  *      or double-submitting can't clobber personalised data.
@@ -33,6 +36,10 @@ function sanitize(value: unknown, maxLength: number): string {
   return value.replace(/[\u0000-\u001f\u007f]/g, "").trim().slice(0, maxLength);
 }
 
+function isTimeString(value: unknown): value is string {
+  return typeof value === "string" && /^([01]\d|2[0-3]):[0-5]\d$/.test(value);
+}
+
 export async function POST(request: Request) {
   const supabase = createClient();
   const {
@@ -45,7 +52,14 @@ export async function POST(request: Request) {
 
   // Body is optional — the flow always sends one, but the endpoint
   // stays safe to call bare.
-  let body: { businessName?: unknown; trade?: unknown } = {};
+  let body: {
+    businessName?: unknown;
+    trade?: unknown;
+    serviceArea?: unknown;
+    openDays?: unknown;
+    openingTime?: unknown;
+    closingTime?: unknown;
+  } = {};
   try {
     body = await request.json();
   } catch {
@@ -65,10 +79,31 @@ export async function POST(request: Request) {
 
   const businessName = sanitize(body.businessName, 80) || business.business_name || "Your business";
   const trade = sanitize(body.trade, 60).toLowerCase() || business.trade || "plumbing";
+  const serviceArea = sanitize(body.serviceArea, 80);
+  const openingTime = isTimeString(body.openingTime) ? body.openingTime : "08:00";
+  const closingTime = isTimeString(body.closingTime) ? body.closingTime : "17:30";
+  const openDays = new Set(
+    Array.isArray(body.openDays)
+      ? body.openDays.filter((d): d is DayKey => DAY_KEYS.includes(d))
+      : (["mon", "tue", "wed", "thu", "fri"] as DayKey[])
+  );
+
+  const availability = defaultAvailability(openingTime, closingTime);
+  for (const day of DAY_KEYS) {
+    availability.hours[day] = { ...availability.hours[day]!, closed: !openDays.has(day) };
+  }
 
   const { error: updateError } = await supabase
     .from("businesses")
-    .update({ business_name: businessName, trade, onboarding_completed: true })
+    .update({
+      business_name: businessName,
+      trade,
+      service_areas: serviceArea ? [serviceArea] : [],
+      opening_time: openingTime,
+      closing_time: closingTime,
+      availability,
+      onboarding_completed: true,
+    })
     .eq("id", business.id);
 
   if (updateError) {

@@ -33,7 +33,7 @@ const FIX_HREF: Record<string, string> = {
   cancellation: "/dashboard/receptionist?topic=behaviours",
   complaint: "/dashboard/receptionist?topic=escalation",
   emergency: "/dashboard/receptionist?topic=escalation",
-  payment: "/dashboard/business?topic=payments",
+  payment: "/dashboard/receptionist?topic=payments",
 };
 
 export function TestConversation({

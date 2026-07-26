@@ -4,28 +4,40 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
 /**
- * Holds the two answers onboarding actually asks for — business name
- * (Screen 3) and trade (Screen 4). Persisted to localStorage so a
- * refresh or accidental back-navigation doesn't cost the owner their
- * progress. Cleared by the preparing screen once the account is
- * provisioned and the dashboard opens.
- *
- * Everything else about the business (hours, services, greeting style,
- * logo, ...) is deliberately NOT here: configuration lives in the
- * dashboard's Business Profile, after value — never in onboarding
- * (Decision Log 005 / 006).
+ * V1 First-Run redesign — the one-minute setup: five real facts, and
+ * nothing that can wait. Business name, trade, service area, opening
+ * days, opening hours — every one of these is required before the
+ * receptionist can say anything real in "Meet your receptionist."
+ * Everything else (services, personality, payment methods, behaviour,
+ * escalation, ...) is deliberately NOT here — that's "Teach your
+ * receptionist," reached only after she's already been introduced.
+ * Persisted to localStorage so a refresh or accidental back-navigation
+ * doesn't cost the owner their progress. Cleared by the preparing
+ * screen once the account is provisioned.
  */
 interface OnboardingState {
   businessName: string;
   trade: string;
+  serviceArea: string;
+  openDays: string[]; // DayKey values, e.g. ["mon","tue","wed","thu","fri"]
+  openingTime: string;
+  closingTime: string;
 
-  setField: <K extends "businessName" | "trade">(key: K, value: string) => void;
+  setField: <K extends "businessName" | "trade" | "serviceArea" | "openingTime" | "closingTime">(
+    key: K,
+    value: string
+  ) => void;
+  setOpenDays: (days: string[]) => void;
   reset: () => void;
 }
 
 const initialState = {
   businessName: "",
   trade: "",
+  serviceArea: "",
+  openDays: ["mon", "tue", "wed", "thu", "fri"],
+  openingTime: "08:00",
+  closingTime: "17:30",
 };
 
 export const useOnboardingStore = create<OnboardingState>()(
@@ -33,6 +45,7 @@ export const useOnboardingStore = create<OnboardingState>()(
     (set) => ({
       ...initialState,
       setField: (key, value) => set({ [key]: value }),
+      setOpenDays: (days) => set({ openDays: days }),
       reset: () => set(initialState),
     }),
     { name: "replyflow-onboarding" }

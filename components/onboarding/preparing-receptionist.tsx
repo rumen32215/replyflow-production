@@ -30,10 +30,10 @@ import { useOnboardingStore } from "@/hooks/use-onboarding-store";
 const EASE = [0.22, 1, 0.36, 1] as const;
 
 const LINES = [
-  "Preparing your front desk",
-  "Learning your business",
-  "Getting ready for today's customers",
-  "Opening today's diary",
+  "Meeting your business",
+  "Learning your hours",
+  "Getting ready to say hello",
+  "Almost ready",
 ];
 
 const LINE_MS = 1600; // each line holds the stage for 1.6s
@@ -43,6 +43,10 @@ export function PreparingReceptionist() {
   const router = useRouter();
   const businessName = useOnboardingStore((s) => s.businessName);
   const trade = useOnboardingStore((s) => s.trade);
+  const serviceArea = useOnboardingStore((s) => s.serviceArea);
+  const openDays = useOnboardingStore((s) => s.openDays);
+  const openingTime = useOnboardingStore((s) => s.openingTime);
+  const closingTime = useOnboardingStore((s) => s.closingTime);
   const resetStore = useOnboardingStore((s) => s.reset);
 
   const [lineIndex, setLineIndex] = useState(0);
@@ -60,6 +64,10 @@ export function PreparingReceptionist() {
         body: JSON.stringify({
           businessName: businessName.trim(),
           trade: trade.trim(),
+          serviceArea: serviceArea.trim(),
+          openDays,
+          openingTime,
+          closingTime,
         }),
       });
       if (!res.ok) throw new Error("prepare_failed");
@@ -94,20 +102,17 @@ export function PreparingReceptionist() {
 
   const ready = sequenceDone && serverDone && !failed;
 
-  // ReplyFlow v1 Product Blueprint: onboarding now hands over to Front
-  // Desk, not the Receptionist teaching tool. Only name and trade have
-  // been captured at this point — nothing is actually taught yet — so
-  // landing on Receptionist stranded the owner with no sense of what's
-  // next. Front Desk already has its own incomplete-setup state (the
-  // Setup Journey checklist), built for exactly this moment: it shows
-  // the whole shape of what's left (Business, Receptionist, Meet Your
-  // Receptionist, Connect WhatsApp) instead of a single teaching page
-  // with no visible next step.
+  // V1 First-Run redesign: onboarding now hands straight to Meet Your
+  // Receptionist, not Front Desk. The whole point of the one-minute
+  // setup is that she already knows enough to say something real the
+  // instant it finishes — landing on Front Desk first would delay that
+  // moment for no reason. Meet's own readiness floor only requires the
+  // five setup facts just collected, so it's always reachable here.
   useEffect(() => {
     if (!ready) return;
     const t = setTimeout(() => {
       resetStore(); // onboarding is over — clear the persisted draft
-      router.replace("/dashboard");
+      router.replace("/dashboard/receptionist/meet");
     }, READY_HOLD_MS);
     return () => clearTimeout(t);
   }, [ready, resetStore, router]);

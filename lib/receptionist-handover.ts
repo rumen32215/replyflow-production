@@ -153,19 +153,19 @@ export function buildHandoverRecap(input: HandoverInput): HandoverRecap {
     understood.push(`You've given me ${input.faqCount} question${input.faqCount === 1 ? "" : "s"} customers usually ask, with your answers.`);
   }
 
-  // "ready" means Test Conversations will actually produce a real reply,
-  // not just that there's something to recap — the Reply Engine's own
-  // Readiness Gate (lib/reply-engine/generate-reply.ts) requires every
-  // receptionist topic taught before it will draft anything at all, so
-  // this must require the same three facts, not just business
-  // knowledge. Getting this wrong is exactly what let an owner reach
-  // "I've finished learning about you" and tap through to Test
-  // Conversations only to hit a silent "not ready" wall on their very
-  // first try.
-  const knowledgeTaught = input.services.length > 0 && input.serviceAreas.length > 0;
-  const receptionistTaught = Boolean(input.systemPrompt.trim() && input.businessRules.trim() && input.escalationRules.trim());
+  // V1 First-Run redesign: Meet now happens right after the one-minute
+  // setup, before Teach — so "ready" can no longer mean "every
+  // receptionist topic has been taught" (that used to be true when
+  // Meet was the last step before Test). It now means the one real
+  // thing setup actually collects for this recap — a service area —
+  // exists, which is always true the moment onboarding completes.
+  // Test Conversations' own Readiness Gate (lib/reply-engine/
+  // generate-reply.ts) is untouched and still requires the full
+  // receptionist teaching before it drafts a real reply — its existing
+  // honest "not ready" message is what keeps an early "Try to break
+  // me" tap safe, not this recap's readiness bar.
   const readiness: HandoverReadiness =
-    knowledgeTaught && receptionistTaught ? "ready" : input.services.length > 0 || input.serviceAreas.length > 0 ? "partial" : "empty";
+    input.serviceAreas.length > 0 ? "ready" : input.services.length > 0 ? "partial" : "empty";
 
   return { readiness, understood, gaps };
 }

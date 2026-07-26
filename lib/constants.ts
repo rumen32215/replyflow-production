@@ -13,9 +13,10 @@
  * around four large targets; Hours and Settings are one tap further
  * on mobile, via the topbar's secondary nav).
  *
- * Receptionist and Business no longer have their own nav entries —
- * both fold into Knowledge (checklist 2.5), which is what
- * "/dashboard/everything-i-know" now serves as the entry point to.
+ * V1 First-Run redesign: Business Profile, Behaviour, and Everything I
+ * Know no longer have separate destinations at all — they're one page
+ * ("Teach your receptionist," /dashboard/receptionist), and this is
+ * that page's single nav entry, replacing the old "Knowledge" entry.
  * WhatsApp connection is reached from Settings and from Front Desk
  * when its health actually needs attention (checklist 3.2), never
  * from primary navigation.
@@ -26,7 +27,7 @@ export const DASHBOARD_NAV = [
   { href: "/dashboard", label: "Front Desk", icon: "Home", primary: true },
   { href: "/dashboard/conversations", label: "Conversations", icon: "MessagesSquare", primary: true },
   { href: "/dashboard/customers", label: "Customers", icon: "Users", primary: true },
-  { href: "/dashboard/everything-i-know", label: "Knowledge", icon: "Brain", primary: true },
+  { href: "/dashboard/receptionist", label: "Receptionist", icon: "Headset", primary: true },
   { href: "/dashboard/availability", label: "Hours", icon: "CalendarDays", primary: false },
   { href: "/dashboard/settings", label: "Settings", icon: "Settings", primary: false },
 ] as const;

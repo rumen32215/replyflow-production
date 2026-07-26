@@ -3,6 +3,7 @@ import { waitUntil } from "@vercel/functions";
 import { verifyWebhookSignature } from "@/lib/whatsapp/verify-signature";
 import { createServiceClient } from "@/lib/supabase/service";
 import { generateReplyForMessage } from "@/lib/reply-engine/generate-reply";
+import { markMessageAsRead } from "@/lib/whatsapp/graph";
 import type { WhatsAppWebhookPayload } from "@/lib/whatsapp/types";
 
 // Needs the Node.js runtime (not Edge) for node:crypto in verify-signature.ts.
@@ -106,7 +107,7 @@ async function processWebhookPayload(payload: WhatsAppWebhookPayload) {
 
       const { data: connection } = await supabase
         .from("whatsapp_connections")
-        .select("business_id")
+        .select("business_id, access_token")
         .eq("phone_number_id", metadata.phone_number_id)
         .maybeSingle();
 
@@ -158,6 +159,16 @@ async function processWebhookPayload(payload: WhatsAppWebhookPayload) {
           )
           .select("id")
           .single();
+
+        // Conversation Experience Review §7 — mark it read (and request
+        // WhatsApp's typing indicator) the moment it arrives, regardless
+        // of message type, rather than leaving the customer at
+        // "delivered" with no acknowledgement until the full reply
+        // eventually lands. Best-effort and never blocking: a failed
+        // read receipt must never hold up the actual reply pipeline.
+        if (insertedMessage) {
+          waitUntil(markMessageAsRead(metadata.phone_number_id, connection.access_token, message.id));
+        }
 
         // Reply Engine trigger (Sprint 10A) — deferred via waitUntil so
         // the LLM call never delays this handler's ACK to Meta. Text

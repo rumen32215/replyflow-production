@@ -113,4 +113,44 @@ export async function sendTextMessage(
   return data as SendTextMessageResponse;
 }
 
+/**
+ * Marks an inbound message as read (blue ticks) and, in the same call,
+ * requests WhatsApp's built-in typing indicator — Conversation
+ * Experience Review §7: today a customer's message sits at "delivered"
+ * with zero acknowledgement until the full reply eventually lands,
+ * which can genuinely be minutes given the approval-queue flow. Meta
+ * expires the typing indicator itself (~25s or once the next message
+ * sends, whichever first) — this code never has to track or clear it,
+ * and it never claims anything false: it just signals "seen" the
+ * moment it's true.
+ *
+ * Deliberately best-effort, unlike every other function in this file:
+ * a failed courtesy read-receipt must never block the real reply
+ * pipeline, so this swallows its own errors rather than throwing.
+ */
+export async function markMessageAsRead(phoneNumberId: string, accessToken: string, messageId: string): Promise<void> {
+  const url = `${GRAPH_BASE}/${phoneNumberId}/messages`;
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        messaging_product: "whatsapp",
+        status: "read",
+        message_id: messageId,
+        typing_indicator: { type: "text" },
+      }),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => null);
+      console.error(`[whatsapp] mark-as-read failed: ${data?.error?.message || res.statusText}`);
+    }
+  } catch (err) {
+    console.error("[whatsapp] mark-as-read request failed:", err);
+  }
+}
+
 export type { WabaPhoneNumberInfo };

@@ -105,6 +105,15 @@ function buildSystemBlock(context: ReplyContext, facts: Fact[], options: { isFir
   );
 
   lines.push(
+    "Demonstrating understanding (Conversation Experience Review): when a diagnostic answer the customer just gave " +
+      "genuinely reveals something useful — a likely cause, what it means for what happens next — say so in one " +
+      "short clause before your next question or action (e.g. \"Sounds like trapped air\" before asking for a " +
+      "postcode). This is not filler: it's proof you understood the specific thing they described, not just " +
+      "extracted information from it. Only do this when the answer was genuinely informative enough to be worth " +
+      "reflecting — never as a habit on every message, and never when there's nothing meaningful to say back."
+  );
+
+  lines.push(
     "Conversation state, always authoritative — never re-derive any of this yourself from the raw history below, " +
       "it is carried forward for you turn by turn: [conversation.stage] tells you where this conversation actually " +
       "is — never move it backwards or repeat a stage it's already passed. [conversation.collected], if present, " +

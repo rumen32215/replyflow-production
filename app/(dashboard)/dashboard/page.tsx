@@ -411,12 +411,18 @@ export default async function HomePage() {
     { id: "whatsapp", label: "Connect WhatsApp", done: whatsappConnected, href: "/dashboard/whatsapp" },
   ];
   // A step's own `done` is always the honest, real signal — never
-  // fabricated. Completion gating is separate: "meet" never
-  // retroactively locks a business that was already live before this
-  // step existed (noActivityYet === false) out of its own Front Desk;
-  // it stays visible and worth doing, it just doesn't block anyone
-  // this step is new to.
-  const journeyComplete = journeySteps.every((s) => s.done || (s.id === "meet" && !noActivityYet));
+  // fabricated. Completion gating is separate: a real, already-
+  // connected WhatsApp number is the strongest possible proof this
+  // business already finished onboarding under whatever rules applied
+  // at the time — it must never be retroactively re-locked behind a
+  // step introduced afterwards (this exact bug: SHABZ, live and
+  // connected since before "test" existed as a tracked step, had its
+  // real Test Conversations activity reset at some point, which would
+  // otherwise wrongly show the setup checklist to a mature, fully
+  // operational business). `noActivityYet` still covers the narrower
+  // case of a business with real conversations but no WhatsApp
+  // connection on record.
+  const journeyComplete = whatsappConnected || journeySteps.every((s) => s.done || (s.id === "meet" && !noActivityYet));
 
   const currentJob = todaysWorkItems.find((j) => j.status === "in_progress");
   const nextJob = todaysWorkItems.find((j) => j.status === "booked" && j.scheduledFor && new Date(j.scheduledFor) >= now);

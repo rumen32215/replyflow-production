@@ -3,10 +3,12 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
-import { Wrench, Zap, Paintbrush, Hammer, Home, MoreHorizontal, type LucideIcon } from "lucide-react";
+import { Wrench, Zap, Paintbrush, Hammer, Home, type LucideIcon } from "lucide-react";
 import { useOnboardingStore } from "@/hooks/use-onboarding-store";
 import { ONBOARDING_TRADES, ONBOARDING_TRADE_LABELS } from "@/lib/trades";
 import { OnboardingCTA } from "@/components/onboarding/onboarding-cta";
+import { EASE, press, GrowingCheck } from "@/components/shared/motion";
+import { TypingDots } from "@/components/shared/typed-message";
 
 /**
  * Screen 2 — "What kind of work do you do?" V1 First-Run decision:
@@ -16,8 +18,6 @@ import { OnboardingCTA } from "@/components/onboarding/onboarding-cta";
  * five are completely unaffected; lib/trades.ts's normalizeTrade still
  * recognises all eight plus a generic fallback.
  */
-
-const EASE = [0.22, 1, 0.36, 1] as const;
 
 const TRADE_ICONS: Record<(typeof ONBOARDING_TRADES)[number], LucideIcon> = {
   plumbing: Wrench,
@@ -77,15 +77,16 @@ export function TradeStep() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.4, ease: EASE, delay: 0.08 + i * 0.05 }}
               whileHover={{ y: -3 }}
-              whileTap={{ scale: 0.97 }}
+              whileTap={{ ...press.whileTap, transition: press.transition }}
               aria-pressed={isSelected}
               className={
-                "flex flex-col items-center gap-2.5 rounded-2xl border-2 p-4 transition-colors duration-200 " +
+                "relative flex flex-col items-center gap-2.5 rounded-2xl border-2 p-4 transition-colors duration-200 " +
                 (isSelected
                   ? "border-primary bg-accent shadow-[0_10px_28px_-12px_rgba(37,99,235,0.4)]"
                   : "border-border bg-background hover:border-muted-foreground/30")
               }
             >
+              {isSelected && <GrowingCheck className="absolute -right-1.5 -top-1.5 h-5 w-5 shadow-sm" />}
               <span
                 className={
                   "flex h-10 w-10 items-center justify-center rounded-full transition-colors duration-200 " +
@@ -108,7 +109,7 @@ export function TradeStep() {
           className="flex cursor-not-allowed flex-col items-center gap-2.5 rounded-2xl border-2 border-dashed border-border/70 bg-background/40 p-4 opacity-55"
         >
           <span className="flex h-10 w-10 items-center justify-center rounded-full bg-accent/50 text-muted-foreground">
-            <MoreHorizontal className="h-[18px] w-[18px]" />
+            <TypingDots />
           </span>
           <span className="text-center text-[11px] font-semibold leading-tight text-muted-foreground">
             More soon

@@ -3,6 +3,8 @@
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { OnboardingCTA } from "@/components/onboarding/onboarding-cta";
+import { EASE } from "@/components/shared/motion";
+import { GradientText } from "@/components/shared/gradient-text";
 
 /**
  * Screen 1 — the beautiful entrance. The receptionist speaks first
@@ -10,8 +12,6 @@ import { OnboardingCTA } from "@/components/onboarding/onboarding-cta";
  * supporting sentence, one premium CTA. Nothing else — no feature
  * list, no inputs, no product pitch (Decision 003).
  */
-
-const EASE = [0.22, 1, 0.36, 1] as const;
 
 function greetingForNow(): string {
   const hour = new Date().getHours();
@@ -81,7 +81,7 @@ export function WelcomeGreeting() {
           transition={{ duration: 0.5, ease: EASE, delay: 1.05 }}
           className="mb-9 text-[15px] leading-relaxed text-muted-foreground"
         >
-          Let&apos;s get you ready for your first customer.
+          Let&apos;s get you ready for your first <GradientText>customer</GradientText>.
         </motion.p>
 
         <motion.div

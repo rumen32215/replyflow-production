@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { useOnboardingStore } from "@/hooks/use-onboarding-store";
 import { OnboardingCTA } from "@/components/onboarding/onboarding-cta";
+import { EASE } from "@/components/shared/motion";
+import { GradientText } from "@/components/shared/gradient-text";
 
 /**
  * Screen 3 — one question, nothing else. The title reacts to typing:
@@ -15,8 +17,6 @@ import { OnboardingCTA } from "@/components/onboarding/onboarding-cta";
  * picked up again by the preparing step when the businesses row is
  * created.
  */
-
-const EASE = [0.22, 1, 0.36, 1] as const;
 
 export function BusinessNameStep() {
   const router = useRouter();
@@ -64,11 +64,7 @@ export function BusinessNameStep() {
               transition={{ duration: 0.35, ease: EASE }}
               className="text-[24px] font-extrabold leading-tight tracking-tight"
             >
-              Nice to meet you,{" "}
-              <span className="bg-gradient-to-r from-primary to-success bg-clip-text text-transparent">
-                {trimmed}
-              </span>
-              .
+              Nice to meet you, <GradientText>{trimmed}</GradientText>.
             </motion.h1>
           ) : (
             <motion.h1
@@ -79,7 +75,7 @@ export function BusinessNameStep() {
               transition={{ duration: 0.35, ease: EASE }}
               className="text-[24px] font-extrabold leading-tight tracking-tight"
             >
-              What is your business called?
+              What&apos;s your <GradientText>business</GradientText> called?
             </motion.h1>
           )}
         </AnimatePresence>

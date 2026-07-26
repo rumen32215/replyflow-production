@@ -3,26 +3,77 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { Check } from "lucide-react";
 import { useOnboardingStore } from "@/hooks/use-onboarding-store";
 import { OnboardingCTA } from "@/components/onboarding/onboarding-cta";
+import { EASE, Reveal, GrowingCheck } from "@/components/shared/motion";
+import { PhonePreview, type PreviewTurn } from "@/components/shared/phone-preview";
+import { ONBOARDING_TRADE_LABELS, type ONBOARDING_TRADES } from "@/lib/trades";
+import { DAY_KEYS, DAY_LABELS } from "@/lib/availability";
 
 /**
- * Screen 5 — the handoff into the finished product. Deliberately built
- * with the same bright card chrome as every other onboarding screen, not
- * a separate dark "AI thinking" scene: the owner should feel like they're
- * arriving somewhere finished, not waiting on a machine.
+ * Screen 5 — the emotional payoff before Meet Your Receptionist (RC4).
  *
- * There is no scripted sequence of lines and no fixed multi-second pacing
- * — the only work happening is the real POST to /api/onboarding/prepare,
- * and the UI reflects that honestly. The single fixed delay in this file
- * (CONFIRM_HOLD_MS) exists only so the success checkmark is perceivable
- * for a beat before navigating — never to manufacture the appearance of
- * work that isn't happening.
+ * Two genuinely different things happen here, and neither one fakes a
+ * delay:
+ *
+ *  1. The real POST to /api/onboarding/prepare creates the business
+ *     row. The brief "Setting up your receptionist" moment lasts
+ *     exactly as long as that real request takes — nothing scripted.
+ *
+ *  2. Once that row exists, this calls the exact same real reasoning
+ *     pipeline production uses (lib/reply-engine/live-reply.ts, via
+ *     /api/receptionist/live-reply — the same route and function
+ *     Receptionist's own live coaching preview calls) with three
+ *     genuine customer questions built from what was just entered.
+ *     This is proof, not a scripted demo: there is still only one
+ *     receptionist, one brain, one conversation engine — this screen
+ *     is a new caller of it, not a second, faked one.
+ *
+ * The only fixed timing left (TYPE_SETTLE_MS) is how long the final
+ * reply's existing type-out effect (borrowed unchanged from
+ * PhonePreview, already used elsewhere) is given to finish before the
+ * closing line appears — a choreography beat for content that has
+ * already arrived, not a wait for something to happen. Advancing to
+ * Meet Your Receptionist is always an explicit tap, never a timer, so
+ * nothing about pacing is invented on the owner's behalf.
  */
 
-const EASE = [0.22, 1, 0.36, 1] as const;
-const CONFIRM_HOLD_MS = 550;
+const TYPE_SETTLE_MS = 2400;
+
+function describeOpenDaysRange(days: string[]): string {
+  const ordered = DAY_KEYS.filter((d) => days.includes(d));
+  const first = ordered[0];
+  const last = ordered[ordered.length - 1];
+  if (!first || !last) return "No days set yet";
+  if (ordered.length === DAY_KEYS.length) return "Every day";
+  const indices = ordered.map((d) => DAY_KEYS.indexOf(d));
+  const isContiguous = indices.every((v, i) => i === 0 || v === (indices[i - 1] ?? -Infinity) + 1);
+  if (isContiguous) {
+    return ordered.length === 1 ? DAY_LABELS[first] : `${DAY_LABELS[first]}–${DAY_LABELS[last]}`;
+  }
+  return ordered.map((d) => DAY_LABELS[d]).join(", ");
+}
+
+async function fetchDemoReply(message: string): Promise<string | null> {
+  try {
+    const res = await fetch("/api/receptionist/live-reply", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        scenarioMessage: message,
+        tone: "friendly",
+        behaviours: "",
+        businessRules: "",
+        escalationRules: "",
+      }),
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return typeof data.replyText === "string" && data.replyText.trim() ? data.replyText : null;
+  } catch {
+    return null;
+  }
+}
 
 export function PreparingReceptionist() {
   const router = useRouter();
@@ -34,11 +85,57 @@ export function PreparingReceptionist() {
   const closingTime = useOnboardingStore((s) => s.closingTime);
   const resetStore = useOnboardingStore((s) => s.reset);
 
-  const [status, setStatus] = useState<"working" | "ready" | "failed">("working");
+  const [stage, setStage] = useState<"working" | "proof" | "ready" | "failed">("working");
+  const [turns, setTurns] = useState<PreviewTurn[]>([]);
+  const [liveReply, setLiveReply] = useState("");
   const startedRef = useRef(false);
 
+  const tradeLabel = ONBOARDING_TRADE_LABELS[trade as (typeof ONBOARDING_TRADES)[number]] ?? trade;
+
+  const facts = [
+    { label: "Business name", value: businessName },
+    { label: "Trade", value: tradeLabel },
+    { label: "Service area", value: serviceArea },
+    { label: "Opening days", value: describeOpenDaysRange(openDays) },
+    { label: "Opening hours", value: `${openingTime}–${closingTime}` },
+  ];
+
+  async function runProofConversation() {
+    const demoMessages = [
+      "Hi, are you free tomorrow?",
+      `Do you cover ${serviceArea}?`,
+      `Are you a ${tradeLabel.toLowerCase()}?`,
+    ];
+    // Fired together so the total wait is roughly one call's latency,
+    // not the sum of three — but revealed in order, so the thread
+    // always reads as one natural conversation.
+    const pending = demoMessages.map((message) => ({ message, promise: fetchDemoReply(message) }));
+
+    const committed: PreviewTurn[] = [];
+    for (let i = 0; i < pending.length; i++) {
+      const item = pending[i];
+      if (!item) continue;
+
+      committed.push({ from: "customer", text: item.message });
+      setTurns([...committed]);
+      setLiveReply("");
+
+      const reply = await item.promise;
+      if (!reply) break; // a real hiccup — never let a nice-to-have block reaching Meet
+
+      if (i < pending.length - 1) {
+        committed.push({ from: "receptionist", text: reply });
+        setTurns([...committed]);
+      } else {
+        setLiveReply(reply);
+        await new Promise((resolve) => setTimeout(resolve, TYPE_SETTLE_MS));
+      }
+    }
+    setStage("ready");
+  }
+
   async function provision() {
-    setStatus("working");
+    setStage("working");
     try {
       const res = await fetch("/api/onboarding/prepare", {
         method: "POST",
@@ -53,14 +150,13 @@ export function PreparingReceptionist() {
         }),
       });
       if (!res.ok) throw new Error("prepare_failed");
-      setStatus("ready");
+      setStage("proof");
+      void runProofConversation();
     } catch {
-      setStatus("failed");
+      setStage("failed");
     }
   }
 
-  // Fire the server call once. (Guarded against Strict Mode's dev
-  // double-invoke; the endpoint is idempotent regardless.)
   useEffect(() => {
     if (startedRef.current) return;
     startedRef.current = true;
@@ -68,32 +164,25 @@ export function PreparingReceptionist() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // V1 First-Run redesign: onboarding hands straight to Meet Your
-  // Receptionist, not Front Desk — she already knows enough to say
-  // something real the instant setup finishes.
-  useEffect(() => {
-    if (status !== "ready") return;
-    const t = setTimeout(() => {
-      resetStore(); // onboarding is over — clear the persisted draft
-      router.replace("/dashboard/receptionist/meet");
-    }, CONFIRM_HOLD_MS);
-    return () => clearTimeout(t);
-  }, [status, resetStore, router]);
+  function enterReceptionist() {
+    resetStore(); // onboarding is over — clear the persisted draft
+    router.replace("/dashboard/receptionist/meet");
+  }
 
   return (
     <motion.div
       initial={{ opacity: 0, y: 14 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.5, ease: EASE }}
-      className="flex min-h-[360px] flex-col items-center justify-center rounded-3xl border border-border bg-card p-9 text-center shadow-elevated sm:p-10"
+      className="rounded-3xl border border-border bg-card p-9 shadow-elevated sm:p-10"
     >
       <AnimatePresence mode="wait">
-        {status === "working" && (
+        {stage === "working" && (
           <motion.div
             key="working"
             exit={{ opacity: 0, scale: 0.97 }}
             transition={{ duration: 0.4, ease: EASE }}
-            className="flex flex-col items-center"
+            className="flex min-h-[300px] flex-col items-center justify-center text-center"
           >
             <div className="relative mb-7 h-14 w-14">
               <motion.div
@@ -114,34 +203,59 @@ export function PreparingReceptionist() {
           </motion.div>
         )}
 
-        {status === "ready" && (
-          <motion.div key="ready" className="flex flex-col items-center">
-            <motion.div
-              initial={{ scale: 0.4, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              transition={{ type: "spring", stiffness: 260, damping: 20 }}
-              className="mb-6 flex h-14 w-14 items-center justify-center rounded-full bg-success shadow-[0_10px_30px_-8px_rgba(34,197,94,0.5)]"
-            >
-              <Check className="h-7 w-7 text-white" strokeWidth={3} />
-            </motion.div>
-            <motion.h1
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.4, ease: EASE, delay: 0.1 }}
-              className="text-[19px] font-semibold tracking-tight text-foreground"
-            >
-              You&apos;re all set.
-            </motion.h1>
+        {(stage === "proof" || stage === "ready") && (
+          <motion.div
+            key="proof"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.4, ease: EASE }}
+          >
+            <h1 className="mb-5 text-[16px] font-bold tracking-tight text-foreground/85">
+              What I&apos;ve already learned
+            </h1>
+
+            <div className="mb-6 space-y-2.5">
+              {facts.map((fact, i) => (
+                <Reveal key={fact.label} index={i} className="flex items-center gap-2.5 text-[13.5px]">
+                  <span aria-hidden>
+                    <GrowingCheck className="h-4 w-4 shrink-0" />
+                  </span>
+                  <span className="text-muted-foreground">{fact.label}:</span>
+                  <span className="font-semibold text-foreground">{fact.value}</span>
+                </Reveal>
+              ))}
+            </div>
+
+            <PhonePreview businessName={businessName || "Your business"} turns={turns} liveReply={liveReply} />
+
+            <AnimatePresence>
+              {stage === "ready" && (
+                <motion.div
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.4, ease: EASE }}
+                  className="mt-6"
+                >
+                  <p className="mb-4 flex items-center gap-2 text-[15px] font-semibold text-foreground">
+                    <span aria-hidden>
+                      <GrowingCheck className="h-4 w-4" />
+                    </span>
+                    Receptionist ready.
+                  </p>
+                  <OnboardingCTA onClick={enterReceptionist}>Meet your receptionist</OnboardingCTA>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </motion.div>
         )}
 
-        {status === "failed" && (
+        {stage === "failed" && (
           <motion.div
             key="failed"
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4, ease: EASE }}
-            className="flex w-full max-w-[320px] flex-col items-center"
+            className="flex min-h-[300px] w-full flex-col items-center justify-center text-center"
           >
             <p className="mb-2 text-[17px] font-semibold tracking-tight text-foreground">
               That didn&apos;t quite go through.

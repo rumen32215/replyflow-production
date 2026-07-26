@@ -5,6 +5,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import Link from "next/link";
 import { X } from "lucide-react";
 import { Logo } from "@/components/shared/logo";
+import { EASE } from "@/components/shared/motion";
 
 /**
  * Shared chrome for every onboarding step: topbar, gradient stage, and
@@ -13,11 +14,12 @@ import { Logo } from "@/components/shared/logo";
  * — this is what makes the steps feel like one continuous flow
  * instead of separate pages.
  *
- * EASE matches the curve every step component uses for its own card
- * entrance and internal transitions — one motion language throughout
- * onboarding, not a page-level easing that differs from what's inside it.
+ * EASE is ReplyFlow's one shared motion constant (components/shared/
+ * motion.tsx) — the same curve every step component's own card
+ * entrance and internal transitions use, and the same one the rest of
+ * the dashboard already uses. One motion language, sourced from one
+ * place, not a page-level easing that happens to match by coincidence.
  */
-const EASE = [0.22, 1, 0.36, 1] as const;
 export default function OnboardingLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
 

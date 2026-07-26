@@ -60,7 +60,13 @@ export function MeetYourReceptionist({
   const router = useRouter();
   const supabase = createClient();
   const { isError, isSaving, startSaving, acknowledge, softError } = useAcknowledgement();
-  const [confirmed, setConfirmed] = useState(alreadyConfirmed);
+  // "ready" here means Test Conversations will actually produce a real
+  // reply — see the exact reasoning in lib/receptionist-handover.ts.
+  // Only ever treat a prior confirmation as still valid when that's
+  // still true today; if the receptionist side was never finished (or
+  // was reset), a stale handover_confirmed_at must not paper over that.
+  const ready = recap.readiness === "ready";
+  const [confirmed, setConfirmed] = useState(alreadyConfirmed && ready);
   const name = receptionistName || "your receptionist";
 
   async function confirm() {
@@ -139,79 +145,103 @@ export function MeetYourReceptionist({
           </Bubble>
         )}
 
-        <Bubble delay={0.32}>
-          <strong>Have I understood your business correctly?</strong>
-        </Bubble>
+        {ready ? (
+          <>
+            <Bubble delay={0.32}>
+              <strong>Have I understood your business correctly?</strong>
+            </Bubble>
 
-        <AnimatePresence mode="wait">
-          {!confirmed ? (
-            <motion.div
-              key="confirm"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.3, delay: 0.42 }}
-              className="mt-1 flex flex-wrap gap-2.5"
-            >
-              <motion.button
-                {...press}
-                type="button"
-                onClick={confirm}
-                disabled={isSaving}
-                className="inline-flex items-center gap-2 rounded-full bg-primary px-5 py-2.5 text-[14px] font-semibold text-primary-foreground shadow-sm hover:bg-primary/90 disabled:opacity-60"
-              >
-                <Check className="h-4 w-4" />
-                {isSaving ? "One moment…" : "Yes, that's right"}
-              </motion.button>
-              <motion.button
-                {...press}
-                type="button"
-                onClick={() => router.push(correctBackHref)}
-                className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-5 py-2.5 text-[14px] font-semibold text-foreground hover:border-muted-foreground/30"
-              >
-                <Pencil className="h-4 w-4" />
-                Actually, let me fix something
-              </motion.button>
-              {isError && (
-                <Acknowledgement message="I'm having trouble saving this — try again." isError className="basis-full" />
+            <AnimatePresence mode="wait">
+              {!confirmed ? (
+                <motion.div
+                  key="confirm"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.3, delay: 0.42 }}
+                  className="mt-1 flex flex-wrap gap-2.5"
+                >
+                  <motion.button
+                    {...press}
+                    type="button"
+                    onClick={confirm}
+                    disabled={isSaving}
+                    className="inline-flex items-center gap-2 rounded-full bg-primary px-5 py-2.5 text-[14px] font-semibold text-primary-foreground shadow-sm hover:bg-primary/90 disabled:opacity-60"
+                  >
+                    <Check className="h-4 w-4" />
+                    {isSaving ? "One moment…" : "Yes, that's right"}
+                  </motion.button>
+                  <motion.button
+                    {...press}
+                    type="button"
+                    onClick={() => router.push(correctBackHref)}
+                    className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-5 py-2.5 text-[14px] font-semibold text-foreground hover:border-muted-foreground/30"
+                  >
+                    <Pencil className="h-4 w-4" />
+                    Actually, let me fix something
+                  </motion.button>
+                  {isError && (
+                    <Acknowledgement message="I'm having trouble saving this — try again." isError className="basis-full" />
+                  )}
+                </motion.div>
+              ) : (
+                <motion.div
+                  key="after"
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.4, ease: EASE }}
+                  className="flex flex-col gap-3"
+                >
+                  <Bubble>
+                    <p className="mb-1.5 font-semibold text-[13px] text-muted-foreground">Before we go any further:</p>
+                    <ul className="flex flex-col gap-1.5">
+                      {THE_PROMISE.map((line, i) => (
+                        <li key={i} className="flex gap-2">
+                          <span className="mt-[3px] text-primary">•</span>
+                          <span>{line}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </Bubble>
+                  <Bubble>
+                    For now, everything I do goes through you first — you&apos;ll see every reply before it sends. As
+                    you get to know how I work, you can hand me more.
+                  </Bubble>
+                  <Bubble>Want to see how I&apos;d actually handle something? Try me.</Bubble>
+                  <div className={cn("mt-2")}>
+                    {/* Hiring Experience redesign (roadmap A2/A3): straight
+                     * into Test Conversations, in the same breath — before
+                     * WhatsApp is ever mentioned, per 03-Trust-Experience.md
+                     * §3-4. */}
+                    <Button onClick={() => router.push("/dashboard/receptionist/try")} variant="primary" size="lg">
+                      Try to break me
+                    </Button>
+                  </div>
+                </motion.div>
               )}
-            </motion.div>
-          ) : (
-            <motion.div
-              key="after"
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.4, ease: EASE }}
-              className="flex flex-col gap-3"
-            >
-              <Bubble>
-                <p className="mb-1.5 font-semibold text-[13px] text-muted-foreground">Before we go any further:</p>
-                <ul className="flex flex-col gap-1.5">
-                  {THE_PROMISE.map((line, i) => (
-                    <li key={i} className="flex gap-2">
-                      <span className="mt-[3px] text-primary">•</span>
-                      <span>{line}</span>
-                    </li>
-                  ))}
-                </ul>
-              </Bubble>
-              <Bubble>
-                For now, everything I do goes through you first — you&apos;ll see every reply before it sends. As you
-                get to know how I work, you can hand me more.
-              </Bubble>
-              <Bubble>Want to see how I&apos;d actually handle something? Try me.</Bubble>
-              <div className={cn("mt-2")}>
-                {/* Hiring Experience redesign (roadmap A2/A3): straight
-                 * into Test Conversations, in the same breath — before
-                 * WhatsApp is ever mentioned, per 03-Trust-Experience.md
-                 * §3-4. */}
-                <Button onClick={() => router.push("/dashboard/receptionist/try")} variant="primary" size="lg">
-                  Try to break me
-                </Button>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+            </AnimatePresence>
+          </>
+        ) : (
+          // RC1 fix: readiness now genuinely means "Test Conversations
+          // will work" (lib/receptionist-handover.ts) — a business that
+          // knows what it does but hasn't taught the receptionist yet
+          // (behaviours/rules/escalation) used to reach this exact
+          // screen, confirm, and land on Test Conversations only to hit
+          // a silent "not ready" wall on the very first try. Better to
+          // be honest here, before the "wow" moment, than disappointing
+          // one message into it.
+          <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, ease: EASE, delay: 0.32 }}>
+            <Bubble>
+              I&apos;m not quite ready to show you properly yet — a little more teaching first, then I can prove it
+              instead of just telling you.
+            </Bubble>
+            <div className="mt-3">
+              <Button onClick={() => router.push(correctBackHref)} variant="primary" size="lg">
+                Finish teaching me
+              </Button>
+            </div>
+          </motion.div>
+        )}
       </div>
     </div>
   );

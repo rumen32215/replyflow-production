@@ -26,6 +26,7 @@ function baseInput(overrides: Partial<HandoverInput> = {}): HandoverInput {
     offersEmergencyCallouts: false,
     chargesCalloutFee: false,
     calloutFeeAmount: null,
+    systemPrompt: "",
     businessRules: "",
     escalationRules: "",
     faqCount: 0,
@@ -39,9 +40,32 @@ test("readiness: empty with nothing taught at all", () => {
   assert.equal(recap.readiness, "empty");
 });
 
-test("readiness: ready once services and areas are both taught", () => {
+test("readiness: partial when business knowledge is taught but the receptionist hasn't been — this is exactly the gap that used to let an owner reach Test Conversations before it could actually reply", () => {
   const recap = buildHandoverRecap(baseInput({ services: ["Boiler repair"], serviceAreas: ["Manchester"] }));
+  assert.equal(recap.readiness, "partial");
+});
+
+test("readiness: ready only once business knowledge AND all three receptionist topics are taught — matching the Reply Engine's own Readiness Gate exactly", () => {
+  const recap = buildHandoverRecap(
+    baseInput({
+      services: ["Boiler repair"],
+      serviceAreas: ["Manchester"],
+      systemPrompt: "Always confirm the customer's address.",
+      businessRules: "Never agree to same-day emergency call-outs after 6pm.",
+      escalationRules: "Come get me if someone mentions an insurance claim.",
+    })
+  );
   assert.equal(recap.readiness, "ready");
+});
+
+test("honest gap for what I should always do, when behaviours have never been taught", () => {
+  const recap = buildHandoverRecap(baseInput());
+  assert.ok(recap.gaps.some((g) => g.includes("what I should always do")));
+});
+
+test("behaviours taught surface as understood, quoted verbatim", () => {
+  const recap = buildHandoverRecap(baseInput({ systemPrompt: "Always ask for the postcode first." }));
+  assert.ok(recap.understood.some((l) => l.includes("Always ask for the postcode first.")));
 });
 
 test("never invents a call-out fee amount that wasn't stored", () => {

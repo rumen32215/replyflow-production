@@ -34,7 +34,7 @@ export default async function MeetYourReceptionistPage() {
 
   const { data: config } = await supabase
     .from("ai_configurations")
-    .select("business_rules, escalation_rules, faqs")
+    .select("system_prompt, business_rules, escalation_rules, faqs")
     .eq("business_id", business.id)
     .maybeSingle();
 
@@ -50,6 +50,7 @@ export default async function MeetYourReceptionistPage() {
     offersEmergencyCallouts: business.offers_emergency_callouts,
     chargesCalloutFee: business.charges_callout_fee,
     calloutFeeAmount: business.callout_fee_amount,
+    systemPrompt: config?.system_prompt ?? "",
     businessRules: config?.business_rules ?? "",
     escalationRules: config?.escalation_rules ?? "",
     faqCount: Array.isArray(config?.faqs) ? config.faqs.length : 0,

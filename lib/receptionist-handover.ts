@@ -33,6 +33,7 @@ export interface HandoverInput {
   offersEmergencyCallouts: boolean | null;
   chargesCalloutFee: boolean | null;
   calloutFeeAmount: string | null;
+  systemPrompt: string;
   businessRules: string;
   escalationRules: string;
   faqCount: number;
@@ -130,6 +131,12 @@ export function buildHandoverRecap(input: HandoverInput): HandoverRecap {
     understood.push(`On emergencies: ${input.knowledge.emergencyNotes.trim()}`);
   }
 
+  if (input.systemPrompt.trim()) {
+    understood.push(`Here's what I always do when someone gets in touch: "${input.systemPrompt.trim()}"`);
+  } else {
+    gaps.push("You haven't told me what I should always do yet — I'll keep things simple until you do.");
+  }
+
   if (input.businessRules.trim()) {
     understood.push(`You've told me: "${input.businessRules.trim()}"`);
   } else {
@@ -146,8 +153,19 @@ export function buildHandoverRecap(input: HandoverInput): HandoverRecap {
     understood.push(`You've given me ${input.faqCount} question${input.faqCount === 1 ? "" : "s"} customers usually ask, with your answers.`);
   }
 
+  // "ready" means Test Conversations will actually produce a real reply,
+  // not just that there's something to recap — the Reply Engine's own
+  // Readiness Gate (lib/reply-engine/generate-reply.ts) requires every
+  // receptionist topic taught before it will draft anything at all, so
+  // this must require the same three facts, not just business
+  // knowledge. Getting this wrong is exactly what let an owner reach
+  // "I've finished learning about you" and tap through to Test
+  // Conversations only to hit a silent "not ready" wall on their very
+  // first try.
+  const knowledgeTaught = input.services.length > 0 && input.serviceAreas.length > 0;
+  const receptionistTaught = Boolean(input.systemPrompt.trim() && input.businessRules.trim() && input.escalationRules.trim());
   const readiness: HandoverReadiness =
-    input.services.length > 0 && input.serviceAreas.length > 0 ? "ready" : input.services.length > 0 || input.serviceAreas.length > 0 ? "partial" : "empty";
+    knowledgeTaught && receptionistTaught ? "ready" : input.services.length > 0 || input.serviceAreas.length > 0 ? "partial" : "empty";
 
   return { readiness, understood, gaps };
 }

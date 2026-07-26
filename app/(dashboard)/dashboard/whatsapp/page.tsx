@@ -17,7 +17,7 @@ export default async function WhatsAppConnectionPage() {
 
   const { data: business } = await supabase
     .from("businesses")
-    .select("id")
+    .select("id, handover_confirmed_at")
     .eq("owner_id", user.id)
     .maybeSingle();
 
@@ -28,6 +28,22 @@ export default async function WhatsAppConnectionPage() {
         .eq("business_id", business.id)
         .maybeSingle()
     : { data: null };
+
+  // RC2-M1 (Proof Before Ask, Principle 6): connecting a real WhatsApp
+  // number is the one genuinely consequential "ask" in this whole
+  // product — it should never be reachable before the owner has been
+  // shown any proof at all. handover_confirmed_at is only ever set
+  // once Meet Your Receptionist's own readiness gate has already
+  // required Business Knowledge and every Receptionist topic to be
+  // taught (see lib/receptionist-handover.ts) and the owner has
+  // explicitly confirmed a real recap was accurate — the same bar
+  // Constitution 04's own journey table describes ("she's already
+  // been seen at work"). Only guards the *unconnected* path: a
+  // business that's already connected must always be able to revisit
+  // its own connection status here, regardless of how it got there.
+  if (!connection && !business?.handover_confirmed_at) {
+    redirect("/dashboard");
+  }
 
   // Only a genuinely unconfigured environment needs to see this — a
   // real merchant on a properly set-up account never should (this was

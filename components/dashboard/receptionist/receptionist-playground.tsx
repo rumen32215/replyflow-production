@@ -11,6 +11,7 @@ import { Acknowledgement, ACK, randomAck, useAcknowledgement } from "@/component
 import { PhonePreview } from "@/components/shared/phone-preview";
 import { TeachingCard } from "@/components/shared/teaching-card";
 import { InsightList } from "@/components/shared/insight";
+import { ConfidenceTag, intentLabel, factSourceSummary } from "@/components/dashboard/conversations/conversation-story";
 import { Switch } from "@/components/ui/switch";
 import { buildBrain } from "@/lib/intelligence";
 import { Textarea } from "@/components/ui/textarea";
@@ -22,14 +23,46 @@ import {
   scenariosForTrade,
   parseOptions,
   composeOptions,
-  buildPreviewConversation,
-  deriveScenarioStatus,
   type Tone,
   type TeachingOption,
 } from "@/lib/receptionist";
-import type { Availability } from "@/lib/availability";
 import { greetingForNow } from "@/components/dashboard/home/home-experience";
 import { cn } from "@/lib/utils";
+
+/** Coaching Implementation Plan C1/C2 — the real reasoning core,
+ * called with no real conversation and no persistence, exactly the
+ * shape lib/reply-engine/live-reply.ts's server function returns.
+ * One receptionist, one brain: this is the same result the real
+ * webhook path would produce for this exact taught state. */
+interface LiveReply {
+  replyText: string;
+  confidence: string;
+  requiresEscalation: boolean;
+  escalationReason: string | null;
+  intent: string;
+  factsUsed: string[];
+  noReplyNeeded: boolean;
+}
+
+async function fetchLiveReply(params: {
+  scenarioMessage: string;
+  tone: string;
+  behaviours: string;
+  businessRules: string;
+  escalationRules: string;
+}): Promise<LiveReply | null> {
+  try {
+    const res = await fetch("/api/receptionist/live-reply", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(params),
+    });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch {
+    return null;
+  }
+}
 
 /**
  * The signature experience (Receptionist V3): training an employee,
@@ -68,6 +101,19 @@ function summariseTopic(selected: Set<string>, notes: string, options: readonly 
   if (notes.trim()) parts.push(notes.trim());
   if (parts.length === 0) return null;
   return parts.length <= 2 ? parts.join(", ") : `${parts.slice(0, 2).join(", ")} + ${parts.length - 2} more`;
+}
+
+/** Coaching Implementation Plan C4 — reflects back the specific thing
+ * just taught, the same discipline the FAQ editor already uses
+ * ("Got it — next time someone asks X, I'll say exactly that"),
+ * instead of a generic rotating acknowledgement that never named what
+ * actually changed. `text` (not `label`) is used because it's already
+ * written as a real instruction sentence, not a short chip label. */
+function chipAck(options: readonly TeachingOption[], id: string, willBeOn: boolean): string {
+  const option = options.find((o) => o.id === id);
+  if (!option) return willBeOn ? randomAck() : "Understood.";
+  if (!willBeOn) return `Understood — I'll stop doing that unless you switch it back on.`;
+  return `Got it — I'll ${option.text.charAt(0).toLowerCase()}${option.text.slice(1)}`;
 }
 
 /**
@@ -120,9 +166,6 @@ export function ReceptionistPlayground({
   businessName,
   trade,
   offersEmergency,
-  chargesCalloutFee,
-  calloutFeeAmount,
-  availability,
   receptionistName,
   initial,
   initialTopic = null,
@@ -132,9 +175,6 @@ export function ReceptionistPlayground({
   trade: string | null;
   /** null = never confirmed either way (Product Guarantee 1). */
   offersEmergency: boolean | null;
-  chargesCalloutFee: boolean | null;
-  calloutFeeAmount: string | null;
-  availability: Availability;
   receptionistName: string | null;
   initial: SavedConfig;
   /** Sprint 8.6: set when arriving from a Recommendations "Teach me"
@@ -262,27 +302,68 @@ export function ReceptionistPlayground({
   }
 
   const scenario = scenarios.find((s) => s.id === scenarioId) ?? scenarios[0]!;
-  // A "standard" scenario always opens with toneOpener() and so always
-  // genuinely differs by tone — an emergency scenario's reply is
-  // entirely tone-independent (buildPreviewConversation), which would
-  // otherwise make all three example cards below render identical
-  // text for whatever scenario tab the owner happens to have open.
+  // A routine enquiry is the clearest, most representative example for
+  // comparing tone side by side — unaffected by the specific scenario
+  // tab currently open (Coaching Implementation Plan C3).
   const toneExampleScenario = scenarios.find((s) => s.kind === "standard") ?? scenario;
-  const { turns, liveReply } = buildPreviewConversation(
-    {
-      businessName,
-      tone,
-      behaviours,
-      rules,
-      escalation,
-      offersEmergency,
-      chargesCalloutFee,
-      calloutFeeAmount,
-    },
-    scenario,
-    { availability }
-  );
-  const status = deriveScenarioStatus(scenario, { escalation });
+
+  /* --------------------- one receptionist, one brain -------------------- *
+   * Coaching Implementation Plan C1/C2/C3 — the phone preview and the
+   * tone examples both call the exact same real reasoning core the
+   * webhook uses (lib/reply-engine/live-reply.ts), debounced, with no
+   * persistence and no Readiness Gate. Never a second, faked engine. */
+  const [liveReply, setLiveReply] = useState<LiveReply | null>(null);
+  const [liveReplyLoading, setLiveReplyLoading] = useState(true);
+  const [toneExamples, setToneExamples] = useState<Partial<Record<Tone, string>>>({});
+  const liveReplyRequestId = useRef(0);
+
+  useEffect(() => {
+    const thisRequest = ++liveReplyRequestId.current;
+    setLiveReplyLoading(true);
+    const t = setTimeout(async () => {
+      const behavioursStr = composeOptions(BEHAVIOUR_OPTIONS, behaviours, behavioursNotes);
+      const rulesStr = composeOptions(RULE_OPTIONS, rules, rulesNotes);
+      const escalationStr = composeOptions(ESCALATION_OPTIONS, escalation, escalationNotes);
+
+      const [main, ...toneResults] = await Promise.all([
+        fetchLiveReply({
+          scenarioMessage: scenario.customerMessage,
+          tone,
+          behaviours: behavioursStr,
+          businessRules: rulesStr,
+          escalationRules: escalationStr,
+        }),
+        ...TONES.map((t2) =>
+          fetchLiveReply({
+            scenarioMessage: toneExampleScenario.customerMessage,
+            tone: t2.value,
+            behaviours: behavioursStr,
+            businessRules: rulesStr,
+            escalationRules: escalationStr,
+          })
+        ),
+      ]);
+      if (thisRequest !== liveReplyRequestId.current) return;
+      setLiveReply(main);
+      setLiveReplyLoading(false);
+      const nextToneExamples: Partial<Record<Tone, string>> = {};
+      TONES.forEach((t2, i) => {
+        nextToneExamples[t2.value] = toneResults[i]?.replyText || "";
+      });
+      setToneExamples(nextToneExamples);
+    }, 600);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scenarioId, tone, behaviours, behavioursNotes, rules, rulesNotes, escalation, escalationNotes]);
+
+  const turns = [{ from: "customer" as const, text: scenario.customerMessage }];
+  const displayedReply = liveReplyLoading ? "" : liveReply ? liveReply.replyText || "Thanks for getting in touch — how can I help?" : "Having trouble generating a live reply right now.";
+  const status: { label: string; tone: "urgent" | "waiting-owner" | "waiting" } | undefined =
+    liveReplyLoading || !liveReply
+      ? undefined
+      : liveReply.requiresEscalation
+        ? { label: liveReply.intent === "EMERGENCY" ? "Urgent" : "Waiting for owner", tone: liveReply.intent === "EMERGENCY" ? "urgent" : "waiting-owner" }
+        : { label: "Waiting for customer", tone: "waiting" };
 
   /* ------------------------- quiet persistence ------------------------- */
   // Debounced upsert: the owner never presses Save; the receptionist
@@ -457,13 +538,64 @@ export function ReceptionistPlayground({
           </div>
 
           <GentleSwap swapKey={scenarioId}>
-            <PhonePreview businessName={businessName} turns={turns} liveReply={liveReply} status={status} />
+            <PhonePreview businessName={businessName} turns={turns} liveReply={displayedReply} status={status} />
           </GentleSwap>
 
+          {/* Coaching Implementation Plan C2 — the same confidence/
+           * escalation/fact-source vocabulary Test Conversations and
+           * real Conversations already use, because this is genuinely
+           * the same reply pipeline, not a separate demo. */}
+          {!liveReplyLoading && liveReply && (
+            <div className="mt-2 flex flex-wrap items-center gap-1.5">
+              <ConfidenceTag confidence={liveReply.confidence} />
+              <span className="rounded-full bg-muted px-2 py-0.5 text-[10.5px] font-medium text-muted-foreground">
+                {intentLabel(liveReply.intent)}
+              </span>
+            </div>
+          )}
+          {!liveReplyLoading && liveReply?.requiresEscalation && (
+            <div className="mt-1.5 flex items-start gap-1.5 rounded-lg bg-amber-50 px-2.5 py-2 text-[12px] leading-relaxed text-amber-900">
+              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              <span>{liveReply.escalationReason || "This one would wait for you, not send on its own."}</span>
+            </div>
+          )}
+          {!liveReplyLoading && liveReply && factSourceSummary(liveReply.factsUsed) && (
+            <p className="mt-1.5 text-[11px] text-muted-foreground">Why she said that: based on {factSourceSummary(liveReply.factsUsed)}.</p>
+          )}
+
           <div className="mt-3 flex min-h-[24px] items-center justify-between">
-            <p className="text-[11.5px] text-muted-foreground">This is exactly how I&apos;ll reply.</p>
+            <p className="text-[11.5px] text-muted-foreground">
+              {liveReplyLoading ? "Thinking it through, using exactly what you've taught me so far…" : "This is genuinely how I'll reply — not a rehearsed line."}
+            </p>
             <Acknowledgement message={message} isError={isError} isSaving={isSaving} />
           </div>
+
+          {/* Coaching Implementation Plan C6 — react to a real example
+           * instead of configuring blind. Neither button writes
+           * anything: "Sounds like me" is just a moment; "Let's adjust"
+           * opens whichever teaching topic is still a real gap, reusing
+           * the exact same controls already below, never a new one. */}
+          {!liveReplyLoading && liveReply && (
+            <div className="mt-2.5 flex items-center gap-2">
+              <p className="text-[11.5px] text-muted-foreground">Sound like you?</p>
+              <motion.button
+                {...press}
+                type="button"
+                onClick={() => acknowledge("Good — I'll keep going like this.")}
+                className="rounded-full border border-border bg-card px-3 py-1.5 text-[11.5px] font-semibold text-foreground transition-colors hover:border-success/40"
+              >
+                Yes, that&apos;s me
+              </motion.button>
+              <motion.button
+                {...press}
+                type="button"
+                onClick={() => setOpen(nextTopicId ?? "behaviours")}
+                className="rounded-full border border-border bg-card px-3 py-1.5 text-[11.5px] font-semibold text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground"
+              >
+                Let&apos;s adjust this
+              </motion.button>
+            </div>
+          )}
         </div>
 
         {/* Teaching her — one topic per chat turn, not a settings
@@ -547,22 +679,16 @@ export function ReceptionistPlayground({
           </SettleCard>
 
           <TeachingTurn delay={0.05} question="Which of these sounds most like you?" learned>
-            {/* Hiring Experience redesign: choosing IS the demonstration
-             * — the same customer message, answered in each real tone,
-             * using whatever's actually been taught so far (never a
-             * hardcoded example line). Replaces picking a pill and then
-             * separately scrolling to the phone preview to see what it
-             * meant — one tap instead of two moments. */}
+            {/* Coaching Implementation Plan C3 — choosing IS the
+             * demonstration, and now a genuinely real one: the same
+             * customer message, answered in each real tone by the real
+             * reasoning engine, using whatever's actually been taught
+             * so far. Never a hardcoded example line. */}
             <div className="space-y-2">
               {TONES.map((t) => {
                 const on = tone === t.value;
                 const Icon = t.icon;
-                const preview = buildPreviewConversation(
-                  { businessName, tone: t.value, behaviours, rules, escalation, offersEmergency, chargesCalloutFee, calloutFeeAmount },
-                  toneExampleScenario,
-                  { availability }
-                );
-                const exampleReply = preview.turns[2]?.text ?? "";
+                const exampleReply = toneExamples[t.value] ?? (liveReplyLoading ? "…" : "");
                 return (
                   <motion.button
                     key={t.value}
@@ -626,7 +752,11 @@ export function ReceptionistPlayground({
             open={open === "behaviours"}
             onToggle={() => setOpen(open === "behaviours" ? null : "behaviours")}
           >
-            <OptionChips options={BEHAVIOUR_OPTIONS} selected={behaviours} onToggle={(id) => toggle(behaviours, setBehaviours, id, randomAck(), "behaviours")} />
+            <OptionChips
+              options={BEHAVIOUR_OPTIONS}
+              selected={behaviours}
+              onToggle={(id) => toggle(behaviours, setBehaviours, id, chipAck(BEHAVIOUR_OPTIONS, id, !behaviours.has(id)), "behaviours")}
+            />
             <OwnWordsInput
               value={behavioursNotes}
               onChange={(v) => {
@@ -653,7 +783,11 @@ export function ReceptionistPlayground({
             open={open === "rules"}
             onToggle={() => setOpen(open === "rules" ? null : "rules")}
           >
-            <RuleList options={RULE_OPTIONS} selected={rules} onToggle={(id) => toggle(rules, setRules, id, randomAck(), "rules")} />
+            <RuleList
+              options={RULE_OPTIONS}
+              selected={rules}
+              onToggle={(id) => toggle(rules, setRules, id, chipAck(RULE_OPTIONS, id, !rules.has(id)), "rules")}
+            />
             <OwnWordsInput
               value={rulesNotes}
               onChange={(v) => {
@@ -687,7 +821,12 @@ export function ReceptionistPlayground({
                 which situations are still serious enough to bring you in personally.
               </p>
             )}
-            <RuleList options={ESCALATION_OPTIONS} selected={escalation} onToggle={(id) => toggle(escalation, setEscalation, id, randomAck(), "escalation")} accent="amber" />
+            <RuleList
+              options={ESCALATION_OPTIONS}
+              selected={escalation}
+              onToggle={(id) => toggle(escalation, setEscalation, id, chipAck(ESCALATION_OPTIONS, id, !escalation.has(id)), "escalation")}
+              accent="amber"
+            />
             <OwnWordsInput
               value={escalationNotes}
               onChange={(v) => {

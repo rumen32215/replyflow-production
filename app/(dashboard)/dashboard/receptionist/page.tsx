@@ -3,7 +3,6 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { ReceptionistPlayground } from "@/components/dashboard/receptionist/receptionist-playground";
 import type { Tone } from "@/lib/receptionist";
-import { parseAvailability } from "@/lib/availability";
 
 export const metadata: Metadata = { title: "Receptionist — ReplyFlow" };
 
@@ -28,9 +27,7 @@ export default async function ReceptionistPage({
 
   const { data: business, error: businessError } = await supabase
     .from("businesses")
-    .select(
-      "id, business_name, trade, offers_emergency_callouts, charges_callout_fee, callout_fee_amount, greeting_style, availability, opening_time, closing_time, receptionist_name"
-    )
+    .select("id, business_name, trade, offers_emergency_callouts, greeting_style, receptionist_name")
     .eq("owner_id", user.id)
     .maybeSingle();
   // A real query error (e.g. a stale PostgREST schema cache right
@@ -47,7 +44,6 @@ export default async function ReceptionistPage({
     .maybeSingle();
 
   const tone = (config?.tone ?? business.greeting_style ?? "friendly") as Tone;
-  const availability = parseAvailability(business.availability, business.opening_time, business.closing_time);
 
   // Product Guarantee 1: no fallback coercion below — null means
   // genuinely unconfirmed and must stay that way, never silently
@@ -58,9 +54,6 @@ export default async function ReceptionistPage({
       businessName={business.business_name}
       trade={business.trade}
       offersEmergency={business.offers_emergency_callouts}
-      chargesCalloutFee={business.charges_callout_fee}
-      calloutFeeAmount={business.callout_fee_amount}
-      availability={availability}
       receptionistName={business.receptionist_name}
       initial={{
         tone,

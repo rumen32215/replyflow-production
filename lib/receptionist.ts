@@ -1,13 +1,16 @@
 /**
- * The receptionist's brain — pure functions only, no React, no Supabase.
+ * The receptionist's teaching vocabulary — pure functions only, no
+ * React, no Supabase. Owners teach behaviours; the options and
+ * scenarios here are what the Receptionist page's chips and starter
+ * messages are built from.
  *
- * Owners teach behaviours; ReplyFlow writes the conversation. This is
- * the single module that converts taught knowledge into the natural
- * replies shown in every live preview (Receptionist playground,
- * onboarding, Business "instant understanding"). Deterministic on
- * purpose: real facts slotted into pre-written natural shapes, so the
- * preview can never invent prices, availability, or services
- * (Receptionist V1: "ReplyFlow never guesses").
+ * Coaching Implementation Plan, C5: this module used to also contain
+ * a hand-written, deterministic reply simulator (`buildPreviewConversation`)
+ * standing in for the real receptionist during teaching — a second,
+ * fake reasoning system the owner could easily mistake for the real
+ * one. It's gone. Every example an owner sees now comes from the same
+ * real reasoning core production uses (lib/reply-engine/live-reply.ts)
+ * — one receptionist, one brain, no exceptions.
  *
  * The `text` on each teaching option is the exact string persisted in
  * ai_configurations (system_prompt / business_rules / escalation_rules),
@@ -15,7 +18,6 @@
  */
 
 import { normalizeTrade, type TradeOrGeneral } from "@/lib/trades";
-import { nextAvailableSlot, type Availability } from "@/lib/availability";
 
 export type Tone = "professional" | "friendly" | "concise";
 
@@ -105,25 +107,12 @@ export function composeOptions(options: readonly TeachingOption[], selected: Set
     .join("\n");
 }
 
-export interface PreviewKnowledge {
-  businessName: string;
-  tone: Tone;
-  behaviours: Set<string>;
-  rules: Set<string>;
-  escalation: Set<string>;
-  /** null = never confirmed either way (Product Guarantee 1 — the
-   * preview must never claim a business fact nobody has taught). */
-  offersEmergency: boolean | null;
-  chargesCalloutFee: boolean | null;
-  calloutFeeAmount: string | null;
-}
-
 /**
- * What kind of exchange this is — drives which reply is composed
- * below. Kept separate from the scenario's id/label/message so the
+ * What kind of exchange this is — used only to pick a representative
+ * scenario for the tone-comparison examples (Coaching Implementation
+ * Plan C3). Kept separate from the scenario's id/label/message so the
  * owner-facing scenario picker can show real customer problems
- * (Receptionist V3.1) while the underlying reply logic keeps its
- * original four behaviours.
+ * (Receptionist V3.1).
  */
 export type ScenarioKind = "standard" | "quote" | "emergency" | "price";
 
@@ -140,9 +129,8 @@ export interface PreviewScenario {
  * Keyed by trade so a landscaper isn't shown "boiler leaking" as their
  * demo (ReplyFlow is a platform, not a plumbing app) — every set keeps
  * the same shape (one emergency, one price question, one quote
- * request, three standard enquiries) so `deriveScenarioStatus` and the
- * reply-composition logic below never need to know which trade it is,
- * only the scenario's `kind`.
+ * request, three standard enquiries) so callers never need to know
+ * which trade it is, only the scenario's `kind`.
  */
 const TRADE_SCENARIOS: Record<TradeOrGeneral, readonly PreviewScenario[]> = {
   plumbing: [
@@ -223,210 +211,3 @@ export function scenariosForTrade(trade: string | null | undefined): readonly Pr
   return TRADE_SCENARIOS[normalizeTrade(trade)];
 }
 
-/**
- * Which stage this simulated exchange is in — shown as a StatusPill
- * next to the preview so the owner instantly reads what's happening,
- * the same way conversation status works in the real inbox. Honest
- * about what a single demo exchange can actually represent: it never
- * claims a booking or a closed conversation, only what's genuinely
- * derivable from the scenario and what's been taught (Receptionist
- * V1: never guess).
- */
-export function deriveScenarioStatus(scenario: PreviewScenario, k: Pick<PreviewKnowledge, "escalation">): {
-  label: string;
-  tone: "urgent" | "waiting-owner" | "waiting";
-} {
-  if (scenario.kind === "emergency") {
-    if (k.escalation.has("flooding")) return { label: "Waiting for owner", tone: "waiting-owner" };
-    return { label: "Urgent", tone: "urgent" };
-  }
-  return { label: "Waiting for customer", tone: "waiting" };
-}
-
-function greetingFor(tone: Tone, businessName: string): string {
-  switch (tone) {
-    case "professional":
-      return `Hello, thanks for contacting ${businessName}. How can we help today?`;
-    case "concise":
-      return `${businessName} here — what's the issue?`;
-    default:
-      return `Hi there! Thanks for getting in touch with ${businessName}. How can I help?`;
-  }
-}
-
-/** Personality changes more than the greeting — it colours every
- * reply's opening words too, so picking a tone visibly demonstrates
- * itself immediately, not just on the first message of the day. */
-function toneOpener(tone: Tone, mood: "sorry" | "glad"): string {
-  if (mood === "sorry") {
-    switch (tone) {
-      case "professional":
-        return "I'm sorry to hear that.";
-      case "concise":
-        return "Sorry to hear that.";
-      default:
-        return "Oh no, sorry to hear that!";
-    }
-  }
-  switch (tone) {
-    case "professional":
-      return "Certainly, I'd be happy to help with that.";
-    case "concise":
-      return "Sure, I can help.";
-    default:
-      return "Of course — happy to help with that!";
-  }
-}
-
-/** What the customer would plausibly say back once she's asked for
- * something — generic and kind-independent (not per-trade text) so it
- * never needs hand-writing dozens of extra scenario-specific strings;
- * it's scripted demo content on the customer's side, exactly like
- * `scenario.customerMessage` already is. */
-function customerFollowUp(askedFor: "photos" | "postcode" | "address" | null): string {
-  switch (askedFor) {
-    case "photos":
-      return "Sure, sending a couple over now \u{1F4F7}";
-    case "postcode":
-      return "Sure — it's on its way now";
-    case "address":
-      return "Sure, here's my address now";
-    default:
-      return "Thanks, appreciate it";
-  }
-}
-
-/**
- * Builds the full settled exchange plus the live closing reply for a
- * scenario — she replies, the customer follows up, and she closes
- * with a real outcome, not just a single reply in isolation. Every
- * taught behaviour visibly changes the words — the owner sees exactly
- * how their teaching becomes conversation, now followed through to an
- * outcome. `context.availability`, when supplied, grounds a standard
- * enquiry's closing line in the real diary (nextAvailableSlot)
- * instead of a generic promise — still 100% deterministic, never a
- * guessed time slot.
- */
-export function buildPreviewConversation(
-  k: PreviewKnowledge,
-  scenario: PreviewScenario,
-  context?: { availability: Availability; now?: Date }
-) {
-  const has = (id: string) => k.behaviours.has(id);
-  const rule = (id: string) => k.rules.has(id);
-  const parts: string[] = [];
-  let askedFor: "photos" | "postcode" | "address" | null = null;
-
-  if (scenario.kind === "emergency") {
-    if (k.escalation.has("flooding")) {
-      parts.push("That sounds urgent — I'm letting the owner know right now, and turning off your water at the stopcock will help in the meantime.");
-    } else {
-      parts.push("I'm really sorry — that sounds urgent.");
-      // Product Guarantee 1: the fact itself must be explicitly
-      // confirmed true — a behaviour toggle can shape how something
-      // true gets said, but it can never independently assert a fact
-      // nobody has taught (or override one explicitly taught as false).
-      if (k.offersEmergency === true) parts.push("We do offer emergency call-outs, so someone can get to you quickly.");
-      if (has("ask-postcode")) {
-        parts.push("Could I take your postcode so we can get on our way?");
-        askedFor = "postcode";
-      } else {
-        parts.push("Could I take your address?");
-        askedFor = "address";
-      }
-    }
-  } else if (scenario.kind === "price") {
-    if (rule("no-exact-prices")) {
-      parts.push("I can't give an exact price over chat, but the team will confirm pricing after a quick look at the job.");
-    }
-    if (k.chargesCalloutFee && (rule("mention-callout-fee") || !rule("no-exact-prices"))) {
-      parts.push(
-        k.calloutFeeAmount
-          ? `There's a call-out fee of ${k.calloutFeeAmount}, which we'll always mention upfront.`
-          : "There is a small call-out fee, which we'll always mention upfront."
-      );
-    } else if (!rule("no-exact-prices")) {
-      parts.push("It depends on the job, but I can get you an accurate quote quickly.");
-    }
-    if (has("ask-photos") || rule("always-ask-photos")) {
-      parts.push("If you can send a couple of photos, that'll help us give you a much better idea.");
-      askedFor = "photos";
-    }
-  } else if (scenario.kind === "quote") {
-    parts.push(toneOpener(k.tone, "glad"));
-    if (has("ask-photos") || rule("always-ask-photos")) {
-      parts.push("Could you send me a few photos of the job first? That way the quote will be accurate.");
-      askedFor = "photos";
-    } else if (has("ask-problem")) {
-      parts.push("Could you tell me a little about the job?");
-    }
-    if (has("ask-postcode")) {
-      parts.push("And could I grab your postcode?");
-      askedFor = askedFor ?? "postcode";
-    }
-    if (rule("no-exact-prices")) parts.push("The team will confirm the final price after a quick look.");
-  } else {
-    // A standard new enquiry.
-    parts.push(toneOpener(k.tone, "sorry"));
-    if (has("ask-photos") || rule("always-ask-photos")) {
-      parts.push("Could you send me a few photos first so I can understand the job?");
-      askedFor = "photos";
-    } else if (has("ask-problem")) {
-      parts.push("Could you tell me a bit more about what's happening?");
-    }
-    if (has("ask-postcode")) {
-      parts.push("Could I also take your postcode?");
-      askedFor = askedFor ?? "postcode";
-    }
-    if (has("mention-emergency") && k.offersEmergency === true) {
-      parts.push("If it's urgent, we do offer emergency call-outs.");
-    }
-  }
-
-  if (has("someone-will-contact") && scenario.kind !== "emergency") {
-    parts.push("A team member will be in touch shortly after that.");
-  }
-
-  let reply = parts.join(" ").trim();
-  if (!reply) reply = "Thanks for getting in touch — how can I help today?";
-  // Concise is a personality trait, not just the "short replies"
-  // behaviour toggle — picking it should visibly shorten replies on
-  // its own, so the tone alone proves what it means.
-  if ((has("short-replies") || k.tone === "concise") && reply.length > 170) {
-    // Keep replies phone-sized: first two sentences only.
-    const sentences = reply.match(/[^.!?]+[.!?]/g) ?? [reply];
-    reply = sentences.slice(0, 2).join(" ").trim();
-  }
-
-  // The outcome — what happens next, not just what she said first.
-  // Still a fixed decision tree keyed on scenario.kind + what's been
-  // taught, same as the reply above; the standard-enquiry close is
-  // the only branch grounded in real data (the diary), everything
-  // else stays a plain, honest promise rather than inventing a time.
-  let outcome: string;
-  if (scenario.kind === "emergency") {
-    outcome = k.escalation.has("flooding")
-      ? "The owner has this now — they'll call you back directly."
-      : "The team will be with you as soon as they can.";
-  } else if (scenario.kind === "quote") {
-    outcome = "I'll get a full quote over to you shortly.";
-  } else if (scenario.kind === "price") {
-    outcome = rule("no-exact-prices")
-      ? "The team will confirm the price once they've seen the job."
-      : "I'll get you a proper price shortly.";
-  } else {
-    const slot = context?.availability ? nextAvailableSlot(context.availability, context.now ?? new Date()) : null;
-    outcome = slot
-      ? `Based on the diary, I can pencil you in for ${slot.label} — I'll get this confirmed with you.`
-      : "I'll get this booked in and confirm the details with you.";
-  }
-
-  const turns = [
-    { from: "receptionist" as const, text: greetingFor(k.tone, k.businessName) },
-    { from: "customer" as const, text: scenario.customerMessage },
-    { from: "receptionist" as const, text: reply },
-    { from: "customer" as const, text: customerFollowUp(askedFor) },
-  ];
-
-  return { turns, liveReply: outcome };
-}

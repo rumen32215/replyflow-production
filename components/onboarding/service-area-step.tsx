@@ -100,9 +100,9 @@ export function ServiceAreaStep() {
                 whileTap={{ ...press.whileTap, transition: press.transition }}
                 aria-pressed={on}
                 className={cn(
-                  "flex flex-col items-center gap-1 rounded-xl border-2 py-3 text-[12.5px] font-semibold transition-colors duration-200",
+                  "flex flex-col items-center gap-1 rounded-xl border-2 py-3 text-[12.5px] font-semibold transition-colors duration-300",
                   on
-                    ? "border-primary bg-accent text-primary"
+                    ? "border-success bg-success/10 text-success"
                     : "border-border bg-background text-muted-foreground hover:border-muted-foreground/30"
                 )}
               >
@@ -140,7 +140,7 @@ export function ServiceAreaStep() {
               value={opening}
               onChange={(e) => setOpening(e.target.value)}
               aria-label="Opening time"
-              className="h-12 w-full rounded-xl border-2 border-border bg-background px-3.5 text-[15px] font-semibold outline-none transition-colors focus:border-primary"
+              className="h-12 w-full rounded-xl border-2 border-border bg-background px-3.5 text-[15px] font-semibold outline-none transition-all duration-300 focus:border-primary focus:shadow-[0_0_0_4px_rgba(37,99,235,0.08),0_12px_32px_-12px_rgba(37,99,235,0.25)]"
             />
           </label>
           <span className="mt-5 text-muted-foreground">–</span>
@@ -151,16 +151,24 @@ export function ServiceAreaStep() {
               value={closing}
               onChange={(e) => setClosing(e.target.value)}
               aria-label="Closing time"
-              className="h-12 w-full rounded-xl border-2 border-border bg-background px-3.5 text-[15px] font-semibold outline-none transition-colors focus:border-primary"
+              className="h-12 w-full rounded-xl border-2 border-border bg-background px-3.5 text-[15px] font-semibold outline-none transition-all duration-300 focus:border-primary focus:shadow-[0_0_0_4px_rgba(37,99,235,0.08),0_12px_32px_-12px_rgba(37,99,235,0.25)]"
             />
           </label>
         </div>
       </div>
 
-      {/* A self-contained "location slot" — plain text today, but the
-          same card is where a future interactive map preview can land
-          without reshaping this screen. */}
-      <div className="mb-8 rounded-2xl border border-border/70 bg-background/40 p-4">
+      {/* A self-contained "location slot" — a faint contour-line texture
+          (the same inline-gradient technique PhoneFrame already uses)
+          signals "this is where she learns where you work" without a
+          real map — the same card is where an interactive one could
+          land later without reshaping this screen. */}
+      <div
+        className="mb-8 overflow-hidden rounded-2xl border border-border/70 bg-background/40 p-4"
+        style={{
+          backgroundImage:
+            "repeating-radial-gradient(circle at 90% 8%, rgba(37,99,235,0.06) 0px, rgba(37,99,235,0.06) 1px, transparent 1px, transparent 16px)",
+        }}
+      >
         <span className="mb-2.5 flex items-center gap-1.5 text-[12px] font-semibold uppercase tracking-wide text-muted-foreground/80">
           <MapPin className="h-3.5 w-3.5" aria-hidden />
           Service area

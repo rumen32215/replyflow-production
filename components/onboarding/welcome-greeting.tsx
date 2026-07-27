@@ -1,10 +1,12 @@
 "use client";
 
+import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { OnboardingCTA } from "@/components/onboarding/onboarding-cta";
 import { EASE } from "@/components/shared/motion";
 import { GradientText } from "@/components/shared/gradient-text";
+import { useOnboardingStore } from "@/hooks/use-onboarding-store";
 
 /**
  * Screen 1 — the beautiful entrance. The receptionist speaks first
@@ -22,6 +24,19 @@ function greetingForNow(): string {
 
 export function WelcomeGreeting() {
   const router = useRouter();
+  const reset = useOnboardingStore((s) => s.reset);
+
+  // RC5: the onboarding draft persists to localStorage so a refresh or
+  // accidental back-navigation mid-flow doesn't cost progress — but
+  // that same persistence meant an abandoned earlier attempt on the
+  // same browser (a different signup, a previous incomplete try) could
+  // silently pre-fill a brand new one. Welcome is always the true
+  // entry point of onboarding, so arriving here always means "start
+  // fresh" — every field genuinely begins empty.
+  useEffect(() => {
+    reset();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <div className="w-full max-w-[440px]">
@@ -81,7 +96,7 @@ export function WelcomeGreeting() {
           transition={{ duration: 0.5, ease: EASE, delay: 1.05 }}
           className="mb-9 text-[15px] leading-relaxed text-muted-foreground"
         >
-          Let&apos;s get you ready for your first <GradientText>customer</GradientText>.
+          Let&apos;s get you ready for your <GradientText>first customer</GradientText>.
         </motion.p>
 
         <motion.div

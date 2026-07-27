@@ -80,14 +80,18 @@ export function useTypedMessage(targetText: string) {
   return { display, isThinking: phase === "thinking", isBusy: phase !== "idle" };
 }
 
-/** Three soft dots — never a spinner, never an infinite loader. */
-export function TypingDots({ className }: { className?: string }) {
+/** Three soft dots — never a spinner, never an infinite loader.
+ *  `dotClassName` overrides the dot colour for callers that aren't a
+ *  chat "thinking" indicator (e.g. a disabled state communicating
+ *  "more is coming") — defaults to the neutral grey every real typing
+ *  indicator already uses. */
+export function TypingDots({ className, dotClassName }: { className?: string; dotClassName?: string }) {
   return (
     <span className={cn("inline-flex items-center gap-1", className)} aria-label="typing">
       {[0, 1, 2].map((i) => (
         <motion.span
           key={i}
-          className="h-1.5 w-1.5 rounded-full bg-muted-foreground/60"
+          className={cn("h-1.5 w-1.5 rounded-full bg-muted-foreground/60", dotClassName)}
           animate={{ opacity: [0.3, 1, 0.3], y: [0, -2, 0] }}
           transition={{ duration: 1, repeat: Infinity, delay: i * 0.16, ease: "easeInOut" }}
         />

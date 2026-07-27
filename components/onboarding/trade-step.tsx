@@ -8,6 +8,7 @@ import { useOnboardingStore } from "@/hooks/use-onboarding-store";
 import { ONBOARDING_TRADES, ONBOARDING_TRADE_LABELS } from "@/lib/trades";
 import { OnboardingCTA } from "@/components/onboarding/onboarding-cta";
 import { EASE, press, GrowingCheck } from "@/components/shared/motion";
+import { GradientText } from "@/components/shared/gradient-text";
 import { TypingDots } from "@/components/shared/typed-message";
 
 /**
@@ -63,7 +64,9 @@ export function TradeStep() {
       transition={{ duration: 0.5, ease: EASE }}
       className="rounded-3xl border border-border bg-card p-9 shadow-elevated sm:p-10"
     >
-      <h1 className="mb-8 text-[24px] font-extrabold leading-tight tracking-tight">What&apos;s your trade?</h1>
+      <h1 className="mb-8 text-[24px] font-extrabold leading-tight tracking-tight">
+        What&apos;s your <GradientText>trade</GradientText>?
+      </h1>
 
       <div className="mb-6 grid grid-cols-3 gap-2.5">
         {TRADE_CARDS.map((card, i) => {
@@ -89,8 +92,8 @@ export function TradeStep() {
               {isSelected && <GrowingCheck className="absolute -right-1.5 -top-1.5 h-5 w-5 shadow-sm" />}
               <span
                 className={
-                  "flex h-10 w-10 items-center justify-center rounded-full transition-colors duration-200 " +
-                  (isSelected ? "bg-primary text-primary-foreground" : "bg-accent text-primary")
+                  "flex h-10 w-10 items-center justify-center rounded-full transition-colors duration-300 " +
+                  (isSelected ? "bg-success text-success-foreground" : "bg-accent text-primary")
                 }
               >
                 <card.icon className="h-[18px] w-[18px]" />
@@ -109,7 +112,7 @@ export function TradeStep() {
           className="flex cursor-not-allowed flex-col items-center gap-2.5 rounded-2xl border-2 border-dashed border-border/70 bg-background/40 p-4 opacity-55"
         >
           <span className="flex h-10 w-10 items-center justify-center rounded-full bg-accent/50 text-muted-foreground">
-            <TypingDots />
+            <TypingDots dotClassName="bg-success/60" />
           </span>
           <span className="text-center text-[11px] font-semibold leading-tight text-muted-foreground">
             More soon

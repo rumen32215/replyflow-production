@@ -50,6 +50,43 @@ export function Bubble({
   );
 }
 
+/**
+ * The phone's chrome (header + thread background) with no opinion on
+ * what's inside it — extracted so callers that need bubble-by-bubble
+ * control they can't get from PhonePreview's single turns+liveReply
+ * shape (onboarding's multi-exchange demo conversation) still render
+ * inside the exact same frame, not a lookalike reimplementation.
+ */
+export function PhoneFrame({
+  businessName,
+  children,
+  className,
+}: {
+  businessName: string;
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <div className={cn("overflow-hidden rounded-[28px] border border-border bg-[#e7e1d8] shadow-md", className)}>
+      <div className="flex items-center gap-3 bg-[#075E54] px-4 py-3 text-white">
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/20 text-[12px] font-bold">
+          {businessName.slice(0, 1).toUpperCase() || "R"}
+        </div>
+        <div className="min-w-0">
+          <p className="truncate text-[13.5px] font-semibold leading-tight">{businessName}</p>
+          <p className="text-[11px] leading-tight text-white/75">online</p>
+        </div>
+      </div>
+      <div
+        className="space-y-2 px-3 py-4"
+        style={{ backgroundImage: "radial-gradient(circle at 20% 10%, rgba(255,255,255,0.35), transparent 40%)" }}
+      >
+        {children}
+      </div>
+    </div>
+  );
+}
+
 export function PhonePreview({
   businessName,
   turns,
@@ -80,54 +117,29 @@ export function PhonePreview({
           <StatusPill label={shownStatus.label} tone={shownStatus.tone} />
         </div>
       )}
-      <div
-        className={cn(
-          "overflow-hidden rounded-[28px] border border-border bg-[#e7e1d8] shadow-md",
-          className
-        )}
-      >
-        {/* Chat header */}
-        <div className="flex items-center gap-3 bg-[#075E54] px-4 py-3 text-white">
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/20 text-[12px] font-bold">
-            {businessName.slice(0, 1).toUpperCase() || "R"}
-          </div>
-          <div className="min-w-0">
-            <p className="truncate text-[13.5px] font-semibold leading-tight">{businessName}</p>
-            <p className="text-[11px] leading-tight text-white/75">online</p>
-          </div>
-        </div>
+      <PhoneFrame businessName={businessName} className={className}>
+        {turns.map((turn, i) => (
+          <motion.div
+            key={`${i}-${turn.text}`}
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.35, ease: EASE, delay: i * 0.05 }}
+          >
+            <Bubble from={turn.from}>{turn.text}</Bubble>
+          </motion.div>
+        ))}
 
-        {/* Thread */}
-        <div
-          className="space-y-2 px-3 py-4"
-          style={{
-            backgroundImage:
-              "radial-gradient(circle at 20% 10%, rgba(255,255,255,0.35), transparent 40%)",
-          }}
-        >
-          {turns.map((turn, i) => (
-            <motion.div
-              key={`${i}-${turn.text}`}
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.35, ease: EASE, delay: i * 0.05 }}
-            >
-              <Bubble from={turn.from}>{turn.text}</Bubble>
-            </motion.div>
-          ))}
-
-          <Bubble from="receptionist" className="min-h-[34px]">
-            {isThinking || display.length === 0 ? (
-              <TypingDots className="px-1 py-1" />
-            ) : (
-              <span>
-                {display}
-                <span className="ml-0.5 inline-block h-3.5 w-[2px] animate-pulse rounded bg-foreground/40 align-middle" />
-              </span>
-            )}
-          </Bubble>
-        </div>
-      </div>
+        <Bubble from="receptionist" className="min-h-[34px]">
+          {isThinking || display.length === 0 ? (
+            <TypingDots className="px-1 py-1" />
+          ) : (
+            <span>
+              {display}
+              <span className="ml-0.5 inline-block h-3.5 w-[2px] animate-pulse rounded bg-foreground/40 align-middle" />
+            </span>
+          )}
+        </Bubble>
+      </PhoneFrame>
     </div>
   );
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -14,11 +14,44 @@ import { createClient } from "@/lib/supabase/client";
 import { loginSchema, type LoginInput } from "@/lib/validations/auth";
 import { toast } from "@/hooks/use-toast";
 
+function hasFragmentSession() {
+  return typeof window !== "undefined" && window.location.hash.includes("access_token");
+}
+
 export function LoginForm() {
   const router = useRouter();
   const supabase = createClient();
   const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  // Supabase's email-confirmation link sometimes redirects here with the
+  // session in the URL fragment (#access_token=...) instead of a
+  // /auth/callback ?code= — a fragment only the browser ever sees, so
+  // the server-side code exchange never fires. Rather than ask someone
+  // who just proved ownership of their email to type a password too,
+  // complete that session client-side and carry them straight into
+  // onboarding. Lazily initialised so a normal login visit (no
+  // fragment) never renders this state at all, not even for one frame.
+  const [completingSignIn, setCompletingSignIn] = useState(hasFragmentSession);
+
+  useEffect(() => {
+    if (!completingSignIn) return;
+    const params = new URLSearchParams(window.location.hash.slice(1));
+    const access_token = params.get("access_token");
+    const refresh_token = params.get("refresh_token");
+    if (!access_token || !refresh_token) {
+      setCompletingSignIn(false);
+      return;
+    }
+    supabase.auth.setSession({ access_token, refresh_token }).then(({ error }) => {
+      window.history.replaceState(null, "", window.location.pathname);
+      if (error) {
+        setCompletingSignIn(false);
+        return;
+      }
+      router.replace("/welcome");
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const {
     register,
@@ -37,6 +70,17 @@ export function LoginForm() {
     }
     router.push("/");
     router.refresh();
+  }
+
+  if (completingSignIn) {
+    return (
+      <AuthCard>
+        <div className="flex flex-col items-center py-8 text-center">
+          <Loader2 className="mb-3 h-5 w-5 animate-spin text-primary" />
+          <p className="text-[14.5px] text-muted-foreground">Signing you in&hellip;</p>
+        </div>
+      </AuthCard>
+    );
   }
 
   return (

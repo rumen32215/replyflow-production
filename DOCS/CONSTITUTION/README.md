@@ -16,6 +16,7 @@ A note on the name: the brief for this sprint suggested `/docs`. This folder is 
 | [05-Experience-Architecture.md](05-Experience-Architecture.md) | What are the actual screens, and what does each one answer? |
 | [06-Engineering-Principles.md](06-Engineering-Principles.md) | How is this actually built, and where does judgement sit versus code? |
 | [07-Implementation-Roadmap.md](07-Implementation-Roadmap.md) | What gets built next, in what order, and why? |
+| [08-Receptionist-Intelligence-Architecture.md](08-Receptionist-Intelligence-Architecture.md) | How does she actually reason, turn by turn, right now — and what does that leave still undecided? |
 
 ## Relationship to `DOCS/SPECS/`
 

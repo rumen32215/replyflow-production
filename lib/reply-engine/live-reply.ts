@@ -1,8 +1,8 @@
 import "server-only";
-import { classifyMessage, resolveContextNeeds, EMPTY_CONVERSATION_STATE } from "./understanding";
+import { classifyMessage, resolveContextNeeds, EMPTY_CONVERSATION_STATE, type ConversationState } from "./understanding";
 import { generateReplyDraft } from "./prompt/generate";
 import { evaluateSafety } from "./safety/evaluate";
-import type { ReplyContext, BusinessProfileContext, DiaryContext } from "./context/types";
+import type { ReplyContext, BusinessProfileContext, DiaryContext, ConversationHistoryContext } from "./context/types";
 
 /**
  * One receptionist, one brain (Coaching Implementation Plan C1). This
@@ -40,14 +40,39 @@ export interface LiveReplyResult {
   intent: string;
   factsUsed: string[];
   noReplyNeeded: boolean;
+  /** RC6 — the updated conversation state after this turn. Pass it back
+   * in as `memory.priorState` on the next call to give a multi-turn
+   * preview (onboarding's demo conversation) genuine turn-by-turn
+   * memory, the same way a real conversation's ai_state is carried
+   * forward turn by turn in production — not a second memory system,
+   * the same one, called again. */
+  conversationState: ConversationState;
+}
+
+/** Optional multi-turn memory. Omitted entirely (the default), this
+ * function's behaviour is byte-for-byte what it always was — every
+ * existing caller (Receptionist's live coaching preview, Test
+ * Conversations) is unaffected. Only a caller that explicitly wants a
+ * threaded conversation (onboarding's demo) passes this. */
+export interface LiveReplyMemory {
+  priorState?: ConversationState;
+  recentHistory?: ConversationHistoryContext["messages"];
 }
 
 export async function generateLiveReply(
   scenarioMessage: string,
   teaching: LiveReplyTeaching,
-  facts: LiveReplyFacts
+  facts: LiveReplyFacts,
+  memory: LiveReplyMemory = {}
 ): Promise<LiveReplyResult> {
-  const understanding = await classifyMessage(scenarioMessage, EMPTY_CONVERSATION_STATE, []);
+  const priorState = memory.priorState ?? EMPTY_CONVERSATION_STATE;
+  const recentHistory = memory.recentHistory ?? [];
+
+  const understanding = await classifyMessage(
+    scenarioMessage,
+    priorState,
+    recentHistory.map((m) => ({ direction: m.direction, body: m.body }))
+  );
   const needs = resolveContextNeeds(understanding);
 
   const context: ReplyContext = {
@@ -63,13 +88,15 @@ export async function generateLiveReply(
       : null,
     diary: needs.diary ? facts.diary : null,
     customerMemory: null,
-    conversationHistory: null,
+    conversationHistory: needs.conversationHistory && recentHistory.length > 0 ? { messages: recentHistory } : null,
     customerJobs: null,
     currentBooking: null,
     newMessage: { body: scenarioMessage, customerName: null, customerPhone: "" },
   };
 
-  const { generation, facts: usedFacts } = await generateReplyDraft(context, understanding, { isFirstMessage: true });
+  const { generation, facts: usedFacts } = await generateReplyDraft(context, understanding, {
+    isFirstMessage: recentHistory.length === 0,
+  });
   const safety = evaluateSafety({ understanding, generation, facts: usedFacts });
 
   return {
@@ -80,5 +107,6 @@ export async function generateLiveReply(
     intent: understanding.primaryIntent,
     factsUsed: generation.factsUsed,
     noReplyNeeded: generation.noReplyNeeded,
+    conversationState: understanding.conversationState,
   };
 }

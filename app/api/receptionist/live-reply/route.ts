@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { parseKnowledge } from "@/lib/knowledge";
 import { parseAvailability, describeBookingReply, nextAvailableSlot } from "@/lib/availability";
 import { generateLiveReply } from "@/lib/reply-engine/live-reply";
+import { toConversationState } from "@/lib/reply-engine/understanding";
 
 export const dynamic = "force-dynamic";
 
@@ -13,6 +14,15 @@ export const dynamic = "force-dynamic";
  * page), and takes only tone/behaviours/rules/escalation from the
  * request body — the owner's current, possibly-unsaved draft teaching
  * state. Never writes anything; never requires a real conversation.
+ *
+ * RC6: optionally accepts `priorState`/`recentHistory` so a caller
+ * (onboarding's demo conversation) can thread real turn-by-turn memory
+ * across several calls — the same ConversationState a real, persisted
+ * conversation carries forward, just never written to a database here.
+ * Both are parsed defensively via toConversationState/plain filtering,
+ * exactly like state read back from any other untrusted source —
+ * malformed input degrades to "no memory" rather than ever crashing
+ * the pipeline. Omitted, behaviour is identical to before this change.
  */
 export async function POST(request: Request) {
   const supabase = createClient();
@@ -27,6 +37,8 @@ export async function POST(request: Request) {
     behaviours?: unknown;
     businessRules?: unknown;
     escalationRules?: unknown;
+    priorState?: unknown;
+    recentHistory?: unknown;
   };
   try {
     body = await request.json();
@@ -36,6 +48,20 @@ export async function POST(request: Request) {
 
   const scenarioMessage = typeof body.scenarioMessage === "string" ? body.scenarioMessage.trim() : "";
   if (!scenarioMessage) return NextResponse.json({ error: "Missing scenarioMessage" }, { status: 400 });
+
+  function isHistoryMessage(m: unknown): m is { direction: "inbound" | "outbound"; body: string } {
+    if (!m || typeof m !== "object") return false;
+    const r = m as Record<string, unknown>;
+    return (r.direction === "inbound" || r.direction === "outbound") && typeof r.body === "string";
+  }
+
+  const priorState = body.priorState ? toConversationState(body.priorState) : undefined;
+  const recentHistory = Array.isArray(body.recentHistory)
+    ? body.recentHistory
+        .filter(isHistoryMessage)
+        .slice(-15)
+        .map((m) => ({ direction: m.direction, body: m.body, createdAt: new Date().toISOString() }))
+    : undefined;
 
   const { data: business, error: businessError } = await supabase
     .from("businesses")
@@ -82,7 +108,8 @@ export async function POST(request: Request) {
           nextAvailable: nextAvailableSlot(availability, now),
         },
         faqs: Array.isArray(config?.faqs) ? config.faqs : [],
-      }
+      },
+      { priorState, recentHistory }
     );
     return NextResponse.json(result);
   } catch (err) {

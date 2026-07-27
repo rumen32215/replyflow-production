@@ -5,11 +5,12 @@ import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { useOnboardingStore } from "@/hooks/use-onboarding-store";
 import { OnboardingCTA } from "@/components/onboarding/onboarding-cta";
-import { EASE, Reveal, GentleSwap, GrowingCheck } from "@/components/shared/motion";
+import { EASE, GentleSwap, GrowingCheck } from "@/components/shared/motion";
 import { PhoneFrame, Bubble, type PreviewTurn } from "@/components/shared/phone-preview";
 import { TypingDots, useTypedMessage } from "@/components/shared/typed-message";
 import { ONBOARDING_TRADE_LABELS, type ONBOARDING_TRADES } from "@/lib/trades";
 import { DAY_KEYS, DAY_LABELS } from "@/lib/availability";
+import type { ConversationState } from "@/lib/reply-engine/understanding/state";
 
 /**
  * Screen 5 — the emotional payoff before Meet Your Receptionist.
@@ -18,29 +19,33 @@ import { DAY_KEYS, DAY_LABELS } from "@/lib/availability";
  * delay:
  *
  *  1. The real POST to /api/onboarding/prepare creates the business
- *     row. The brief "Setting up your receptionist" moment lasts
- *     exactly as long as that real request takes — nothing scripted.
+ *     row. "Setting up your receptionist" lasts exactly as long as
+ *     that real request takes — nothing scripted.
  *
  *  2. Once that row exists, this calls the exact same real reasoning
  *     pipeline production uses (lib/reply-engine/live-reply.ts, via
- *     /api/receptionist/live-reply — the same route and function
- *     Receptionist's own live coaching preview calls) with four
- *     genuine customer questions built from what was just entered
- *     (availability, service area, trade, and a forward-moving "what's
- *     next" question). This is proof, not a scripted demo: there is
- *     still only one receptionist, one brain, one conversation engine.
+ *     /api/receptionist/live-reply). RC6: this now threads real
+ *     conversation memory across the four demo exchanges — the same
+ *     ConversationState/history a persisted conversation carries
+ *     turn by turn, just held in this component instead of a
+ *     database row. The four messages are written as one continuous,
+ *     natural thread specifically so later turns depend on earlier
+ *     ones (the customer never repeats what they already said) —
+ *     proof the receptionist genuinely remembers, not a scripted
+ *     imitation of remembering. Still one receptionist, one brain,
+ *     one conversation engine; this screen is one more real caller of
+ *     it, never a second, faked one.
  *
- * RC5: every reply now types itself in turn (not just the last one),
- * with a short natural pause between exchanges — the earlier version
- * committed most replies instantly and only animated the final one,
- * which read as mechanical. The only fixed timings below
- * (BETWEEN_EXCHANGE_PAUSE_MS, estimateTypeMs) are choreography beats
- * for content that has already arrived — how long a reply's own
- * type-out animation takes, and a breathing gap before the next
- * message — never an invented wait for something to happen.
+ * Because later replies now depend on earlier ones, the four calls are
+ * necessarily sequential (memory can't be parallelised) — the only
+ * fixed timings below (BETWEEN_EXCHANGE_PAUSE_MS, estimateTypeMs) are
+ * choreography for content that has already arrived: how long a
+ * reply's own type-out animation takes, and a breathing gap before the
+ * next message. Never an invented wait for something to happen.
  */
 
-const BETWEEN_EXCHANGE_PAUSE_MS = 650;
+const BETWEEN_EXCHANGE_PAUSE_MS = 750;
+const FACT_GROUP_DWELL_MS = 2100;
 
 function estimateTypeMs(text: string): number {
   const pause = 150;
@@ -63,7 +68,27 @@ function describeOpenDaysRange(days: string[]): string {
   return ordered.map((d) => DAY_LABELS[d]).join(", ");
 }
 
-async function fetchDemoReply(message: string): Promise<string | null> {
+/** A trade-appropriate opening problem — the customer states something
+ * real up front so the rest of the thread has genuine context to carry
+ * forward, instead of four disconnected trivia questions. */
+const TRADE_ISSUE: Record<(typeof ONBOARDING_TRADES)[number], string> = {
+  plumbing: "I've got a leak under the kitchen sink",
+  electrical: "one of my sockets keeps tripping the fuse box",
+  painting: "my living room walls need repainting, they're looking pretty tired",
+  building: "I'm looking to get a small extension built at the back of the house",
+  roofing: "I've noticed a few tiles missing after the storm last week",
+};
+
+interface DemoReply {
+  replyText: string;
+  conversationState: ConversationState;
+}
+
+async function fetchDemoReply(
+  message: string,
+  priorState: ConversationState | undefined,
+  recentHistory: { direction: "inbound" | "outbound"; body: string }[]
+): Promise<DemoReply | null> {
   try {
     const res = await fetch("/api/receptionist/live-reply", {
       method: "POST",
@@ -74,11 +99,14 @@ async function fetchDemoReply(message: string): Promise<string | null> {
         behaviours: "",
         businessRules: "",
         escalationRules: "",
+        priorState,
+        recentHistory,
       }),
     });
     if (!res.ok) return null;
     const data = await res.json();
-    return typeof data.replyText === "string" && data.replyText.trim() ? data.replyText : null;
+    if (typeof data.replyText !== "string" || !data.replyText.trim()) return null;
+    return { replyText: data.replyText, conversationState: data.conversationState };
   } catch {
     return null;
   }
@@ -105,6 +133,43 @@ function TypedReply({ text }: { text: string }) {
     </Bubble>
   );
 }
+
+/** One learned fact, revealing in a deliberate rhythm — a small pause,
+ * the check animates, then the label and value gently fade in after it
+ * — rather than everything appearing in the same instant. `delay` is
+ * this fact's position within its group's reveal. */
+function LearnedFact({ label, value, delay }: { label: string; value: string; delay: number }) {
+  return (
+    <div className="flex items-center gap-2.5 text-[13.5px]">
+      <span aria-hidden>
+        <GrowingCheck className="h-4 w-4 shrink-0" delay={delay} />
+      </span>
+      <motion.span
+        initial={{ opacity: 0, y: 4 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: delay + 0.2, duration: 0.4, ease: EASE }}
+        className="text-muted-foreground"
+      >
+        {label}:
+      </motion.span>
+      <motion.span
+        initial={{ opacity: 0, y: 4 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: delay + 0.2, duration: 0.4, ease: EASE }}
+        className="font-semibold text-foreground"
+      >
+        {value}
+      </motion.span>
+    </div>
+  );
+}
+
+const PARTICLES = [
+  { x: "18%", y: "22%", duration: 4.2, delay: 0 },
+  { x: "78%", y: "30%", duration: 5, delay: 1.1 },
+  { x: "30%", y: "72%", duration: 4.6, delay: 2.1 },
+  { x: "70%", y: "68%", duration: 5.4, delay: 0.6 },
+];
 
 export function PreparingReceptionist() {
   const router = useRouter();
@@ -135,50 +200,55 @@ export function PreparingReceptionist() {
   ];
   const factGroups = chunk(facts, 2);
 
-  // RC5: presented two at a time rather than all five simultaneously —
-  // "watching her assemble knowledge" instead of "reading a checklist".
-  // Purely a presentational stagger over already-known facts; settles
-  // on the final group and stops, it doesn't loop.
+  // Presented two at a time, in a deliberate rhythm, rather than all
+  // five simultaneously — assembling knowledge, not a checklist.
+  // Settles on the final group and stops, it doesn't loop.
   useEffect(() => {
     if (stage !== "proof" && stage !== "ready") return;
     if (factGroupIndex >= factGroups.length - 1) return;
-    const t = setTimeout(() => setFactGroupIndex((i) => i + 1), 1150);
+    const t = setTimeout(() => setFactGroupIndex((i) => i + 1), FACT_GROUP_DWELL_MS);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stage, factGroupIndex]);
 
   async function runProofConversation() {
+    const issue = TRADE_ISSUE[trade as (typeof ONBOARDING_TRADES)[number]] ?? "I need some work done";
     const demoMessages = [
-      "Hi, are you free tomorrow?",
+      `Hi, ${issue}`,
+      "Would tomorrow work?",
       `Do you cover ${serviceArea}?`,
-      `Are you a ${tradeLabel.toLowerCase()}?`,
-      "That sounds great — what's the next step?",
+      "Great — what do I need to do now?",
     ];
-    // Fired together so the total wait is roughly one call's latency,
-    // not the sum of four — but revealed one exchange at a time, each
-    // typing itself out, so the thread reads as one natural
-    // conversation rather than a burst of bubbles.
-    const pending = demoMessages.map((message) => ({ message, promise: fetchDemoReply(message) }));
 
+    let priorState: ConversationState | undefined;
+    let history: { direction: "inbound" | "outbound"; body: string }[] = [];
     const settled: PreviewTurn[] = [];
-    for (let i = 0; i < pending.length; i++) {
-      const item = pending[i];
-      if (!item) continue;
 
-      setActiveExchange({ customerText: item.message, replyText: null });
+    for (let i = 0; i < demoMessages.length; i++) {
+      const message = demoMessages[i];
+      if (!message) continue;
 
-      const reply = await item.promise;
-      if (!reply) {
+      setActiveExchange({ customerText: message, replyText: null });
+
+      const result = await fetchDemoReply(message, priorState, history);
+      if (!result) {
         setActiveExchange(null);
         break; // a real hiccup — never let a nice-to-have block reaching Meet
       }
 
-      setActiveExchange({ customerText: item.message, replyText: reply });
-      await new Promise((resolve) => setTimeout(resolve, estimateTypeMs(reply)));
+      setActiveExchange({ customerText: message, replyText: result.replyText });
+      await new Promise((resolve) => setTimeout(resolve, estimateTypeMs(result.replyText)));
 
-      settled.push({ from: "customer", text: item.message }, { from: "receptionist", text: reply });
+      settled.push({ from: "customer", text: message }, { from: "receptionist", text: result.replyText });
       setSettledTurns([...settled]);
       setActiveExchange(null);
+
+      priorState = result.conversationState;
+      history = [
+        ...history,
+        { direction: "inbound", body: message },
+        { direction: "outbound", body: result.replyText },
+      ];
 
       await new Promise((resolve) => setTimeout(resolve, BETWEEN_EXCHANGE_PAUSE_MS));
     }
@@ -233,26 +303,51 @@ export function PreparingReceptionist() {
             key="working"
             exit={{ opacity: 0, scale: 0.97 }}
             transition={{ duration: 0.4, ease: EASE }}
-            className="flex min-h-[300px] flex-col items-center justify-center text-center"
+            className="relative flex min-h-[300px] flex-col items-center justify-center overflow-hidden text-center"
           >
+            {/* Ambient environment: a very slow light sweep and a few
+                tiny drifting particles — anticipation, not a loader. */}
             <motion.div
-              className="relative mb-7 h-14 w-14"
-              animate={{ y: [0, -4, 0], scale: [1, 1.035, 1] }}
-              transition={{ duration: 2.2, repeat: Infinity, ease: "easeInOut" }}
-            >
-              <motion.div
+              aria-hidden
+              className="pointer-events-none absolute -inset-y-10 left-0 w-1/3 -skew-x-12"
+              style={{
+                background:
+                  "linear-gradient(90deg, transparent, rgba(37,99,235,0.05), rgba(34,197,94,0.05), transparent)",
+              }}
+              animate={{ x: ["-60%", "340%"] }}
+              transition={{ duration: 5.5, repeat: Infinity, repeatDelay: 2.6, ease: "easeInOut" }}
+            />
+            {PARTICLES.map((p, i) => (
+              <motion.span
+                key={i}
                 aria-hidden
-                animate={{ opacity: [0.35, 0.75, 0.35] }}
-                transition={{ duration: 2.2, repeat: Infinity, ease: "easeInOut" }}
-                className="absolute inset-0 rounded-3xl bg-gradient-to-br from-primary to-success blur-lg"
+                className="pointer-events-none absolute h-1 w-1 rounded-full bg-primary/30"
+                style={{ left: p.x, top: p.y }}
+                animate={{ opacity: [0, 0.6, 0], y: [0, -16, -26] }}
+                transition={{ duration: p.duration, repeat: Infinity, delay: p.delay, ease: "easeInOut" }}
               />
-              <div className="relative flex h-14 w-14 items-center justify-center rounded-3xl bg-gradient-to-br from-primary to-success shadow-elevated">
-                <svg viewBox="0 0 24 24" fill="none" className="h-7 w-7">
-                  <path d="M4 20l1.6-4.8A8 8 0 1112 20a7.96 7.96 0 01-3.9-1L4 20z" fill="white" />
-                </svg>
-              </div>
-            </motion.div>
-            <p className="text-[16.5px] font-semibold tracking-tight text-foreground">
+            ))}
+
+            <div className="relative mb-7 h-14 w-14">
+              <motion.div
+                animate={{ y: [0, -4, 0], scale: [1, 1.035, 1] }}
+                transition={{ duration: 2.2, repeat: Infinity, ease: "easeInOut" }}
+                className="relative h-14 w-14"
+              >
+                <motion.div
+                  aria-hidden
+                  animate={{ opacity: [0.35, 0.75, 0.35] }}
+                  transition={{ duration: 2.2, repeat: Infinity, ease: "easeInOut" }}
+                  className="absolute inset-0 rounded-3xl bg-gradient-to-br from-primary to-success blur-lg"
+                />
+                <div className="relative flex h-14 w-14 items-center justify-center rounded-3xl bg-gradient-to-br from-primary to-success shadow-elevated">
+                  <svg viewBox="0 0 24 24" fill="none" className="h-7 w-7">
+                    <path d="M4 20l1.6-4.8A8 8 0 1112 20a7.96 7.96 0 01-3.9-1L4 20z" fill="white" />
+                  </svg>
+                </div>
+              </motion.div>
+            </div>
+            <p className="relative text-[16.5px] font-semibold tracking-tight text-foreground">
               Setting up your receptionist
             </p>
           </motion.div>
@@ -271,13 +366,7 @@ export function PreparingReceptionist() {
 
             <GentleSwap swapKey={factGroupIndex} className="mb-6 min-h-[54px] space-y-2.5">
               {(factGroups[factGroupIndex] ?? []).map((fact, i) => (
-                <Reveal key={fact.label} index={i} className="flex items-center gap-2.5 text-[13.5px]">
-                  <span aria-hidden>
-                    <GrowingCheck className="h-4 w-4 shrink-0" />
-                  </span>
-                  <span className="text-muted-foreground">{fact.label}:</span>
-                  <span className="font-semibold text-foreground">{fact.value}</span>
-                </Reveal>
+                <LearnedFact key={fact.label} label={fact.label} value={fact.value} delay={0.15 + i * 0.55} />
               ))}
             </GentleSwap>
 

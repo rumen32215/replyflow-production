@@ -100,10 +100,10 @@ export function ServiceAreaStep() {
                 whileTap={{ ...press.whileTap, transition: press.transition }}
                 aria-pressed={on}
                 className={cn(
-                  "flex flex-col items-center gap-1 rounded-xl border-2 py-3 text-[12.5px] font-semibold transition-colors duration-300",
+                  "flex flex-col items-center gap-1 rounded-xl border-2 bg-background py-3 text-[12.5px] font-semibold transition-colors duration-300",
                   on
-                    ? "border-success bg-success/10 text-success"
-                    : "border-border bg-background text-muted-foreground hover:border-muted-foreground/30"
+                    ? "border-success text-primary"
+                    : "border-border text-muted-foreground hover:border-muted-foreground/30"
                 )}
               >
                 <AnimatePresence mode="wait" initial={false}>
@@ -114,6 +114,7 @@ export function ServiceAreaStep() {
                       animate={{ scale: 1, opacity: 1 }}
                       exit={{ scale: 0.4, opacity: 0 }}
                       transition={{ type: "spring", stiffness: 500, damping: 26 }}
+                      className="text-success"
                     >
                       <Check className="h-3 w-3" strokeWidth={3} />
                     </motion.span>
@@ -140,7 +141,7 @@ export function ServiceAreaStep() {
               value={opening}
               onChange={(e) => setOpening(e.target.value)}
               aria-label="Opening time"
-              className="h-12 w-full rounded-xl border-2 border-border bg-background px-3.5 text-[15px] font-semibold outline-none transition-all duration-300 focus:border-primary focus:shadow-[0_0_0_4px_rgba(37,99,235,0.08),0_12px_32px_-12px_rgba(37,99,235,0.25)]"
+              className="h-12 w-full rounded-xl border-2 border-border bg-background px-3.5 text-[15px] font-semibold outline-none transition-all duration-300 focus:border-success focus:shadow-[0_0_0_3px_rgba(34,197,94,0.10)]"
             />
           </label>
           <span className="mt-5 text-muted-foreground">–</span>
@@ -151,29 +152,38 @@ export function ServiceAreaStep() {
               value={closing}
               onChange={(e) => setClosing(e.target.value)}
               aria-label="Closing time"
-              className="h-12 w-full rounded-xl border-2 border-border bg-background px-3.5 text-[15px] font-semibold outline-none transition-all duration-300 focus:border-primary focus:shadow-[0_0_0_4px_rgba(37,99,235,0.08),0_12px_32px_-12px_rgba(37,99,235,0.25)]"
+              className="h-12 w-full rounded-xl border-2 border-border bg-background px-3.5 text-[15px] font-semibold outline-none transition-all duration-300 focus:border-success focus:shadow-[0_0_0_3px_rgba(34,197,94,0.10)]"
             />
           </label>
         </div>
       </div>
 
-      {/* A self-contained "location slot" — a faint contour-line texture
-          (the same inline-gradient technique PhoneFrame already uses)
-          signals "this is where she learns where you work" without a
-          real map — the same card is where an interactive one could
-          land later without reshaping this screen. */}
-      <div
-        className="mb-8 overflow-hidden rounded-2xl border border-border/70 bg-background/40 p-4"
-        style={{
-          backgroundImage:
-            "repeating-radial-gradient(circle at 90% 8%, rgba(37,99,235,0.06) 0px, rgba(37,99,235,0.06) 1px, transparent 1px, transparent 16px)",
-        }}
-      >
-        <span className="mb-2.5 flex items-center gap-1.5 text-[12px] font-semibold uppercase tracking-wide text-muted-foreground/80">
+      {/* A self-contained "location slot" — an ambient, almost-imperceptible
+          map feeling (soft breathing glow + layered contour lines, never a
+          literal map) signals "this is where she learns where you work"
+          — the same card is where an interactive one could land later
+          without reshaping this screen. */}
+      <div className="relative mb-8 overflow-hidden rounded-2xl border border-border/70 bg-background/40 p-4">
+        <motion.div
+          aria-hidden
+          className="pointer-events-none absolute -right-12 -top-14 h-44 w-44 rounded-full blur-2xl"
+          style={{ background: "radial-gradient(circle, rgba(34,197,94,0.18), transparent 70%)" }}
+          animate={{ opacity: [0.5, 0.9, 0.5], scale: [1, 1.08, 1] }}
+          transition={{ duration: 7, repeat: Infinity, ease: "easeInOut" }}
+        />
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0"
+          style={{
+            backgroundImage:
+              "repeating-radial-gradient(circle at 88% 6%, rgba(34,197,94,0.10) 0px, rgba(34,197,94,0.10) 1px, transparent 1px, transparent 18px), repeating-radial-gradient(circle at 10% 100%, rgba(37,99,235,0.05) 0px, rgba(37,99,235,0.05) 1px, transparent 1px, transparent 26px)",
+          }}
+        />
+        <span className="relative z-10 mb-2.5 flex items-center gap-1.5 text-[12px] font-semibold uppercase tracking-wide text-muted-foreground/80">
           <MapPin className="h-3.5 w-3.5" aria-hidden />
           Service area
         </span>
-        <motion.div whileFocus={{ scale: 1.01 }} className="group relative">
+        <motion.div whileFocus={{ scale: 1.01 }} className="group relative z-10">
           <input
             autoFocus
             value={area}

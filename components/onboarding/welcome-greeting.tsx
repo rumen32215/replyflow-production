@@ -47,7 +47,9 @@ export function WelcomeGreeting() {
         className="rounded-3xl border border-border bg-card p-10 shadow-elevated"
       >
         {/* Logo animation: the mark scales in with a soft glow that
-            settles — the product feels alive before a word is read. */}
+            settles, then keeps breathing — a quiet float, an ambient
+            glow that never fully rests, and an occasional tiny pulse.
+            The receptionist is already awake before a word is read. */}
         <motion.div
           initial={{ opacity: 0, scale: 0.7 }}
           animate={{ opacity: 1, scale: 1 }}
@@ -55,17 +57,34 @@ export function WelcomeGreeting() {
           className="relative mb-8 h-16 w-16"
         >
           <motion.div
-            aria-hidden
-            initial={{ opacity: 0 }}
-            animate={{ opacity: [0, 0.7, 0.35] }}
-            transition={{ duration: 1.6, ease: "easeOut", delay: 0.3, times: [0, 0.5, 1] }}
-            className="absolute inset-0 rounded-3xl bg-gradient-to-br from-primary to-success blur-xl"
-          />
-          <div className="relative flex h-16 w-16 items-center justify-center rounded-3xl bg-gradient-to-br from-primary to-success shadow-elevated">
-            <svg viewBox="0 0 24 24" fill="none" className="h-8 w-8">
-              <path d="M4 20l1.6-4.8A8 8 0 1112 20a7.96 7.96 0 01-3.9-1L4 20z" fill="white" />
-            </svg>
-          </div>
+            animate={{ y: [0, -3, 0] }}
+            transition={{ duration: 3.6, repeat: Infinity, ease: "easeInOut", delay: 0.9 }}
+            className="relative h-16 w-16"
+          >
+            <motion.div
+              aria-hidden
+              initial={{ opacity: 0 }}
+              animate={{ opacity: [0, 0.7, 0.35] }}
+              transition={{ duration: 1.6, ease: "easeOut", delay: 0.3, times: [0, 0.5, 1] }}
+              className="absolute inset-0 rounded-3xl bg-gradient-to-br from-primary to-success blur-xl"
+            />
+            <motion.div
+              aria-hidden
+              initial={{ opacity: 0 }}
+              animate={{ opacity: [0.15, 0.45, 0.15] }}
+              transition={{ duration: 4, repeat: Infinity, ease: "easeInOut", delay: 1.9 }}
+              className="absolute inset-0 rounded-3xl bg-gradient-to-br from-primary to-success blur-xl"
+            />
+            <motion.div
+              animate={{ scale: [1, 1.035, 1] }}
+              transition={{ duration: 0.7, repeat: Infinity, repeatDelay: 3.3, ease: "easeInOut", delay: 2.6 }}
+              className="relative flex h-16 w-16 items-center justify-center rounded-3xl bg-gradient-to-br from-primary to-success shadow-elevated"
+            >
+              <svg viewBox="0 0 24 24" fill="none" className="h-8 w-8">
+                <path d="M4 20l1.6-4.8A8 8 0 1112 20a7.96 7.96 0 01-3.9-1L4 20z" fill="white" />
+              </svg>
+            </motion.div>
+          </motion.div>
         </motion.div>
 
         {/* Time-of-day greeting is computed in the browser; the server

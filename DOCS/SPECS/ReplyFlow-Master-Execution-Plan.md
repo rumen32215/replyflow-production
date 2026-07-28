@@ -45,7 +45,7 @@ Every task states: **Objective**, **Why** (the specific Founder Constitution lin
 
 *Cheap, foundational, unlocks almost everything downstream. Nothing here should take long, and nothing later should start ahead of it.*
 
-### 0.1 AI token and cost tracking
+### 0.1 AI token and cost tracking — implemented
 - **Objective:** Persist the token counts and cost already returned by every OpenAI call, per business and per call site.
 - **Why:** *"Build for reliability before intelligence."* ReplyFlow cannot offer the predictability the Constitution promises without knowing its own costs.
 - **Dependencies:** None.
@@ -54,6 +54,7 @@ Every task states: **Objective**, **Why** (the specific Founder Constitution lin
 - **Risk if postponed:** Every pricing, margin, and reliability decision downstream stays a guess.
 - **Success criteria:** Every real OpenAI call's token usage and estimated cost is queryable per business.
 - **Blocks:** Billing (3.1), Founder metrics dashboard (3.4), any real pricing decision.
+- **Shipped as:** a new `ai_usage_events` table (`supabase/migrations/0016_ai_usage_tracking.sql`), written from the one provider-agnostic chokepoint every completion call already passes through (`lib/reply-engine/llm/client.ts`), so all three real call sites — production replies, Test Conversations, and the onboarding/coaching live-reply preview — are covered without instrumenting each one separately. Cost estimation is a pure, unit-tested function (`lib/reply-engine/llm/pricing.ts`); recording itself is best-effort and never blocks a reply (`lib/reply-engine/llm/usage-tracking.ts`). Verified against real production data: the 18-scenario adversarial regression suite ran with 0 failures, and 59 real rows landed in `ai_usage_events` (30 `understanding.classify`, 29 `prompt.generate`), correctly attributed by business, call site, model, tier, and cost.
 
 ### 0.2 Fix the onboarding demo's uncapped-cost bug, add basic rate limiting
 - **Objective:** Stop the onboarding demo conversation from re-firing 8 real OpenAI calls on every refresh/retry, and add a basic per-endpoint rate limit to every AI-calling route.

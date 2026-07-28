@@ -8,15 +8,16 @@ A note on the name: the brief for this sprint suggested `/docs`. This folder is 
 
 | File | Answers |
 |---|---|
-| [00-Vision.md](00-Vision.md) | What is ReplyFlow, and why does it exist? |
-| [01-Principles.md](01-Principles.md) | What must every future decision obey? |
-| [02-Conversation-Philosophy.md](02-Conversation-Philosophy.md) | How does the receptionist think, decide, and speak? |
-| [03-Trust-Experience.md](03-Trust-Experience.md) | How does an owner come to trust her? |
-| [04-Owner-Experience.md](04-Owner-Experience.md) | What should the owner feel, at every stage of using ReplyFlow? |
-| [05-Experience-Architecture.md](05-Experience-Architecture.md) | What are the actual screens, and what does each one answer? |
-| [06-Engineering-Principles.md](06-Engineering-Principles.md) | How is this actually built, and where does judgement sit versus code? |
-| [07-Implementation-Roadmap.md](07-Implementation-Roadmap.md) | What gets built next, in what order, and why? |
-| [08-Receptionist-Intelligence-Architecture.md](08-Receptionist-Intelligence-Architecture.md) | How does she actually reason, turn by turn, right now — and what does that leave still undecided? |
+| [00-Founder-Constitution.md](00-Founder-Constitution.md) | Why does ReplyFlow exist, and what does it refuse to become? The why every other document below answers to. |
+| [01-Vision.md](01-Vision.md) | What is ReplyFlow, and why does it exist? |
+| [02-Principles.md](02-Principles.md) | What must every future decision obey? |
+| [03-Conversation-Philosophy.md](03-Conversation-Philosophy.md) | How does the receptionist think, decide, and speak? |
+| [04-Trust-Experience.md](04-Trust-Experience.md) | How does an owner come to trust her? |
+| [05-Owner-Experience.md](05-Owner-Experience.md) | What should the owner feel, at every stage of using ReplyFlow? |
+| [06-Experience-Architecture.md](06-Experience-Architecture.md) | What are the actual screens, and what does each one answer? |
+| [07-Engineering-Principles.md](07-Engineering-Principles.md) | How is this actually built, and where does judgement sit versus code? |
+| [08-Implementation-Roadmap.md](08-Implementation-Roadmap.md) | What gets built next, in what order, and why? |
+| [09-Receptionist-Intelligence-Architecture.md](09-Receptionist-Intelligence-Architecture.md) | How does she actually reason, turn by turn, right now — and what does that leave still undecided? |
 
 ## Relationship to `DOCS/SPECS/`
 
@@ -28,4 +29,4 @@ A note on the name: the brief for this sprint suggested `/docs`. This folder is 
 
 ## How to use this folder going forward
 
-Before scoping a new sprint, check it against [01-Principles.md](01-Principles.md) and locate it in [07-Implementation-Roadmap.md](07-Implementation-Roadmap.md). If it isn't in the roadmap, ask why before building it. If it's in the roadmap out of dependency order, ask why before reordering it. This folder is not read once and filed away — it's the thing every subsequent sprint checks itself against.
+Before scoping a new sprint, check it against [02-Principles.md](02-Principles.md) and locate it in [08-Implementation-Roadmap.md](08-Implementation-Roadmap.md). If it isn't in the roadmap, ask why before building it. If it's in the roadmap out of dependency order, ask why before reordering it. This folder is not read once and filed away — it's the thing every subsequent sprint checks itself against.

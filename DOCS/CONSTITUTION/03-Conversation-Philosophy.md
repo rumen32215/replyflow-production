@@ -1,4 +1,4 @@
-# 02 — Conversation Philosophy
+# 03 — Conversation Philosophy
 
 **How the receptionist thinks, decides, and speaks.** This document synthesises four separate design sprints (`DOCS/BUILD/05` Reply Engine Architecture, `06` Understanding Engine Architecture, `07` Voice, `08` Judgement) into one coherent account, and resolves a terminology tension between them that was never previously written down in one place. The full historical depth and reasoning behind each part still lives in the archive — this is the consolidated, current answer, not a replacement for that depth.
 
@@ -10,11 +10,11 @@
 
 1. **Understand** — a small, cheap model call classifies what a message actually wants (`06`), extracts real entities deterministically where possible, and decides how much context this specific message actually needs — never everything, never nothing.
 2. **Assemble** — deterministic code gathers exactly the facts Understanding asked for: bounded business facts (sent in full, they're small), unbounded history and customer memory (windowed, never sent whole) (`05`).
-3. **Judge** — a deterministic table, not a model guess, decides which category this falls into and what confidence bar it has to clear before anything could ever be automatic (`06`, and see document 06 of this folder for how this plays out in practice).
+3. **Judge** — a deterministic table, not a model guess, decides which category this falls into and what confidence bar it has to clear before anything could ever be automatic (`06`, and see document 07 of this folder for how this plays out in practice).
 4. **Generate** — the one point a larger model call actually writes the reply, following the Receptionist Writing Standard (`07`).
 5. **Verify** — deterministic safety checks run against the draft before it goes anywhere: does it cite real facts, does it overclaim, does it match the confidence and escalation rules Judge already decided.
 
-The discipline underneath every stage: **retrieval and safety are code; only the sentence itself is ever delegated to a model.** The model proposes. Deterministic code decides. This is Principle 7 (document 01), and it's the single idea everything below elaborates on.
+The discipline underneath every stage: **retrieval and safety are code; only the sentence itself is ever delegated to a model.** The model proposes. Deterministic code decides. This is Principle 7 (document 02), and it's the single idea everything below elaborates on.
 
 ---
 
@@ -68,5 +68,5 @@ Two mechanisms make this reliable rather than aspirational: a deterministic scan
 
 ## What's designed but still open
 
-- **Business Personality** (`07` §4) — a genuine architecture recommendation, not yet implemented. The current tone setting is a flat enum; a real personality system (distinct sentence-length ceilings, greeting frequency, question style per business) needs a richer data shape that doesn't exist yet. Flagged here, not solved — see document 07 of this folder for where it sits in priority.
-- **The correction/learning loop** (`05` §7) — designed in detail, never built. `recordCorrection()` and `recordOutcome()` remain unimplemented; there is no `reply_outcomes` or `reply_corrections` table. This is the "Improve" stage of the Learn → Work → Escalate → Improve loop (document 00), and it's currently the least mature part of the whole pipeline. See document 06 of this folder.
+- **Business Personality** (`07` §4) — a genuine architecture recommendation, not yet implemented. The current tone setting is a flat enum; a real personality system (distinct sentence-length ceilings, greeting frequency, question style per business) needs a richer data shape that doesn't exist yet. Flagged here, not solved — see document 08 of this folder for where it sits in priority.
+- **The correction/learning loop** (`05` §7) — designed in detail, never built. `recordCorrection()` and `recordOutcome()` remain unimplemented; there is no `reply_outcomes` or `reply_corrections` table. This is the "Improve" stage of the Learn → Work → Escalate → Improve loop (document 01), and it's currently the least mature part of the whole pipeline. See document 07 of this folder.

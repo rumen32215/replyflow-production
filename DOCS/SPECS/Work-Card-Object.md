@@ -1,6 +1,6 @@
 # The Work Card Object
 
-**Implementation planning, not a page design.** Per the roadmap (`DOCS/CONSTITUTION/07`), no screen gets designed until this object feels complete. This document is a living spec — expected to change as building proceeds — unlike the permanent philosophy in `DOCS/CONSTITUTION/`.
+**Implementation planning, not a page design.** Per the roadmap (`DOCS/CONSTITUTION/08`), no screen gets designed until this object feels complete. This document is a living spec — expected to change as building proceeds — unlike the permanent philosophy in `DOCS/CONSTITUTION/`.
 
 ---
 
@@ -58,7 +58,7 @@ A Work Card can come from two different origins, and the object has to honestly 
 
 ## 3. The one hard rule: price is never her territory
 
-Consistent with the very first grounding principle this whole product was built around (`DOCS/CONSTITUTION/06` §1) — pricing is never automatic, never proposed by the model, never even drafted as a suggestion on a Work Card. `estimated_value` is owner-entered or it's empty. This isn't a gap to fill later; it's a deliberate, permanent boundary.
+Consistent with the very first grounding principle this whole product was built around (`DOCS/CONSTITUTION/07` §1) — pricing is never automatic, never proposed by the model, never even drafted as a suggestion on a Work Card. `estimated_value` is owner-entered or it's empty. This isn't a gap to fill later; it's a deliberate, permanent boundary.
 
 ---
 

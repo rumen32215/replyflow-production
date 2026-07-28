@@ -1,6 +1,6 @@
-# 08 — Receptionist Intelligence Architecture
+# 09 — Receptionist Intelligence Architecture
 
-**How she actually thinks, right now, cited against the real code.** Document 02 describes the receptionist in behavioural terms — what she knows, how she decides, how she speaks. Document 06 describes the general engineering discipline that makes any of that reliable. This document sits between them: the definitive, detailed map of her actual reasoning — every mechanism named, every table reproduced in full, every gap stated plainly — written specifically so the next phase of work (building the receptionist experience in earnest, now that onboarding is frozen) starts from an accurate picture instead of a remembered one.
+**How she actually thinks, right now, cited against the real code.** Document 03 describes the receptionist in behavioural terms — what she knows, how she decides, how she speaks. Document 07 describes the general engineering discipline that makes any of that reliable. This document sits between them: the definitive, detailed map of her actual reasoning — every mechanism named, every table reproduced in full, every gap stated plainly — written specifically so the next phase of work (building the receptionist experience in earnest, now that onboarding is frozen) starts from an accurate picture instead of a remembered one.
 
 Nothing below is aspirational. Where something is designed but not built, it says so, in its own section, not folded quietly into the rest.
 
@@ -8,7 +8,7 @@ Nothing below is aspirational. Where something is designed but not built, it say
 
 ## 1. How she thinks — the pipeline, in order
 
-Five stages, each with exactly one job (document 06 §2 names the same pipeline; this section goes one level deeper into what each stage actually decides):
+Five stages, each with exactly one job (document 07 §2 names the same pipeline; this section goes one level deeper into what each stage actually decides):
 
 **Understanding** (`lib/reply-engine/understanding/classify.ts`) — one model call does both intent classification *and* conversation-state extraction together, deliberately not two calls. It judges the new message on its own terms, "never biased toward whatever we were already doing" — a pricing question asked mid-booking is classified `PRICING_INQUIRY`, not folded into `BOOKING_REQUEST`, specifically because pricing carries its own never-automatic rule regardless of context. Twelve intents exist:
 
@@ -85,7 +85,7 @@ The three Product Guarantees, as they're actually numbered and enforced in code 
 - **Guarantee 2** (`lib/reply-engine/safety/evaluate.ts`) — a payment question is always answered using the real taught payment methods when they exist, or forced to escalate rather than dodge the question. Covered by a dedicated grounding check (§8).
 - **Guarantee 3** (`components/dashboard/conversations/conversation-story.tsx`, `app/api/conversations/[id]/send/route.ts`) — the owner always has a manual way to reach their own customer, even on the rare occasion the AI produces no draft at all. The product never becomes the only channel to a real customer.
 
-Underneath all three sits the same mechanism: the commitments ledger and `slots` never silently drop something the customer already said. If it's real, it's tracked until it's resolved — the alternative (re-deriving everything from raw history every turn, the thing this whole state machine was built to replace) is exactly what produced re-greeting, re-asking, and fact drift in earlier production testing (document 02).
+Underneath all three sits the same mechanism: the commitments ledger and `slots` never silently drop something the customer already said. If it's real, it's tracked until it's resolved — the alternative (re-deriving everything from raw history every turn, the thing this whole state machine was built to replace) is exactly what produced re-greeting, re-asking, and fact drift in earlier production testing (document 03).
 
 ---
 
@@ -102,7 +102,7 @@ At most one meaningful question per message. `stage` supplies the guidance strin
 Two mechanisms working together, not one:
 
 1. **The slot gate** — `stage` cannot reach `quote_or_book` while `slots.issue` is still unset. This is what stops the model from jumping straight to "when works for you?" before it has actually understood the job.
-2. **Reflected understanding before the next question** — the generation prompt explicitly instructs a short diagnostic reflection ("Sounds like trapped air") before the follow-up question, not as filler on every message, but as a real acknowledgement that the previous answer landed. This is one of document 02's identified gaps closed since: it's a live instruction now, not just a Voice-document aspiration.
+2. **Reflected understanding before the next question** — the generation prompt explicitly instructs a short diagnostic reflection ("Sounds like trapped air") before the follow-up question, not as filler on every message, but as a real acknowledgement that the previous answer landed. This is one of document 03's identified gaps closed since: it's a live instruction now, not just a Voice-document aspiration.
 
 Combined with §2's commitments ledger (never ask for something already given) and §4's five-outcome rule (never ask something that doesn't serve the conversation), qualification here is not a fixed intake form — it's "ask the next thing that's actually still missing, and only if asking earns its place."
 
@@ -185,7 +185,7 @@ Intent is re-evaluated fresh on every single message — nothing is locked in fr
 
 Trade-specific facts (services offered, typical jobs, opening hours, service areas) live entirely in `BusinessProfileContext` — real, taught data, gathered the same way regardless of trade. Voice — sentence length, question discipline, repetition-avoidance, the five-outcome question rule — is written once, trade-agnostic by design, and applied identically whether the business is a plumber or a painter and decorator. Consistency across trades is a direct consequence of *not* hardcoding trade-flavoured phrasing anywhere in the prompt.
 
-What's genuinely still flat, honestly: **Business Personality is a three-value tone enum today**, not the richer, structured system document 07 §4 envisions (distinct sentence-length ceilings, greeting frequency, and question style per business, five named presets from "Quick & direct" to "Premium concierge"). This is already tracked as unbuilt in document 06 §6 — repeated here only because it's the direct answer to "how consistently human, across every trade *and* every business's own character" — today, the honest answer is: consistent in voice discipline, not yet expressive in personality.
+What's genuinely still flat, honestly: **Business Personality is a three-value tone enum today**, not the richer, structured system `BUILD/07` §4 envisions (distinct sentence-length ceilings, greeting frequency, and question style per business, five named presets from "Quick & direct" to "Premium concierge"). This is already tracked as unbuilt in document 07 §6 — repeated here only because it's the direct answer to "how consistently human, across every trade *and* every business's own character" — today, the honest answer is: consistent in voice discipline, not yet expressive in personality.
 
 ---
 
@@ -194,8 +194,8 @@ What's genuinely still flat, honestly: **Business Personality is a three-value t
 Deliberately left open rather than quietly decided while writing this:
 
 - **Photos** (§7) — whether/how she asks for one, and where captioning happens in the pipeline.
-- **Proactive follow-up** — document 08 (Judgement) names this as a real, not-yet-built capability: ReplyFlow only ever responds today, it never initiates. Worth deciding whether this belongs in the next phase of work or stays explicitly out of scope for longer.
-- **Business Personality as real data** (§11, document 06 §6) — the schema-level design work hasn't started.
-- **The correction/learning loop** (document 06 §6) — `reply_outcomes`/`reply_corrections` remain undesigned at the table level beyond the original proposal; this is the entire "Improve" stage of Learn → Work → Escalate → Improve (document 00), still the least mature part of the whole system.
+- **Proactive follow-up** — document 03 (Judgement) names this as a real, not-yet-built capability: ReplyFlow only ever responds today, it never initiates. Worth deciding whether this belongs in the next phase of work or stays explicitly out of scope for longer.
+- **Business Personality as real data** (§11, document 07 §6) — the schema-level design work hasn't started.
+- **The correction/learning loop** (document 07 §6) — `reply_outcomes`/`reply_corrections` remain undesigned at the table level beyond the original proposal; this is the entire "Improve" stage of Learn → Work → Escalate → Improve (document 01), still the least mature part of the whole system.
 
 None of these are silently assumed solved anywhere above. Building the next phase of the receptionist experience on top of this document means picking these up deliberately, not discovering them mid-build.

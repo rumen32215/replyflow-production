@@ -1,4 +1,4 @@
-# 00 — Vision
+# 01 — Vision
 
 **This document did not exist before this sprint.** Everything in it was true and agreed early in this product's design — it lived in working notes and conversation, never written down as its own permanent chapter. Consolidating it here, first, because every other document in this folder assumes it.
 
@@ -28,10 +28,10 @@ Not "did the AI reply, classify, draft, or send" — those are process questions
 
 **Learn → Work → Escalate → Improve → repeat.**
 
-- **Learn** — the owner teaches the receptionist (document 02).
-- **Work** — she handles what she's confident about, within the narrow, evidence-earned autonomy the Confidence Timeline describes (document 03).
-- **Escalate** — the owner reviews the small number of things that genuinely need a person (document 06's Decision Categories, document 05's Judgement).
-- **Improve** — corrections and outcomes feed back into what she knows. This is the one stage of the loop still substantially unbuilt — see document 07.
+- **Learn** — the owner teaches the receptionist (document 03).
+- **Work** — she handles what she's confident about, within the narrow, evidence-earned autonomy the Confidence Timeline describes (document 04).
+- **Escalate** — the owner reviews the small number of things that genuinely need a person (document 07's Decision Categories, document 03's Judgement).
+- **Improve** — corrections and outcomes feed back into what she knows. This is the one stage of the loop still substantially unbuilt — see document 08.
 
 Every screen in the product exists to serve one stage of this loop. A screen that doesn't map onto Learn, Work, Escalate, or Improve should be questioned before it's built.
 
@@ -49,4 +49,4 @@ Not a permanent ban on any of those ideas — they may all get built eventually.
 
 ## What changed, going from building software to designing an employee
 
-Early in this product's life, the working mode was implementation-driven: where do I click, why doesn't this work. It shifted, deliberately, to product-founder-level observation: the owner shouldn't have to touch anything; a screen should make them *feel* something, not just report data; the AI should only interrupt for genuine exceptions. That shift is why documents 01 through 07 in this folder exist at all, and it's the standing discipline every future sprint should carry forward — not "finishing ReplyFlow" as a checklist of screens, but building the receptionist a sole trader wishes they could afford, and staying disciplined about using that as the filter for every decision from here.
+Early in this product's life, the working mode was implementation-driven: where do I click, why doesn't this work. It shifted, deliberately, to product-founder-level observation: the owner shouldn't have to touch anything; a screen should make them *feel* something, not just report data; the AI should only interrupt for genuine exceptions. That shift is why documents 02 through 08 in this folder exist at all, and it's the standing discipline every future sprint should carry forward — not "finishing ReplyFlow" as a checklist of screens, but building the receptionist a sole trader wishes they could afford, and staying disciplined about using that as the filter for every decision from here.

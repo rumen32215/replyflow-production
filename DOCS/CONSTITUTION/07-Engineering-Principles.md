@@ -1,12 +1,12 @@
-# 06 — Engineering Principles
+# 07 — Engineering Principles
 
-**How this is actually built, and where judgement sits versus code.** Document 02 describes the receptionist in behavioural terms — what she knows, how she decides, how she speaks. This document describes the same system from the other side: the concrete engineering discipline that makes that behaviour reliable rather than merely hoped-for. Like document 02, it consolidates and updates `DOCS/BUILD/05` and `06`, which described the original proposal — a meaningful amount of what's below was built later and never previously written up as its own architecture document.
+**How this is actually built, and where judgement sits versus code.** Document 03 describes the receptionist in behavioural terms — what she knows, how she decides, how she speaks. This document describes the same system from the other side: the concrete engineering discipline that makes that behaviour reliable rather than merely hoped-for. Like document 03, it consolidates and updates `DOCS/BUILD/05` and `06`, which described the original proposal — a meaningful amount of what's below was built later and never previously written up as its own architecture document.
 
 ---
 
 ## 1. The one rule
 
-**Retrieval and safety are deterministic code. Only the sentence itself is ever delegated to a model.** The model proposes; code decides. This is Principle 7 (document 01), and every section below is a different concrete expression of it.
+**Retrieval and safety are deterministic code. Only the sentence itself is ever delegated to a model.** The model proposes; code decides. This is Principle 7 (document 02), and every section below is a different concrete expression of it.
 
 A practical test for any new capability: if getting it wrong would be genuinely costly — an invented price, a false "you're booked," a real emergency waved off — it needs a rule that owns the outcome, not a hope that the model's judgement holds. Everywhere else, her judgement is the right tool, because rules can't sound like a person and shouldn't try to.
 
@@ -46,7 +46,7 @@ The pattern across all of these: **a prompt instruction is a request; a safety-l
 
 ## 4. Conversation State
 
-Detailed in document 02. The engineering discipline worth restating here: it is computed by extending the existing, small, cheap Understanding classification call — never a new call, and never re-derived from raw history on every turn. Two fields are corrected *after* generation runs rather than trusted from the pre-generation guess (`open_question`, and which commitments a reply actually resolved), because the classification step genuinely cannot know what the generation step will end up writing. This two-pass correction pattern is the one architectural idea in this document most likely to be needed again for any future stateful field.
+Detailed in document 03. The engineering discipline worth restating here: it is computed by extending the existing, small, cheap Understanding classification call — never a new call, and never re-derived from raw history on every turn. Two fields are corrected *after* generation runs rather than trusted from the pre-generation guess (`open_question`, and which commitments a reply actually resolved), because the classification step genuinely cannot know what the generation step will end up writing. This two-pass correction pattern is the one architectural idea in this document most likely to be needed again for any future stateful field.
 
 ---
 
@@ -62,7 +62,7 @@ Detailed in document 02. The engineering discipline worth restating here: it is 
 
 Being honest about this here is more useful than letting it go unstated:
 
-- **The correction/learning loop.** `reply_outcomes` and `reply_corrections` were designed in detail early in this product's architecture — a real signal every time the owner sends a draft unedited, edits it, or rejects it, feeding suggestions back through the same Recommendations surfaces the owner already trusts. Neither table exists yet; `recordOutcome()` and `recordCorrection()` remain unimplemented. This is the "Improve" stage of the Learn → Work → Escalate → Improve loop (document 00), and it's currently the least mature part of the whole pipeline — several owner-facing ideas in document 05 (visible receptionist improvement over time) are blocked on this existing first.
+- **The correction/learning loop.** `reply_outcomes` and `reply_corrections` were designed in detail early in this product's architecture — a real signal every time the owner sends a draft unedited, edits it, or rejects it, feeding suggestions back through the same Recommendations surfaces the owner already trusts. Neither table exists yet; `recordOutcome()` and `recordCorrection()` remain unimplemented. This is the "Improve" stage of the Learn → Work → Escalate → Improve loop (document 01), and it's currently the least mature part of the whole pipeline — several owner-facing ideas in document 06 (visible receptionist improvement over time) are blocked on this existing first.
 - **Business Personality as a real data shape.** The current tone setting is a flat enum. A genuine personality system — distinct sentence-length ceilings, greeting frequency, question style per business — needs a richer, structured representation that hasn't been designed at the schema level yet.
 - **Semantic deduplication for taught knowledge.** Exact-string dedup exists today; recognising that "do you work Saturdays" and "are you open on weekends" are the same fact in different words does not. Flagged as a real future improvement, not a current requirement.
 

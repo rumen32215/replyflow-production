@@ -1,6 +1,6 @@
-# 07 — Implementation Roadmap
+# 08 — Implementation Roadmap
 
-**What gets built next, in what order, and why.** Ordered by dependency, not difficulty. Every item states why it exists, which principles (document 01) it supports, what it depends on, and what it unlocks afterward. This is the one document in this folder written to be re-read before every sprint, not read once.
+**What gets built next, in what order, and why.** Ordered by dependency, not difficulty. Every item states why it exists, which principles (document 02) it supports, what it depends on, and what it unlocks afterward. This is the one document in this folder written to be re-read before every sprint, not read once.
 
 **Status: the two-track structure below is formally adopted, not proposed.** Track A and Track B now run in parallel, by decision — this document no longer argues for that; it records it and tracks what each one needs next.
 
@@ -20,13 +20,13 @@ They don't block each other because they touch different parts of the system —
 ## Track A — Trust
 
 ### A1. Handover ("Meet Your Receptionist")
-**Why it exists:** the highest-leverage trust moment in the entire journey, fully designed in document 03 §2. A presentation of data that already exists — everything taught so far — not new capability.
+**Why it exists:** the highest-leverage trust moment in the entire journey, fully designed in document 04 §2. A presentation of data that already exists — everything taught so far — not new capability.
 **Principles supported:** 1, 2, 6.
 **Depends on:** nothing beyond what already exists (teaching data, the receptionist's own voice).
 **Unlocks:** A2 flows directly from it in the same session.
 
 ### A2. Test Conversations
-**Why it exists:** the second-highest-leverage trust moment, designed in full in document 03 §4. Needs a real, safe sandbox around the existing reply pipeline so test messages never touch production conversation data.
+**Why it exists:** the second-highest-leverage trust moment, designed in full in document 04 §4. Needs a real, safe sandbox around the existing reply pipeline so test messages never touch production conversation data.
 **Principles supported:** 1, 6, 7 — this is where the owner sees deterministic-vs-judgement in action for the first time, via "The Why."
 **Depends on:** A1 (the natural entry point), and the existing reply pipeline (already built, already adversarially tested).
 **Unlocks:** A3.
@@ -35,7 +35,7 @@ They don't block each other because they touch different parts of the system —
 **Why it exists:** the current sequence asks for WhatsApp before showing any proof. A sequencing change, not a new capability.
 **Principles supported:** 1, 6.
 **Depends on:** A1 and A2 existing — there's nothing to reorder onboarding *around* until they do.
-**Unlocks:** the full Confidence Timeline (document 03 §7) becomes a real, owner-visible feature, because Shadowing and Observed now have real onboarding stages feeding into them.
+**Unlocks:** the full Confidence Timeline (document 04 §7) becomes a real, owner-visible feature, because Shadowing and Observed now have real onboarding stages feeding into them.
 
 ---
 
@@ -51,19 +51,19 @@ They don't block each other because they touch different parts of the system —
 **Why it exists:** the current screen already has the right data; it doesn't yet read like an office, it reads like a report.
 **Principles supported:** 3, 4, 5.
 **Depends on:** B1 — "today's work" needs real Work Cards to summarise, not thin rows.
-**Unlocks:** the daily "Routine" feeling described in document 04 §2 becomes buildable, not just describable.
-**Built as:** one unified Front Desk at `/dashboard`, replacing what used to be two independently-queried pages (`/dashboard` and `/dashboard/mission-control`, the latter now a redirect) — see `DOCS/CONSTITUTION/05-Experience-Architecture.md` §1 for the full account, including what's still deliberately left for the Approvals item (§7 there) to pick up.
+**Unlocks:** the daily "Routine" feeling described in document 05 §2 becomes buildable, not just describable.
+**Built as:** one unified Front Desk at `/dashboard`, replacing what used to be two independently-queried pages (`/dashboard` and `/dashboard/mission-control`, the latter now a redirect) — see `DOCS/CONSTITUTION/06-Experience-Architecture.md` §1 for the full account, including what's still deliberately left for the Approvals item (§7 there) to pick up.
 
 ### B3. Diary reframe
 **Why it exists:** a calendar answers "what's on this date." An owner needs "what does my day look like, and what changed since I checked." The diary is *made of* Work Cards.
 **Principles supported:** 4, 5.
 **Depends on:** B1.
-**Unlocks:** the "what changed" signal (document 05 §3) — impossible to build honestly against thin job rows.
+**Unlocks:** the "what changed" signal (document 06 §3) — impossible to build honestly against thin job rows.
 
 ### B4. Customers completion
 **Why it exists:** the detail page is already strong; the list is a placeholder, and three real fields (outstanding work, communication preferences, previous quotations) have no home yet.
 **Principles supported:** 2, 4.
-**Depends on:** nothing structurally — outstanding work reads from the Commitments ledger (document 02), which already exists. Enriched by B1, not blocked by it.
+**Depends on:** nothing structurally — outstanding work reads from the Commitments ledger (document 03), which already exists. Enriched by B1, not blocked by it.
 **Unlocks:** nothing downstream. Rounds out an already-functional experience rather than fixing a broken one.
 
 ### B5. Approvals queue
@@ -88,11 +88,11 @@ They don't block each other because they touch different parts of the system —
 
 Don't block either track and aren't blocked by them — do these opportunistically.
 
-- **Knowledge page relationship** (document 05 §6) — presentation-only, low cost.
-- **Receptionist "why it matters" copy** (document 05 §5) — presentation-only, cheap.
+- **Knowledge page relationship** (document 06 §6) — presentation-only, low cost.
+- **Receptionist "why it matters" copy** (document 06 §5) — presentation-only, cheap.
 - **Legacy redirect cleanup** — `business-profile` and `ai-receptionist` stub removal. Trivial, zero risk.
-- **The correction/learning loop** (document 06 §6) — genuinely valuable; nothing above is blocked on it except one sub-feature (visible receptionist improvement over time).
-- **Business Personality data shape** (document 06 §6) — needs a design decision before it needs engineering.
+- **The correction/learning loop** (document 07 §6) — genuinely valuable; nothing above is blocked on it except one sub-feature (visible receptionist improvement over time).
+- **Business Personality data shape** (document 07 §6) — needs a design decision before it needs engineering.
 
 ---
 

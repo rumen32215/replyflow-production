@@ -1,6 +1,6 @@
-# 03 — Trust Experience
+# 04 — Trust Experience
 
-**How an owner comes to trust her enough to hand over real customers.** This is the fully-expanded version of an idea document 04 first named as a single stage in a longer journey ("Trust is earned") — the sprint that produced this document discovered it was actually the product's biggest competitive advantage, not one step among many.
+**How an owner comes to trust her enough to hand over real customers.** This is the fully-expanded version of an idea document 05 first named as a single stage in a longer journey ("Trust is earned") — the sprint that produced this document discovered it was actually the product's biggest competitive advantage, not one step among many.
 
 ---
 
@@ -18,7 +18,7 @@ He doesn't care that it uses AI. He cares whether it will represent his business
 
 > What would make the owner trust ReplyFlow one little bit more than five minutes ago?
 
-Every screen, message, and moment in this document is judged against this sentence, exactly the way document 02 judges every reply against "would a customer believe this was ChatGPT or a real receptionist." If an interaction doesn't move that needle — even a copy change, even a button — it doesn't belong in the trust journey, however useful it might be for some other reason. Usefulness is not the bar here. Trust is.
+Every screen, message, and moment in this document is judged against this sentence, exactly the way document 03 judges every reply against "would a customer believe this was ChatGPT or a real receptionist." If an interaction doesn't move that needle — even a copy change, even a button — it doesn't belong in the trust journey, however useful it might be for some other reason. Usefulness is not the bar here. Trust is.
 
 ---
 
@@ -37,10 +37,10 @@ No "Hi, I'm Sarah" preamble first, no settings-page recap. The introduction *is*
 Every fact in that recap should be specific, not summarised, and one the owner actually typed, in recognisable form — never "I've learned your business profile," always the real sentence back. This is proof, in miniature, that teaching her actually went somewhere — the same discipline that governs `facts_used` in every real reply she'll ever draft, now applied to the very first thing she ever says.
 
 ### How she explains what she doesn't know
-This is the single most trust-building sentence available in this entire moment. A new employee who says "I don't know that yet, I'll ask you" on day one is more trustworthy than one who claims to know everything — document 02 already established this as her judgement temperament ("more afraid of a confident mistake than an honest 'I'm not sure'"). Meet Your Receptionist should say it about herself, plainly: "I don't know your pricing yet, so I won't guess at it — I'll always bring pricing questions to you." An admitted gap, named before it's ever tested, is worth more here than a claimed strength.
+This is the single most trust-building sentence available in this entire moment. A new employee who says "I don't know that yet, I'll ask you" on day one is more trustworthy than one who claims to know everything — document 03 already established this as her judgement temperament ("more afraid of a confident mistake than an honest 'I'm not sure'"). Meet Your Receptionist should say it about herself, plainly: "I don't know your pricing yet, so I won't guess at it — I'll always bring pricing questions to you." An admitted gap, named before it's ever tested, is worth more here than a claimed strength.
 
 ### How she explains when she'll ask for help
-Not a settings list of escalation categories. A short, human account of her own judgement, in her own words, drawn straight from document 02's seven judgement questions: "I'll always bring you anything about pricing, any complaint, and anything that sounds like an emergency. Everything else, I'll try to handle myself — but I'll never guess if I'm not sure." This is the owner's first exposure to the idea that she has judgement at all, not just answers.
+Not a settings list of escalation categories. A short, human account of her own judgement, in her own words, drawn straight from document 03's seven judgement questions: "I'll always bring you anything about pricing, any complaint, and anything that sounds like an emergency. Everything else, I'll try to handle myself — but I'll never guess if I'm not sure." This is the owner's first exposure to the idea that she has judgement at all, not just answers.
 
 ### How she explains that trust will grow
 Set the expectation here, explicitly, before it's ever tested: "For now, everything I do goes through you first — you'll see every reply before it sends. As you get to know how I work, you can hand me more." This single sentence is what turns the Confidence Timeline (§7) from a surprise mechanic into something the owner was told to expect from the very first conversation.
@@ -68,14 +68,14 @@ If Meet Your Receptionist is the introduction, this is the working interview. Th
 Directly from Meet Your Receptionist, in the same breath: "Want to see how I'd actually handle something? Try me."
 
 ### How they know what to test
-Suggestions organised by exactly the categories document 02 already built judgement around, so the owner is unknowingly testing real decision boundaries: a routine question, a booking, a pricing question (to prove she escalates it, not to prove she answers it), and — deliberately included, not hidden — an emergency and a complaint. **Testing her correctly escalate something is exactly as trust-building as testing her correctly answer something.**
+Suggestions organised by exactly the categories document 03 already built judgement around, so the owner is unknowingly testing real decision boundaries: a routine question, a booking, a pricing question (to prove she escalates it, not to prove she answers it), and — deliberately included, not hidden — an emergency and a complaint. **Testing her correctly escalate something is exactly as trust-building as testing her correctly answer something.**
 
 ### Suggested questions — encouraged to be adversarial
 Explicitly invite the owner to try to catch her out. Not a footnote — the actual heading of the moment:
 
 > **"Try to break me."**
 
-Most AI products hide their weak spots and hope nobody looks too hard. This says the opposite out loud: scrutinise me, on purpose, before you decide. A receptionist who survives a genuine attempt to trip her up is worth infinitely more trust than one who's only ever been asked easy things — the same discipline the adversarial regression suite (document 06) already applies internally, now surfaced to the owner instead of only to engineering.
+Most AI products hide their weak spots and hope nobody looks too hard. This says the opposite out loud: scrutinise me, on purpose, before you decide. A receptionist who survives a genuine attempt to trip her up is worth infinitely more trust than one who's only ever been asked easy things — the same discipline the adversarial regression suite (document 07) already applies internally, now surfaced to the owner instead of only to engineering.
 
 ### How failures are shown
 Never as an error. A wrong or shaky answer during testing is not a bug report — it's the entire point of this stage existing. Shown plainly, without apology, immediately next to a real, one-tap way to correct her right there. A failure fixed *in front of the owner, immediately* is a bigger trust-builder than a flawless run would have been — it proves the Promise from §3 is real.
@@ -87,7 +87,7 @@ A visible, plain-language "why I said that" — the human-readable form of exact
 Correcting a wrong answer here should feed the same real teaching data the Receptionist page writes to — never a separate, parallel "test mode" correction that vanishes afterward. Wrong, corrected, right, witnessed in under a minute.
 
 ### How the owner knows she's ready
-Not a score, not a checklist, not a percentage — document 02's whole judgement standard exists specifically to reject exactly that kind of quantified confidence. Readiness should be a moment the owner recognises themselves, followed by a plain, ownership-respecting question: **"How does that feel? Ready to connect her to your real customers?"** The system never declares her ready. It shows enough evidence that the owner can decide that for themselves.
+Not a score, not a checklist, not a percentage — document 03's whole judgement standard exists specifically to reject exactly that kind of quantified confidence. Readiness should be a moment the owner recognises themselves, followed by a plain, ownership-respecting question: **"How does that feel? Ready to connect her to your real customers?"** The system never declares her ready. It shows enough evidence that the owner can decide that for themselves.
 
 ---
 
@@ -114,7 +114,7 @@ Design this as a specific, plainly-stated fact, not a badge or animation — "Yo
 ## 7. The Confidence Timeline
 
 ### Whether this belongs
-Yes — but only as a **relationship, not a score.** A percentage or a gamified level would undercut everything document 02 established about honesty and judgement — it would turn "how much do I trust her" into a number the product is asserting about itself, precisely the kind of unearned confidence she's never allowed to display in a reply. If she isn't allowed to sound falsely confident, the product shouldn't be allowed to either, about her.
+Yes — but only as a **relationship, not a score.** A percentage or a gamified level would undercut everything document 03 established about honesty and judgement — it would turn "how much do I trust her" into a number the product is asserting about itself, precisely the kind of unearned confidence she's never allowed to display in a reply. If she isn't allowed to sound falsely confident, the product shouldn't be allowed to either, about her.
 
 ### The real shape of it
 Not a single global dial. **Trust is earned category by category**, because that's how the actual system already works — auto-send today is scoped to one narrow, deliberately chosen category, widened only with real evidence:
@@ -128,7 +128,7 @@ Not a single global dial. **Trust is earned category by category**, because that
 - **Trusted** — a longer track record exists; the owner has stopped feeling the need to check every reply in this category, even though nothing has technically changed yet
 - **Autonomous** — that category now sends without waiting, because the evidence says it's earned
 
-A business might sit at *Trusted* for general questions while still firmly at *Shadowing* for anything booking-related — not an inconsistency to smooth over, the whole point being visibly, honestly true. This is document 04's Growth of Trust (Week 1 → Month 6) made concrete and legible — the same curve, now something the owner can actually see happening to their own receptionist.
+A business might sit at *Trusted* for general questions while still firmly at *Shadowing* for anything booking-related — not an inconsistency to smooth over, the whole point being visibly, honestly true. This is document 05's Growth of Trust (Week 1 → Month 6) made concrete and legible — the same curve, now something the owner can actually see happening to their own receptionist.
 
 ### What it must never become
 A leaderboard. A score to optimise. Anything implying the owner should *want* to reach Autonomous faster, for its own sake. The correct pace is whatever pace matches real evidence for that specific business. Sitting in Shadowing or Observed for months, correctly, is not a failure.
@@ -148,4 +148,4 @@ A leaderboard. A score to optimise. Anything implying the owner should *want* to
 
 ## 9. How to use this document
 
-Before building any owner-facing interaction, ask the governing question from §1 first. If the honest answer is "it doesn't move trust, it's just useful," that's fine — it belongs to document 04 or 05's broader scope, not this one, and shouldn't borrow this document's emotional weight (ceremony, visibility, "your first...") for something that hasn't actually earned it. Reserve the weight of this document for the handful of moments that genuinely deserve it.
+Before building any owner-facing interaction, ask the governing question from §1 first. If the honest answer is "it doesn't move trust, it's just useful," that's fine — it belongs to document 05 or 06's broader scope, not this one, and shouldn't borrow this document's emotional weight (ceremony, visibility, "your first...") for something that hasn't actually earned it. Reserve the weight of this document for the handful of moments that genuinely deserve it.

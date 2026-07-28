@@ -1,6 +1,6 @@
-# 05 — Experience Architecture
+# 06 — Experience Architecture
 
-**The actual screens, and what each one has to answer.** Document 04 is the feeling; this is the concrete structure that produces it — the information architecture, the missing concepts, and the reframe each existing screen needs. Everything here is measured against one rule:
+**The actual screens, and what each one has to answer.** Document 05 is the feeling; this is the concrete structure that produces it — the information architecture, the missing concepts, and the reframe each existing screen needs. Everything here is measured against one rule:
 
 > If a screen cannot answer its one question within five seconds, it is wrong.
 
@@ -39,7 +39,7 @@ Not "wrong eventually." Wrong today, regardless of how much real data is on it. 
 - **Conversation summary** — three sentences, not a thread to scroll
 - **Photos** — surfaced here, not buried in Conversations
 - **Appointment time and status**, always in sync with the Diary (§3)
-- **Collected details** — parking, access, anything volunteered mid-conversation. This is exactly what the Commitments ledger (document 02) already captures — Work Cards are the first real *use* of that data, not new plumbing.
+- **Collected details** — parking, access, anything volunteered mid-conversation. This is exactly what the Commitments ledger (document 03) already captures — Work Cards are the first real *use* of that data, not new plumbing.
 
 **The test:** could a technician who has never touched ReplyFlow walk out the door with only this screen open and do the job competently? If not, it's missing something. Every other section below assumes Jobs exist as a real object — Front Desk, Diary, and Customers are all currently pointing at something thin.
 
@@ -67,7 +67,7 @@ A calendar answers "what's on this date." A diary answers "what does my day look
 
 Already correctly reframed — an explicit "teaching playground," already the post-onboarding landing point. Endorse and finish, don't rebuild.
 
-**Still missing:** why each question matters, stated in-page next to the field, not just a label. And visible improvement over time — a short, honest "she's gotten better at X" sourced from real correction history, never invented. This depends on the correction/learning loop described in document 06, which is currently the least mature part of the whole pipeline — this specific improvement can't ship honestly before that exists.
+**Still missing:** why each question matters, stated in-page next to the field, not just a label. And visible improvement over time — a short, honest "she's gotten better at X" sourced from real correction history, never invented. This depends on the correction/learning loop described in document 07, which is currently the least mature part of the whole pipeline — this specific improvement can't ship honestly before that exists.
 
 ---
 
@@ -83,7 +83,7 @@ Two real pages already do real jobs but their relationship isn't obvious: `busin
 
 No page currently shows every pending decision across the business in one place — approval only happens inline, one conversation at a time, with Front Desk showing an aggregate count but no way to act on it directly.
 
-This is the interruption-budget principle (document 00) made literal: **the fewer things land here, the better the product is working.** A long queue isn't a sign this page needs better design — it's a signal the receptionist isn't yet trusted with enough, and should point the owner toward autonomy expansion (document 07), not toward a better inbox. Each item should carry the same Work-Card discipline as §2 — full context to decide in one glance, never a bare message requiring the owner to go find the conversation to understand what's even being asked.
+This is the interruption-budget principle (document 01) made literal: **the fewer things land here, the better the product is working.** A long queue isn't a sign this page needs better design — it's a signal the receptionist isn't yet trusted with enough, and should point the owner toward autonomy expansion (document 08), not toward a better inbox. Each item should carry the same Work-Card discipline as §2 — full context to decide in one glance, never a bare message requiring the owner to go find the conversation to understand what's even being asked.
 
 **Partially built (Owner Experience 01):** the aggregation problem is solved — draft Work Cards and pending AI-drafted replies are now counted and ranked business-wide for the first time, inside Front Desk's Needs Your Attention queue (§1). What's still missing is this as its own dedicated nav destination, separate from Front Desk's daily view — left open deliberately rather than built ahead of a real need for it.
 
@@ -91,11 +91,11 @@ This is the interruption-budget principle (document 00) made literal: **the fewe
 
 ## 8. Onboarding — the concrete sequence
 
-Document 03 designs the emotional experience of Introduction and Proof in full depth. This section is the structural sequence they sit inside:
+Document 04 designs the emotional experience of Introduction and Proof in full depth. This section is the structural sequence they sit inside:
 
 **Welcome → Teach your receptionist → Meet your receptionist → Test real conversations → See exactly how she behaves → Gain confidence → Connect WhatsApp → Approval mode → Gradually increase autonomy**
 
-The load-bearing structural change: **Test real conversations** and **See exactly how she behaves** sit *before* WhatsApp connection, not after — proof before permission (document 01, Principle 6). Concretely, this needs a real, working chat interface running the actual reply engine, not a preview or a mockup — the same pipeline validated throughout this product's testing sprints, now surfaced to the owner instead of only to engineering.
+The load-bearing structural change: **Test real conversations** and **See exactly how she behaves** sit *before* WhatsApp connection, not after — proof before permission (document 02, Principle 6). Concretely, this needs a real, working chat interface running the actual reply engine, not a preview or a mockup — the same pipeline validated throughout this product's testing sprints, now surfaced to the owner instead of only to engineering.
 
 **Approval mode** as an explicit, named stage — not just a default setting — matters structurally too: the owner should be told plainly, "everything goes through you for now, and here's what will change and when," so the ceiling on autonomy reads as a deliberate, temporary choice, not a limitation to be discovered later in settings.
 
@@ -124,14 +124,14 @@ The load-bearing structural change: **Test real conversations** and **See exactl
 
 1. **Work Cards (page and object)** — doesn't exist. The single biggest gap (§2), now fully specified in `DOCS/SPECS/Work-Card-Object.md`.
 2. **Approvals (dedicated queue)** — doesn't exist (§7).
-3. **Handover ("Meet Your Receptionist")** — fully designed in document 03, not yet built.
-4. **Test conversations in onboarding** — fully designed in document 03, not yet built.
+3. **Handover ("Meet Your Receptionist")** — fully designed in document 04, not yet built.
+4. **Test conversations in onboarding** — fully designed in document 04, not yet built.
 5. **Customer communication preferences and previous quotations** — no data home currently exists (§4).
 6. **"What changed" as an explicit diary signal** — today's diary shows state, not change (§3).
-7. **Visible receptionist improvement over time** — blocked on the correction/learning loop (document 06) not existing yet (§5).
+7. **Visible receptionist improvement over time** — blocked on the correction/learning loop (document 07) not existing yet (§5).
 
 ---
 
 ## 11. What this document is not
 
-Not a set of wireframes. Not a component spec. Not a commitment to build all of this at once — document 07 exists specifically so it doesn't have to be. What it is: the answer to "what should ReplyFlow feel like to run a business on," concrete enough to build from, honest about what doesn't exist yet.
+Not a set of wireframes. Not a component spec. Not a commitment to build all of this at once — document 08 exists specifically so it doesn't have to be. What it is: the answer to "what should ReplyFlow feel like to run a business on," concrete enough to build from, honest about what doesn't exist yet.

@@ -1,6 +1,6 @@
 # Trust Track — Implementation Plan
 
-**What engineering actually needs to exist to build what document 03 already designed.** Document 03 (`DOCS/CONSTITUTION/03-Trust-Experience.md`) fully specifies the experience — what she says, when, and why. This document is the equivalent of the Work Card object definition (`DOCS/SPECS/Work-Card-Object.md`) for Track A: not new design, just what has to be technically true before any of it can be built. Living spec, expected to change as building proceeds.
+**What engineering actually needs to exist to build what document 04 already designed.** Document 04 (`DOCS/CONSTITUTION/04-Trust-Experience.md`) fully specifies the experience — what she says, when, and why. This document is the equivalent of the Work Card object definition (`DOCS/SPECS/Work-Card-Object.md`) for Track A: not new design, just what has to be technically true before any of it can be built. Living spec, expected to change as building proceeds.
 
 ---
 

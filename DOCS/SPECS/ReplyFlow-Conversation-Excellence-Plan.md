@@ -2,7 +2,7 @@
 
 **Proposed standard, not yet adopted.** No prompts, no models, no APIs — this document describes what makes a customer finish a WhatsApp conversation believing they were talking to an excellent receptionist, not how the code produces that feeling. Once agreed, this is the standard every future conversation gets measured against; until then, it's a draft for discussion, which is why it lives in `DOCS/SPECS/` rather than `DOCS/CONSTITUTION/` — its natural home once ratified would be alongside `02-Conversation-Philosophy.md`.
 
-Everything below is built from three sources, in this order of weight: **real production conversations** (§2), **the philosophy already agreed** (`DOCS/CONSTITUTION/01-03`, `DOCS/BUILD/07-09`), and only then judgement calls where evidence was thin. Every claim below is either a quoted, timestamped real exchange, or explicitly marked as a judgement call rather than dressed up as evidence.
+Everything below is built from three sources, in this order of weight: **real production conversations** (§2), **the philosophy already agreed** (`DOCS/CONSTITUTION/02-04`, `DOCS/BUILD/07-09`), and only then judgement calls where evidence was thin. Every claim below is either a quoted, timestamped real exchange, or explicitly marked as a judgement call rather than dressed up as evidence.
 
 ---
 

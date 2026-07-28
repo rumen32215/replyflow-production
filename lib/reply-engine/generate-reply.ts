@@ -116,7 +116,7 @@ export async function generateReplyForMessage(params: {
     // wrong — an opening message always deserves a reply, however vague.
     const isFirstMessage = recentHistory.length <= 1;
 
-    const understanding = await classifyMessage(messageBody, priorState, recentHistory);
+    const understanding = await classifyMessage(businessId, messageBody, priorState, recentHistory);
 
     // Persist the updated state immediately, regardless of what happens
     // downstream (escalation, silence, auto-send, pending draft) — the
@@ -161,7 +161,7 @@ export async function generateReplyForMessage(params: {
       messageBody,
     });
 
-    const { generation, facts } = await generateReplyDraft(context, understanding, { isFirstMessage });
+    const { generation, facts } = await generateReplyDraft(businessId, context, understanding, { isFirstMessage });
     const safety = evaluateSafety({ understanding, generation, facts });
 
     // Correct open_question with what the reply actually asks, now that

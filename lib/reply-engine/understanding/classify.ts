@@ -189,6 +189,7 @@ function toUnderstandingResult(raw: unknown, messageText: string, priorState: Co
 }
 
 export async function classifyMessage(
+  businessId: string,
   messageText: string,
   priorState: ConversationState = EMPTY_CONVERSATION_STATE,
   recentHistory: { direction: "inbound" | "outbound"; body: string }[] = []
@@ -211,6 +212,8 @@ export async function classifyMessage(
       ],
       jsonSchema: { name: "understanding_classification", schema: RESPONSE_SCHEMA },
       maxOutputTokens: 500,
+      businessId,
+      callSite: "understanding.classify",
     });
     return toUnderstandingResult(result.data, messageText, priorState);
   } catch (err) {

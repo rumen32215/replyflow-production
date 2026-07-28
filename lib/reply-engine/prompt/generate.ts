@@ -71,6 +71,7 @@ export interface GeneratedReply {
  * escalation, never a thrown error that would lose the message.
  */
 export async function generateReplyDraft(
+  businessId: string,
   context: ReplyContext,
   understanding: UnderstandingResult,
   options: { isFirstMessage: boolean } = { isFirstMessage: false }
@@ -78,7 +79,14 @@ export async function generateReplyDraft(
   const { messages, jsonSchema, facts } = buildPrompt(context, understanding, options);
 
   try {
-    const result = await getCompletion({ tier: "large", messages, jsonSchema, maxOutputTokens: 500 });
+    const result = await getCompletion({
+      tier: "large",
+      messages,
+      jsonSchema,
+      maxOutputTokens: 500,
+      businessId,
+      callSite: "prompt.generate",
+    });
     return { generation: toGenerationResult(result.data), facts };
   } catch (err) {
     console.error("[reply-engine] generation failed:", err);

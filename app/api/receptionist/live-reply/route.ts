@@ -80,6 +80,7 @@ export async function POST(request: Request) {
 
   try {
     const result = await generateLiveReply(
+      business.id,
       scenarioMessage,
       {
         tone: typeof body.tone === "string" ? body.tone : "friendly",

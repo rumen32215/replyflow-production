@@ -60,6 +60,7 @@ export interface LiveReplyMemory {
 }
 
 export async function generateLiveReply(
+  businessId: string,
   scenarioMessage: string,
   teaching: LiveReplyTeaching,
   facts: LiveReplyFacts,
@@ -69,6 +70,7 @@ export async function generateLiveReply(
   const recentHistory = memory.recentHistory ?? [];
 
   const understanding = await classifyMessage(
+    businessId,
     scenarioMessage,
     priorState,
     recentHistory.map((m) => ({ direction: m.direction, body: m.body }))
@@ -94,7 +96,7 @@ export async function generateLiveReply(
     newMessage: { body: scenarioMessage, customerName: null, customerPhone: "" },
   };
 
-  const { generation, facts: usedFacts } = await generateReplyDraft(context, understanding, {
+  const { generation, facts: usedFacts } = await generateReplyDraft(businessId, context, understanding, {
     isFirstMessage: recentHistory.length === 0,
   });
   const safety = evaluateSafety({ understanding, generation, facts: usedFacts });

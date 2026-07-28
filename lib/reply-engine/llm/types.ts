@@ -29,6 +29,15 @@ export interface CompletionRequest {
   messages: CompletionMessage[];
   jsonSchema: JsonSchemaSpec;
   maxOutputTokens?: number;
+  /** Master Execution Plan 0.1 — every call is attributed to the
+   * business it was made for and the pipeline stage that made it, so
+   * token usage lands in ai_usage_events instead of being discarded.
+   * Required, not optional: the two real call sites (classify.ts,
+   * generate.ts) always have a businessId available by the time they
+   * call this, and making it required means a future third call site
+   * can't silently go untracked by omitting it. */
+  businessId: string;
+  callSite: string;
 }
 
 export interface CompletionResult {

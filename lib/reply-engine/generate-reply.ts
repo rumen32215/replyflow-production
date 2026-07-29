@@ -6,6 +6,7 @@ import { assembleContext } from "./context/assemble";
 import { generateReplyDraft } from "./prompt/generate";
 import { evaluateSafety } from "./safety/evaluate";
 import { sendReplyToCustomer } from "./send";
+import { recordErrorEvent } from "@/lib/error-events";
 
 const STATE_HISTORY_WINDOW = 4;
 
@@ -339,6 +340,18 @@ export async function generateReplyForMessage(params: {
     );
   } catch (err) {
     console.error("[reply-engine] generateReplyForMessage failed:", err);
+    // Critical: a real customer message hit a totally unhandled
+    // pipeline failure — this is precisely the "silent drop" gap 0.3's
+    // SLI investigation found happening by a different (non-throwing)
+    // mechanism. This is the throwing half of that same failure mode.
+    await recordErrorEvent({
+      severity: "critical",
+      source: "reply-engine.pipeline_failure",
+      businessId,
+      message: "generateReplyForMessage threw an unhandled error — this customer message has no reply_drafts row.",
+      error: err,
+      context: { conversationId, customerMessageId },
+    });
   }
 }
 

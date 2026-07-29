@@ -5,6 +5,7 @@ import { parseAvailability, describeBookingReply, nextAvailableSlot } from "@/li
 import { generateLiveReply } from "@/lib/reply-engine/live-reply";
 import { toConversationState } from "@/lib/reply-engine/understanding";
 import { checkAiRateLimit } from "@/lib/ai-rate-limit";
+import { recordErrorEvent } from "@/lib/error-events";
 
 export const dynamic = "force-dynamic";
 
@@ -124,6 +125,19 @@ export async function POST(request: Request) {
     return NextResponse.json(result);
   } catch (err) {
     console.error("[live-reply] generation failed:", err);
+    // Warning, not critical: this is the owner-facing teaching/onboarding
+    // preview, never a real customer conversation — classifyMessage()/
+    // generateReplyDraft() already report their own failures at
+    // warning severity; this only fires for a genuinely unexpected
+    // error above that (e.g. context assembly), which is why it's
+    // still worth a signal, just not an urgent one.
+    await recordErrorEvent({
+      severity: "warning",
+      source: "receptionist.live_reply_failed",
+      businessId: business.id,
+      message: "The live-reply preview (onboarding demo or Receptionist coaching page) failed unexpectedly.",
+      error: err,
+    });
     return NextResponse.json({ error: "Could not generate a live reply right now." }, { status: 500 });
   }
 }

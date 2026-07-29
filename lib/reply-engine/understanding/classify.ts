@@ -3,6 +3,7 @@ import { getCompletion } from "../llm/client";
 import { extractPatternEntities } from "./entities";
 import { INTENTS, type Intent, type MeaningEntities, type SafetyTag, type UnderstandingConfidence, type UnderstandingResult } from "./types";
 import { EMPTY_CONVERSATION_STATE, toConversationState, type ConversationState } from "./state";
+import { recordErrorEvent } from "@/lib/error-events";
 
 /**
  * The Understanding Engine's one model call (Sprint 9.1 §2, §7): small,
@@ -223,6 +224,18 @@ export async function classifyMessage(
     // throwing and losing the message entirely. State is carried forward
     // unchanged rather than reset, since we genuinely don't know it changed.
     console.error("[reply-engine] classification failed:", err);
+    // Awaited, not fire-and-forget — matches recordAiUsage's own
+    // discipline (0.1): some callers (the owner-facing live-reply
+    // route) are a synchronous request/response, not wrapped in
+    // waitUntil, so an un-awaited write here risks the serverless
+    // function freezing before it actually completes.
+    await recordErrorEvent({
+      severity: "warning",
+      source: "reply-engine.classify_failed",
+      businessId,
+      message: "classifyMessage's completion call failed — degraded to the safe UNCLEAR fallback, message was not lost.",
+      error: err,
+    });
     return {
       primaryIntent: "UNCLEAR",
       secondaryIntents: [],

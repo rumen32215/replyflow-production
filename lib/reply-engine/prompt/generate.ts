@@ -5,6 +5,7 @@ import type { ReplyContext } from "../context/types";
 import { buildPrompt } from "./build";
 import type { Fact } from "./facts";
 import type { GenerationResult, ReplyConfidence } from "./types";
+import { recordErrorEvent } from "@/lib/error-events";
 
 interface RawGeneration {
   draft_reply: string;
@@ -90,6 +91,13 @@ export async function generateReplyDraft(
     return { generation: toGenerationResult(result.data), facts };
   } catch (err) {
     console.error("[reply-engine] generation failed:", err);
+    await recordErrorEvent({
+      severity: "warning",
+      source: "reply-engine.generate_failed",
+      businessId,
+      message: "generateReplyDraft's completion call failed — degraded to a forced-escalation fallback, message was not lost.",
+      error: err,
+    });
     return {
       generation: {
         draftReply: "",

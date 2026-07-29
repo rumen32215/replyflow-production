@@ -5,6 +5,7 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { generateReplyForMessage } from "@/lib/reply-engine/generate-reply";
 import { markMessageAsRead } from "@/lib/whatsapp/graph";
 import type { WhatsAppWebhookPayload } from "@/lib/whatsapp/types";
+import { recordErrorEvent } from "@/lib/error-events";
 
 // Needs the Node.js runtime (not Edge) for node:crypto in verify-signature.ts.
 export const runtime = "nodejs";
@@ -64,12 +65,31 @@ export async function POST(request: NextRequest) {
   // practice even though it returned a 401.
   if (!appSecret) {
     console.error("[whatsapp webhook] POST rejected — WHATSAPP_APP_SECRET is not set in this environment.");
+    // Critical: every single inbound customer message is blocked while
+    // this is true — a total outage of the entire receive path.
+    await recordErrorEvent({
+      severity: "critical",
+      source: "webhook.signature_invalid",
+      businessId: null,
+      message: "WHATSAPP_APP_SECRET is not set — every inbound WhatsApp message is being rejected.",
+    });
     return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
   }
   if (!verifyWebhookSignature(rawBody, signature, appSecret)) {
     console.error(
       "[whatsapp webhook] POST rejected — signature did not match. WHATSAPP_APP_SECRET is set but does not match the App Secret Meta signed this request with."
     );
+    // Warning, not critical: a public endpoint gets scanned, and a
+    // single bad signature is often just noise. A real secret rotation
+    // gone wrong shows up as a sustained rate, not one occurrence — see
+    // scripts/monitoring/error-summary.mjs. Never logs the signature or
+    // secret values themselves.
+    await recordErrorEvent({
+      severity: "warning",
+      source: "webhook.signature_invalid",
+      businessId: null,
+      message: "A webhook POST had a signature that did not match WHATSAPP_APP_SECRET.",
+    });
     return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
   }
 
@@ -77,6 +97,12 @@ export async function POST(request: NextRequest) {
   try {
     payload = JSON.parse(rawBody);
   } catch {
+    await recordErrorEvent({
+      severity: "warning",
+      source: "webhook.invalid_payload",
+      businessId: null,
+      message: "A webhook POST had a validly-signed but non-JSON body.",
+    });
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
@@ -88,6 +114,15 @@ export async function POST(request: NextRequest) {
     await processWebhookPayload(payload);
   } catch (err) {
     console.error("[whatsapp webhook] processing error:", err);
+    // Critical: an uncaught exception while processing a real batch of
+    // inbound messages — every message in this batch may be affected.
+    await recordErrorEvent({
+      severity: "critical",
+      source: "webhook.processing_failed",
+      businessId: null,
+      message: "processWebhookPayload threw an unhandled error while processing a real inbound webhook event.",
+      error: err,
+    });
   }
 
   return NextResponse.json({ received: true }, { status: 200 });

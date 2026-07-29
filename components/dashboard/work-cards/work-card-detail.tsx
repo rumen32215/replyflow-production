@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
@@ -19,8 +19,9 @@ import {
 import { press, SettleCard, Reveal, EASE } from "@/components/shared/motion";
 import { Acknowledgement, useAcknowledgement } from "@/components/shared/acknowledgement";
 import { createClient } from "@/lib/supabase/client";
-import { WORK_CARD_TONE_STYLE, type WorkCardState } from "@/lib/work-card-state";
+import { describeWorkCardState, WORK_CARD_TONE_STYLE } from "@/lib/work-card-state";
 import { toDateTimeLocalValue, mapsHref, formatDateTime, formatDate } from "@/lib/work-card-format";
+import type { ConversationGroup } from "@/lib/conversations";
 import { cn } from "@/lib/utils";
 
 export interface WorkCardDetailData {
@@ -46,11 +47,13 @@ const SECTION_HEADING = "mb-3 text-[11px] font-bold uppercase tracking-widest te
 
 export function WorkCardDetail({
   workCard,
-  state,
+  conversationGroup,
+  isEmergency,
   completedSiblingCount,
 }: {
   workCard: WorkCardDetailData;
-  state: WorkCardState;
+  conversationGroup: ConversationGroup | null;
+  isEmergency: boolean;
   completedSiblingCount: number;
 }) {
   const router = useRouter();
@@ -70,9 +73,19 @@ export function WorkCardDetail({
   const [estimatedValue, setEstimatedValue] = useState(card.estimatedValue != null ? String(card.estimatedValue) : "");
   const [notes, setNotes] = useState(card.notes ?? "");
 
+  // Recomputed from the current, possibly client-updated `card` — a
+  // real bug found in production verification: this used to be a
+  // static server-passed prop, so the badge silently froze at
+  // whatever it was on first load and never reflected a real,
+  // successful status change afterward (the write succeeded; only the
+  // display didn't).
+  const state = useMemo(
+    () => describeWorkCardState({ status: card.status, addressConfirmed: card.addressConfirmed, conversationGroup, isEmergency }),
+    [card.status, card.addressConfirmed, conversationGroup, isEmergency]
+  );
+
   const isDraft = card.status === "draft";
   const isTerminal = card.status === "completed" || card.status === "cancelled";
-  const isActiveBooking = card.status === "booked" || card.status === "in_progress";
 
   function startEdit() {
     setIssue(card.issue);

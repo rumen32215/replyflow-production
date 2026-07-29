@@ -4,7 +4,6 @@ import { createClient } from "@/lib/supabase/server";
 import { WorkCardDetail } from "@/components/dashboard/work-cards/work-card-detail";
 import { groupForStatus, type ConversationGroup } from "@/lib/conversations";
 import { toConversationState } from "@/lib/reply-engine/understanding/state";
-import { describeWorkCardState } from "@/lib/work-card-state";
 
 export const metadata: Metadata = { title: "Work Card — ReplyFlow" };
 
@@ -70,13 +69,6 @@ export default async function WorkCardDetailPage({ params }: { params: { id: str
   );
   const conversationGroup: ConversationGroup | null = conversation ? groupForStatus(conversation.status) : null;
 
-  const state = describeWorkCardState({
-    status: workCard.status,
-    addressConfirmed: workCard.address_confirmed,
-    conversationGroup,
-    isEmergency,
-  });
-
   const completedSiblingCount = (siblingCards ?? []).filter((c) => c.status === "completed").length;
 
   return (
@@ -99,7 +91,8 @@ export default async function WorkCardDetailPage({ params }: { params: { id: str
         conversationSummary: workCard.conversation_summary,
         approvedAt: workCard.approved_at,
       }}
-      state={state}
+      conversationGroup={conversationGroup}
+      isEmergency={isEmergency}
       completedSiblingCount={completedSiblingCount}
     />
   );

@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { AlertTriangle, CalendarDays } from "lucide-react";
 import { SettleCard, Reveal } from "@/components/shared/motion";
-import { describeWorkCardState, type WorkCardStateTone } from "@/lib/work-card-state";
+import { describeWorkCardState, WORK_CARD_TONE_STYLE } from "@/lib/work-card-state";
 import { cn } from "@/lib/utils";
 
 /**
@@ -23,15 +23,6 @@ export interface TodaysWorkItem {
   conversationGroup: "waiting" | "active" | "booked" | "done" | null;
   isEmergency: boolean;
 }
-
-const TONE_STYLE: Record<WorkCardStateTone, string> = {
-  emergency: "bg-destructive/10 text-destructive",
-  attention: "bg-attention/10 text-attention",
-  warning: "bg-amber-100 text-amber-700",
-  success: "bg-success/10 text-success",
-  active: "bg-accent text-primary",
-  neutral: "bg-muted text-muted-foreground",
-};
 
 function timeLabel(iso: string | null): string {
   if (!iso) return "No time set";
@@ -61,10 +52,9 @@ export function TodaysWork({ items }: { items: TodaysWorkItem[] }) {
               conversationGroup: item.conversationGroup,
               isEmergency: item.isEmergency,
             });
-            const href = item.conversationId ? `/dashboard/conversations/${item.conversationId}` : "/dashboard/conversations";
             return (
               <Reveal key={item.id} index={Math.min(i, 6)}>
-                <Link href={href} className="flex items-center gap-3 rounded-xl px-3 py-2.5 hover:bg-muted/40">
+                <Link href={`/dashboard/work-cards/${item.id}`} className="flex items-center gap-3 rounded-xl px-3 py-2.5 hover:bg-muted/40">
                   <span className="w-[58px] shrink-0 text-[12px] font-semibold text-muted-foreground">
                     {timeLabel(item.scheduledFor)}
                   </span>
@@ -72,7 +62,7 @@ export function TodaysWork({ items }: { items: TodaysWorkItem[] }) {
                     <p className="truncate text-[13.5px] font-semibold">{item.issue}</p>
                     <p className="truncate text-[12px] text-muted-foreground">{item.customerName}</p>
                   </div>
-                  <span className={cn("flex shrink-0 items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold", TONE_STYLE[state.tone])}>
+                  <span className={cn("flex shrink-0 items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold", WORK_CARD_TONE_STYLE[state.tone])}>
                     {state.tone === "emergency" && <AlertTriangle className="h-2.5 w-2.5" />}
                     {state.label}
                   </span>

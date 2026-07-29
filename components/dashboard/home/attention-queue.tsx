@@ -34,7 +34,7 @@ function hrefFor(item: AttentionItem): string {
     case "waiting_conversation":
       return `/dashboard/conversations/${item.conversationId}`;
     case "draft_work_card":
-      return item.conversationId ? `/dashboard/conversations/${item.conversationId}` : "/dashboard/conversations";
+      return `/dashboard/work-cards/${item.workCardId}`;
     case "pending_reply":
       return `/dashboard/conversations/${item.conversationId}`;
   }

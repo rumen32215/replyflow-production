@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Briefcase, Calendar, MapPin } from "lucide-react";
 import { SettleCard } from "@/components/shared/motion";
 import type { CustomerJob } from "@/lib/customer-memory-signals";
@@ -41,14 +42,18 @@ export function RelationshipOverview({
             {jobs
               .filter((j) => j.status === "completed")
               .map((j) => (
-                <div key={j.id} className="flex items-center justify-between gap-3 text-[13.5px]">
+                <Link
+                  key={j.id}
+                  href={`/dashboard/work-cards/${j.id}`}
+                  className="flex items-center justify-between gap-3 text-[13.5px] hover:text-primary"
+                >
                   <span className="min-w-0 truncate">{j.jobTitle}</span>
                   <span className="shrink-0 flex items-center gap-1 text-[12px] text-muted-foreground">
                     <Calendar className="h-3 w-3" />
                     {j.completedAt &&
                       new Date(j.completedAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
                   </span>
-                </div>
+                </Link>
               ))}
           </div>
         </SettleCard>

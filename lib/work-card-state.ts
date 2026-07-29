@@ -13,6 +13,18 @@ import type { ConversationGroup } from "@/lib/conversations";
 
 export type WorkCardStateTone = "emergency" | "attention" | "warning" | "success" | "active" | "neutral";
 
+/** Shared across every surface that shows a Work Card's state
+ * (Today's Work, the Work Card detail page) — one tone→style mapping,
+ * not one copy per component. */
+export const WORK_CARD_TONE_STYLE: Record<WorkCardStateTone, string> = {
+  emergency: "bg-destructive/10 text-destructive",
+  attention: "bg-attention/10 text-attention",
+  warning: "bg-amber-100 text-amber-700",
+  success: "bg-success/10 text-success",
+  active: "bg-accent text-primary",
+  neutral: "bg-muted text-muted-foreground",
+};
+
 export interface WorkCardState {
   label: string;
   tone: WorkCardStateTone;

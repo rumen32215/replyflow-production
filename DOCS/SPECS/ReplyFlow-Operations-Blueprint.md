@@ -117,6 +117,8 @@ This blueprint exists because the Constitution Compliance Audit found the same t
 
 ## 8. Security and Access Controls
 
+**Shipped (Master Execution Plan 1.4):** see `DOCS/SPECS/ReplyFlow-Security-Access-Baseline.md`. Multi-tenant isolation verified empirically against real production (zero unauthenticated access across all 9 core tables; zero cross-tenant leakage for a real second business), not just read from the migration files. A real gap found and fixed: `whatsapp_connections.access_token` was technically client-readable via RLS grants (never actually exploited by app code, now closed at the database level with column-level privileges, verified rejected). The "who has production access, and why" list and the scoped-auth rule for future internal tools are both done. **2FA confirmation is the one open item** — an account-level setting in each service's own dashboard that can't be checked from a development environment; pending the founder's own confirmation per service.
+
 **Why it matters:** The Business Blueprint confirmed genuine database-level Row Level Security — a real strength. What hasn't been assessed is *operational* security: who on the team can access what, how secrets are managed, whether shared admin accounts (Supabase, Vercel, Meta, OpenAI) have real protection, and what access trail exists into real customer data.
 
 **How it supports the Founder Constitution:** Extends the existing *"non-negotiable data boundaries"* principle (already applied to what the model sees) to who on the team can see what — the same discipline, a different surface.

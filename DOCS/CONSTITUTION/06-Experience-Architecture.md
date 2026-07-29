@@ -57,11 +57,11 @@ A calendar answers "what's on this date." A diary answers "what does my day look
 
 ## 4. Customers — a person your receptionist already knows
 
-**What already exists:** the detail page is further along than the rest of the app — a relationship overview, a timeline, an AI insights panel. The list view is currently just an empty-state placeholder; the real list lives elsewhere, not obviously connected to it.
+**Shipped (Master Execution Plan 2.3).** Investigation before implementation found this section itself was stale: the list view was never actually a placeholder by the time 2.3 started — a real, complete implementation (search, filters, relationship strength, a genuinely honest empty state) had already shipped in a later sprint than this document's last update. Corrected here rather than left uncorrected, and nothing rebuilt.
 
-**Missing:** outstanding work (an unresolved quote, an open "let me check and come back to you" — a direct expression of the Commitments ledger, scoped to one customer instead of one conversation), communication preferences as a real field, previous quotations (no data home currently exists), and FAQs answered specifically for this customer.
+**What was genuinely missing, now added:** outstanding work (a card of real, currently-active Work Cards for this customer), previous quotations (real `estimated_value` data that existed but was never fetched or shown on this page), and a real communication-preference field (one nullable column, owner-entered free text, deliberately not a structured dropdown — matching "we are not a CRM"). **FAQs answered specifically for this customer** remains a real, un-scoped gap — named here in the original audit but never actually part of the Master Execution Plan's 2.3 objective, so it wasn't built; flagged for a future task if it's ever prioritised, not silently dropped.
 
-**The reframe:** the page should read like the sentence a good receptionist would actually say handing over the phone — "This is Dave, had us out twice, always pays on the day, still waiting on a bathroom price" — not four panels to mentally assemble.
+**The reframe, verified rather than assumed:** the page should read like the sentence a good receptionist would actually say handing over the phone — "This is Dave, had us out twice, always pays on the day, still waiting on a bathroom price" — not four panels to mentally assemble. Confirmed directly against real production screenshots after adding the three new fields: the communication preference sits inside the existing summary sentence, not as a separate settings field, and both new cards match the existing "Service history" card's own visual pattern exactly.
 
 ---
 
@@ -110,7 +110,7 @@ The load-bearing structural change: **Test real conversations** and **See exactl
 | **Front Desk** | What do I need to know right now? | Rebuilt as one unified page (§1) | Done — Owner Experience 01 |
 | **Work Cards** | What work do I have? | Detail page built (§2); no nav destination yet, deliberately | Done for now — nav list only if a real need emerges |
 | **Diary** | Where am I going? | Real schedule + rules, both conversational (§3) | Done |
-| **Customers** | Who are these people? | Detail page strong, list is a placeholder | Fix the list, extend the detail (§4) |
+| **Customers** | Who are these people? | List and detail both real and complete (§4) | Done |
 | **Receptionist** | What have I taught her? | Exists, already well-framed | Keep, extend (§5) |
 | **Knowledge** | What does she know? | Exists as two pages, relationship unclear | Keep both, connect them (§6) |
 | **Approvals** | What needs my judgement? | Doesn't exist; only inline | **Build** (§7) |

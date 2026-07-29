@@ -29,18 +29,33 @@ function timeLabel(iso: string | null): string {
   return new Date(iso).toLocaleTimeString("en-GB", { hour: "numeric", minute: "2-digit" });
 }
 
-export function TodaysWork({ items }: { items: TodaysWorkItem[] }) {
+/** Master Execution Plan 2.2 — reused as-is on the Diary page for both
+ * "Today" and "Tomorrow" (title/empty-state text made configurable,
+ * defaults unchanged so Front Desk's own usage is byte-for-byte the
+ * same as before) rather than writing a second, near-identical
+ * component. */
+export function TodaysWork({
+  items,
+  title = "Today's work",
+  emptyTitle = "Nothing booked in for today.",
+  emptySubtitle = "I'll show it here the moment something is.",
+}: {
+  items: TodaysWorkItem[];
+  title?: string;
+  emptyTitle?: string;
+  emptySubtitle?: string;
+}) {
   return (
     <SettleCard delay={0.12} className="rounded-2xl border border-border bg-card p-6 shadow-sm">
-      <h2 className="mb-4 text-[11px] font-bold uppercase tracking-widest text-muted-foreground">Today&apos;s work</h2>
+      <h2 className="mb-4 text-[11px] font-bold uppercase tracking-widest text-muted-foreground">{title}</h2>
       {items.length === 0 ? (
         <div className="flex items-center gap-3">
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">
             <CalendarDays className="h-4 w-4" />
           </div>
           <div>
-            <p className="text-[14px] font-semibold">Nothing booked in for today.</p>
-            <p className="mt-0.5 text-[12.5px] text-muted-foreground">I&apos;ll show it here the moment something is.</p>
+            <p className="text-[14px] font-semibold">{emptyTitle}</p>
+            <p className="mt-0.5 text-[12.5px] text-muted-foreground">{emptySubtitle}</p>
           </div>
         </div>
       ) : (

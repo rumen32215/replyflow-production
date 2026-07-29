@@ -7,6 +7,7 @@ import { SettleCard, press, EASE } from "@/components/shared/motion";
 import { Acknowledgement, ACK, useAcknowledgement } from "@/components/shared/acknowledgement";
 import { Switch, SwitchVisual } from "@/components/ui/switch";
 import { CollapsibleRule } from "@/components/dashboard/availability/collapsible-rule";
+import { TodaysWork, type TodaysWorkItem } from "@/components/dashboard/home/todays-work";
 import { InsightList } from "@/components/shared/insight";
 import { buildBrain } from "@/lib/intelligence";
 import { createClient } from "@/lib/supabase/client";
@@ -33,9 +34,17 @@ import { cn } from "@/lib/utils";
 export function AvailabilityDiary({
   businessId,
   initial,
+  todaysWork,
+  tomorrowsWork,
 }: {
   businessId: string;
   initial: Availability;
+  /** Master Execution Plan 2.2 — the real schedule, not just the
+   * availability standing below. Kept view-only here: every action
+   * (approve, edit, mark complete) happens on the Work Card page
+   * itself (2.1), never duplicated into a second write path. */
+  todaysWork: TodaysWorkItem[];
+  tomorrowsWork: TodaysWorkItem[];
 }) {
   const supabase = createClient();
   const { message, isError, isSaving, startSaving, acknowledge, softError } = useAcknowledgement();
@@ -178,6 +187,10 @@ export function AvailabilityDiary({
         </p>
       </SettleCard>
 
+      {/* The real schedule, not just the standing above — "am I open"
+       * and "what's actually on" are different questions. */}
+      <TodaysWork items={todaysWork} />
+
       {/* Tomorrow is a glance, not a card of its own. */}
       <SettleCard
         delay={0.07}
@@ -188,6 +201,13 @@ export function AvailabilityDiary({
           {describeStanding(tomorrowStanding)}
         </span>
       </SettleCard>
+
+      <TodaysWork
+        items={tomorrowsWork}
+        title="Tomorrow's work"
+        emptyTitle="Nothing booked in for tomorrow yet."
+        emptySubtitle="Still quiet — I'll show it here the moment something is."
+      />
 
       {/* One honest shortcut for a hectic day. */}
       <SettleCard delay={0.09}>

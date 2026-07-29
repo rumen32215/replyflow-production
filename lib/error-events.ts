@@ -1,6 +1,7 @@
 import "server-only";
 import { createServiceClient } from "@/lib/supabase/service";
 import { describeError } from "./error-events-format";
+import { notifyCriticalIncident } from "./incident-alert";
 
 /**
  * Master Execution Plan 1.1 — the durable sink for a caught failure at
@@ -22,6 +23,11 @@ import { describeError } from "./error-events-format";
  * error type/message strings (which describe what broke technically,
  * not what anyone said). Same non-negotiable data boundary this
  * project already applies everywhere else.
+ *
+ * Master Execution Plan 1.3 — a `critical` event also triggers active
+ * alerting (incident-alert.ts), closing the gap 1.1 left open. Fired
+ * from here, once, rather than from each call site that reports a
+ * critical event today (and any added later).
  */
 
 export type ErrorSeverity = "warning" | "error" | "critical";
@@ -58,6 +64,10 @@ export async function recordErrorEvent(input: ErrorEventInput): Promise<void> {
       context: { ...(input.context ?? {}), ...(errorDetail ? { errorDetail } : {}) },
     });
     if (error) console.error("[error-events] could not record error event:", error.message);
+
+    if (input.severity === "critical") {
+      await notifyCriticalIncident({ source: input.source, message: input.message, businessId: input.businessId });
+    }
   } catch (err) {
     // Migration 0017 may not be applied yet in every environment, or
     // the DB may be briefly unreachable — either way, this is

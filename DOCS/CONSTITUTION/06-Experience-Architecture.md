@@ -28,7 +28,7 @@ Not "wrong eventually." Wrong today, regardless of how much real data is on it. 
 
 **Retired term:** this section used to be called "Jobs & Work Cards." "Job" is retired — see `DOCS/SPECS/Work-Card-Object.md` for why, and for the complete object definition (every field, where it comes from, what's automatic versus owner-entered, what's live versus history). That document is now the source of truth for this concept; this section stays as the short version and the pointer to it.
 
-**The gap, stated plainly:** there is no dedicated Work Cards page anywhere in ReplyFlow today, and the underlying data model has no address, no parking notes, no access notes, no photo storage. A booking today is a title, a status, a date. That is not enough to send a technician to a stranger's house.
+**Shipped (Master Execution Plan 2.1):** the dedicated page exists — `/dashboard/work-cards/[id]` — with every field below except Photos. The gap this section originally described (no address, no parking notes, no access notes, a booking that was only a title/status/date) is closed; only the media-storage prerequisite for Photos remains genuinely open, tracked separately.
 
 **The concept:** everything a technician needs to walk out the door, assembled automatically, never re-typed:
 
@@ -106,7 +106,7 @@ The load-bearing structural change: **Test real conversations** and **See exactl
 | Nav item | The one question | Current reality | Verdict |
 |---|---|---|---|
 | **Front Desk** | What do I need to know right now? | Rebuilt as one unified page (§1) | Done — Owner Experience 01 |
-| **Work Cards** | What work do I have? | Doesn't exist; data model too thin | **Build** — highest-impact gap (§2) |
+| **Work Cards** | What work do I have? | Detail page built (§2); no nav destination yet, deliberately | Done for now — nav list only if a real need emerges |
 | **Diary** | Where am I going? | Exists, calendar-shaped | Keep plumbing, redesign framing (§3) |
 | **Customers** | Who are these people? | Detail page strong, list is a placeholder | Fix the list, extend the detail (§4) |
 | **Receptionist** | What have I taught her? | Exists, already well-framed | Keep, extend (§5) |
@@ -122,7 +122,7 @@ The load-bearing structural change: **Test real conversations** and **See exactl
 
 ## 10. Missing concepts — the complete list
 
-1. **Work Cards (page and object)** — doesn't exist. The single biggest gap (§2), now fully specified in `DOCS/SPECS/Work-Card-Object.md`.
+1. ~~**Work Cards (page and object)**~~ — shipped (Master Execution Plan 2.1), object fully specified in `DOCS/SPECS/Work-Card-Object.md`.
 2. **Approvals (dedicated queue)** — doesn't exist (§7).
 3. **Handover ("Meet Your Receptionist")** — fully designed in document 04, not yet built.
 4. **Test conversations in onboarding** — fully designed in document 04, not yet built.

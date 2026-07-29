@@ -173,7 +173,7 @@ All four tasks (1.1–1.4) implemented, verified against real production (not as
 
 *The acknowledged UX gaps, re-sequenced after the safety net because nothing here is time-critical the way Phase 1 is.*
 
-### 2.1 Work Cards
+### 2.1 Work Cards — implemented
 - **Objective:** A dedicated Work Card page and a real object (address, access notes, photos placeholder, collected details) — everything a technician needs to walk out the door prepared, assembled automatically from the conversation.
 - **Why:** *"The owner should think less."* Today a job is a title, a status, and a date — not enough to act on without reconstructing it from a WhatsApp thread by hand.
 - **Dependencies:** None structurally (per `08-Implementation-Roadmap.md` B1, the one genuinely foundational item in that track). Full object definition already lives in `DOCS/SPECS/Work-Card-Object.md`.
@@ -182,6 +182,13 @@ All four tasks (1.1–1.4) implemented, verified against real production (not as
 - **Risk if postponed:** Front Desk, Diary, and Customers all continue pointing at a thin data model.
 - **Success criteria:** A technician with no other context could complete a job using only this screen.
 - **Blocks:** Materially enriches 2.2 (Diary), 2.3 (Customers), and 2.4 (Approvals) — none are *blocked* by it, but all are weaker without it.
+- **Shipped as:** `/dashboard/work-cards/[id]` (`app/(dashboard)/dashboard/work-cards/[id]/page.tsx`, `components/dashboard/work-cards/work-card-detail.tsx`). The object and schema were already complete (a prior sprint) — this task was genuinely just the page, so no new migrations or API routes were needed: field edits and status transitions (`booked → in_progress → completed`, cancel) are direct client-side Supabase updates, the same pattern `conversation-story.tsx`'s existing `rejectJob()` already used; only `draft → booked` reuses the existing `/api/work-cards/[id]/approve` route unchanged (the one transition with a real side effect — sending a WhatsApp confirmation). No Photos section — zero backend media storage exists anywhere, a separately-tracked gap, not faked here. No new list/index page or nav destination, per `06-Experience-Architecture.md` §2's own explicit deferral. Every existing reference to a Work Card (Front Desk's Today's Work and Needs Your Attention, the Customer page's service history) now points here instead of the parent conversation, which previously lost every Work-Card-specific field.
+
+  **Verified genuinely end-to-end against real production**, not just build success — and this caught two real bugs before founder review, not after:
+  1. A React hydration mismatch (errors #422/#425): `toLocaleString`/`toLocaleDateString` calls had no explicit `timeZone`, so the Vercel server and the browser could format the identical timestamp as different text. Confirmed this wasn't cosmetic — it broke the page's ability to visually update after real, successful changes. Fixed by pinning `Europe/London` explicitly in `lib/work-card-format.ts`, with tests asserting exact output (not just "doesn't crash") so a silent regression would be caught.
+  2. The status badge was computed once on the server and passed as a static prop — a real status change (approve, start job, complete, cancel) updated the database and the local card state correctly, but the badge itself never re-rendered. Fixed by computing it reactively client-side via `useMemo`, keyed on the live card state.
+
+  Both were caught and fixed using the same real-production-Playwright-verification discipline already established for reply-engine changes, then re-verified clean: real status transitions confirmed via direct DB checks alongside UI checks, address confirm/edit flows confirmed, mobile viewport confirmed, all real test data restored to its exact original state afterward.
 
 ### 2.2 Diary reframe
 - **Objective:** Reframe the existing Diary/Hours page around "what does my day look like, and what changed" rather than a calendar grid, once it can be made of real Work Cards.

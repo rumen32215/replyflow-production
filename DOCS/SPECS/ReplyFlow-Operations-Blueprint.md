@@ -147,6 +147,8 @@ This blueprint exists because the Constitution Compliance Audit found the same t
 
 ## 10. Incident Response Process
 
+**Shipped (Master Execution Plan 1.3):** see `DOCS/SPECS/ReplyFlow-Incident-Response.md` for the full runbook — severity classification, notification approach, owner-communication templates, and a postmortem habit, walked through against a real incident already sitting in production telemetry. Also closes 1.1's own "no alert yet" gap: a `critical` `error_events` row now triggers a real webhook POST (`lib/incident-alert.ts`), verified end-to-end against a real test endpoint — inert in production today only because no real notification channel (Slack/Discord/etc.) has been configured yet, honestly documented as such rather than claimed as active.
+
 **Why it matters:** §1–§4 are about detecting a problem. This is about what happens in the moment after detection — currently, nothing is defined.
 
 **How it supports the Founder Constitution:** Directly serves *"the owner should always feel supported,"* and mirrors a principle the product already applies to customers back onto the founders' own operational conduct — own a mistake plainly, no defensive template language, the same standard the receptionist herself is held to in every customer-facing failure.

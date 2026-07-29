@@ -52,21 +52,21 @@ Binding going forward, matching the Master Execution Plan's own framing (this is
 
 ---
 
-## 6. 2FA on shared accounts — cannot be verified from this environment
+## 6. 2FA on shared accounts — confirmed by the founder (2026-07-29)
 
-Two-factor authentication on Supabase, Vercel, Meta, and OpenAI accounts is an account-level setting in each service's own dashboard — this environment has no access to check or change it (confirmed: no Supabase Management API token, no way to inspect Meta/OpenAI account security settings). **This requires the founder to check each dashboard directly and report back**, the same handoff pattern already established for Supabase's backup/PITR settings (1.2).
+Two-factor authentication is an account-level setting in each service's own dashboard — unverifiable from this environment (confirmed: no Supabase Management API token, no way to inspect Meta/OpenAI account security settings), so this required the founder to check each dashboard directly, the same handoff pattern already established for Supabase's backup/PITR settings (1.2).
 
 | Account | 2FA status |
 |---|---|
-| Supabase | Not yet confirmed |
-| Vercel | Not yet confirmed |
-| Meta (Business/Developer account) | Not yet confirmed |
-| OpenAI (platform account) | Not yet confirmed |
+| Supabase | **Enabled** (Google Authenticator) |
+| Vercel | **Enabled** (Authenticator App) |
+| Meta (Business/Developer account) | **Enabled** |
+| OpenAI (platform account) | **Enabled** (Authenticator App) |
 
-This table will be updated once confirmed — left honestly incomplete rather than assumed enabled.
+All four confirmed enabled, all via authenticator app rather than SMS (the stronger, phishing/SIM-swap-resistant option) — genuinely verified, not assumed.
 
 ---
 
-## Success criteria, stated plainly
+## Success criteria — met
 
-*"2FA confirmed on every shared account; access list documented."* Access list: done, above, verified rather than assumed. 2FA: **not yet confirmed** — genuinely unverifiable from this environment, pending the founder's own check. Task 1.4 is not fully closed until that table above is filled in.
+*"2FA confirmed on every shared account; access list documented."* Both true: 2FA confirmed enabled on all four shared accounts (founder-verified, 2026-07-29), and the access list above is documented and empirically verified rather than assumed. Task 1.4 is complete.

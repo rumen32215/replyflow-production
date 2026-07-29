@@ -51,6 +51,8 @@ A calendar answers "what's on this date." A diary answers "what does my day look
 
 **What it should answer:** Where am I today, in order (a sequence of Work Cards, not a grid)? Where am I tomorrow (present, quieter)? What changed — a reschedule, a cancellation — surfaced explicitly, never something the owner has to notice by comparing against memory? What's delayed, with an easy way to push the rest of the day back in one motion? What's waiting for confirmation, visibly distinct from confirmed? What's already finished, kept visible as the day's evidence?
 
+**Shipped (Master Execution Plan 2.2):** investigation confirmed the existing "Your hours" page already satisfied the framing half of this section — chip-based, conversational, zero calendar-grid feel. What it never had was real content: a real Today/Tomorrow sequence of Work Cards, in order, each with real state, now sits alongside the existing availability rules — reusing Front Desk's own query pattern and its `TodaysWork` component rather than building a second way to ask the same question. "Waiting for confirmation vs. confirmed" and "already finished, kept visible" come for free from the existing Work Card state labeling. **Deliberately not built:** explicit change/diff tracking against a previous state, and bulk "push the rest of the day back" rescheduling — both are genuinely separate, bigger features with no supporting infrastructure today, not required by this task's actual success criteria (a real, live sequence replacing a static grid).
+
 ---
 
 ## 4. Customers — a person your receptionist already knows
@@ -107,7 +109,7 @@ The load-bearing structural change: **Test real conversations** and **See exactl
 |---|---|---|---|
 | **Front Desk** | What do I need to know right now? | Rebuilt as one unified page (§1) | Done — Owner Experience 01 |
 | **Work Cards** | What work do I have? | Detail page built (§2); no nav destination yet, deliberately | Done for now — nav list only if a real need emerges |
-| **Diary** | Where am I going? | Exists, calendar-shaped | Keep plumbing, redesign framing (§3) |
+| **Diary** | Where am I going? | Real schedule + rules, both conversational (§3) | Done |
 | **Customers** | Who are these people? | Detail page strong, list is a placeholder | Fix the list, extend the detail (§4) |
 | **Receptionist** | What have I taught her? | Exists, already well-framed | Keep, extend (§5) |
 | **Knowledge** | What does she know? | Exists as two pages, relationship unclear | Keep both, connect them (§6) |

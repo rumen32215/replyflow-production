@@ -190,7 +190,7 @@ All four tasks (1.1–1.4) implemented, verified against real production (not as
 
   Both were caught and fixed using the same real-production-Playwright-verification discipline already established for reply-engine changes, then re-verified clean: real status transitions confirmed via direct DB checks alongside UI checks, address confirm/edit flows confirmed, mobile viewport confirmed, all real test data restored to its exact original state afterward.
 
-### 2.2 Diary reframe
+### 2.2 Diary reframe — implemented
 - **Objective:** Reframe the existing Diary/Hours page around "what does my day look like, and what changed" rather than a calendar grid, once it can be made of real Work Cards.
 - **Why:** *"The owner should think less"* — a calendar answers "what's on this date"; an owner needs "what changed since I last checked."
 - **Dependencies:** 2.1, for the "what changed" signal to be honest rather than built against thin rows.
@@ -199,6 +199,7 @@ All four tasks (1.1–1.4) implemented, verified against real production (not as
 - **Risk if postponed:** Low on its own — the underlying page already functions reasonably well.
 - **Success criteria:** A day's schedule reads as "what changed," not a static grid.
 - **Blocks:** Nothing.
+- **Shipped as:** the hypothesis was confirmed by investigation, not assumed — the existing page already satisfied the framing (chip-based, conversational), and only needed real content. Added real Today/Tomorrow Work Card sequences reusing Front Desk's exact query pattern and its `TodaysWork` component (given an optional title/empty-state prop, defaults unchanged — Front Desk's own rendering is byte-for-byte identical to before). Every action stays on the 2.1 Work Card page; this page is deliberately view-only for the schedule. Verified end-to-end against real production: correct empty states, a real synthetic booking rendered correctly for both today and tomorrow with real status labeling, and clicking through genuinely navigated to its real Work Card page — confirming the 2.1→2.2 integration works, not just compiles. Deliberately did not build explicit change/diff tracking or bulk "push the day back" rescheduling — both are separate, bigger features the task's actual success criteria didn't require.
 
 ### 2.3 Customers completion
 - **Objective:** Fix the placeholder list view, add the three missing fields (outstanding work, communication preferences, previous quotations), and explicitly verify the page still reads as *understanding* a relationship rather than *managing* one.

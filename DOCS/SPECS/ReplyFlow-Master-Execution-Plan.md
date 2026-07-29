@@ -110,7 +110,7 @@ Every task states: **Objective**, **Why** (the specific Founder Constitution lin
 
   **Honest gap, not glossed over: this does not yet produce an "alert."** The original success criteria ("produce a real alert within minutes") isn't fully met — what exists is the prerequisite (structured, queryable, durable capture), not push notification. Active alerting needs either a notification channel the founder provides (an email address or Slack webhook — the same kind of external, founder-actioned dependency as the Sentry account) or adopting the hosted APM tool, whichever is decided first. Recommended as the very next increment, most naturally alongside or as part of Incident response (1.3) rather than reopening this item.
 
-### 1.2 Backup and recovery
+### 1.2 Backup and recovery — real gap confirmed and documented; success criteria not met
 - **Objective:** Confirm or enable Supabase point-in-time recovery; perform and document one real restore; define a rough tolerable data-loss window.
 - **Why:** *"Reliable. Consistent."* A business's entire customer history lives here — this has to include "the data survives."
 - **Dependencies:** None.
@@ -119,6 +119,9 @@ Every task states: **Objective**, **Why** (the specific Founder Constitution lin
 - **Risk if postponed:** An unverified backup is a hope, not a plan.
 - **Success criteria:** A real restore has been performed at least once and documented.
 - **Blocks:** Nothing directly, but should complete before Phase 4.
+- **Shipped as:** the honest finding this task exists to surface, not the checklist item it was written expecting to close. The founder confirmed directly in the Supabase dashboard (2026-07-29): production runs on the **Free** plan — no scheduled backups, no PITR, no restore capability, at all. **Success criteria not met, stated plainly rather than rounded away** — no restore was performed, because no safe, non-destructive target existed to perform one against (no branching, no scratch project on this plan), and restoring in place against the only real environment purely to test restoring would itself have been the kind of risky, unnecessary action this engagement's own safety discipline exists to avoid.
+
+  What was built instead: a minimal, fully-verified, on-demand snapshot tool (`scripts/backup/export-snapshot.mjs`, zero new infrastructure or cost, reuses the same service-role pattern as every prior operational script), explicitly documented as a stopgap, not a fix — no schedule, no redundant storage, no retention policy, and (deliberately) no accompanying restore script, since shipping unverified "recovery" code would create false confidence rather than real safety. Verified for real against production: complete (row counts matched exactly across all 7 core tables), referentially consistent (zero orphaned rows), and confirmed to correctly exclude the one real secret in scope (`whatsapp_connections.access_token`). Full account, including the documented-but-unverified restore procedure and the recommended real fix (a Supabase plan upgrade, timed before Phase 4), in `DOCS/SPECS/ReplyFlow-Backup-Recovery.md`.
 
 ### 1.3 Incident response process
 - **Objective:** A short written runbook: who's notified when an alert fires, a simple severity classification, a plain-language owner-communication approach, a lightweight postmortem habit for anything customer-visible.

@@ -5,3 +5,10 @@ node_modules
 .DS_Store
 next-env.d.ts
 *.tsbuildinfo
+
+.vercel
+.env*
+
+# Master Execution Plan 1.2 — manual backup snapshots contain real
+# business/customer data and must never be committed.
+/backups/

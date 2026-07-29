@@ -131,6 +131,8 @@ This blueprint exists because the Constitution Compliance Audit found the same t
 
 ## 9. Backup and Recovery Strategy
 
+**Confirmed and shipped (Master Execution Plan 1.2):** see `DOCS/SPECS/ReplyFlow-Backup-Recovery.md` for the full account. The real, dashboard-confirmed state (2026-07-29): production runs on Supabase Free, which provides **no scheduled backups, no point-in-time recovery, and no restore capability at all**. This is a real, current gap, not a hypothetical one — documented honestly rather than claimed as satisfied. A minimal, verified, on-demand export tool (`scripts/backup/export-snapshot.mjs`) was built as a stopgap (zero new infrastructure/cost), but the actual fix — recommended before real paying customers depend on ReplyFlow, no later than Phase 4 — is upgrading to a paid Supabase tier with real managed backups.
+
 **Why it matters:** No documented backup policy exists. Supabase's infrastructure may provide some default protection, but this hasn't been confirmed, and — more importantly — never tested as an actual, working restore.
 
 **How it supports the Founder Constitution:** A business's entire customer relationship history lives in ReplyFlow. *"Reliable. Consistent."* has to include "the data survives," not just "the app responds."

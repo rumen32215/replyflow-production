@@ -94,6 +94,8 @@ This blueprint exists because the Constitution Compliance Audit found the same t
 
 ## 7. Reliability Targets (SLIs/SLOs)
 
+**Shipped:** see `DOCS/SPECS/ReplyFlow-SLIs-SLOs.md` (Master Execution Plan 0.3) for the real targets and real current baselines, computed from production data via `scripts/sli/`.
+
 **Why it matters:** No reliability target is currently defined anywhere. Monitoring (§1) needs something to alert *against* — without a target, an alert threshold is just a guess.
 
 **How it supports the Founder Constitution:** *"Reliable. Consistent. Predictable."* are specific claims, and specific claims need a specific, checkable definition behind them — the same discipline the Constitution already applies to the receptionist's own conversational honesty, applied here to the business's operational honesty.

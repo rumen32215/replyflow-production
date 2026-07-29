@@ -20,7 +20,7 @@ import { press, SettleCard, Reveal, EASE } from "@/components/shared/motion";
 import { Acknowledgement, useAcknowledgement } from "@/components/shared/acknowledgement";
 import { createClient } from "@/lib/supabase/client";
 import { WORK_CARD_TONE_STYLE, type WorkCardState } from "@/lib/work-card-state";
-import { toDateTimeLocalValue, mapsHref } from "@/lib/work-card-format";
+import { toDateTimeLocalValue, mapsHref, formatDateTime, formatDate } from "@/lib/work-card-format";
 import { cn } from "@/lib/utils";
 
 export interface WorkCardDetailData {
@@ -40,16 +40,6 @@ export interface WorkCardDetailData {
   collectedDetails: string | null;
   conversationSummary: string | null;
   approvedAt: string | null;
-}
-
-function formatDateTime(iso: string | null): string | null {
-  if (!iso) return null;
-  return new Date(iso).toLocaleString("en-GB", { weekday: "short", day: "numeric", month: "short", hour: "numeric", minute: "2-digit" });
-}
-
-function formatDate(iso: string | null): string | null {
-  if (!iso) return null;
-  return new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
 }
 
 const SECTION_HEADING = "mb-3 text-[11px] font-bold uppercase tracking-widest text-muted-foreground";

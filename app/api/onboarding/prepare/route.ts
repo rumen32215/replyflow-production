@@ -73,8 +73,13 @@ export async function POST(request: Request) {
 
   // Already fully set up (revisited URL, double submit, second tab):
   // success, and nothing the owner personalised is ever touched.
+  // alreadyCompleted tells the caller (preparing-receptionist.tsx) this
+  // is a repeat visit, not a fresh completion — Master Execution Plan
+  // 0.2: the real-reasoning-pipeline demo conversation is a one-time
+  // reveal, not something to re-run (and re-spend real OpenAI calls on)
+  // every time this screen is revisited.
   if (business.onboarding_completed) {
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({ ok: true, alreadyCompleted: true });
   }
 
   const businessName = sanitize(body.businessName, 80) || business.business_name || "Your business";
@@ -110,5 +115,5 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: updateError.message }, { status: 500 });
   }
 
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: true, alreadyCompleted: false });
 }

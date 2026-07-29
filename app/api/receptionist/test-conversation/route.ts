@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { generateReplyForMessage } from "@/lib/reply-engine/generate-reply";
 import { TEST_CONVERSATION_PHONE, TEST_CONVERSATION_NAME } from "@/lib/test-conversation";
+import { checkAiRateLimit } from "@/lib/ai-rate-limit";
 
 export const runtime = "nodejs";
 
@@ -38,6 +39,14 @@ export async function POST(request: NextRequest) {
 
   const { data: business } = await service.from("businesses").select("id").eq("owner_id", user.id).maybeSingle();
   if (!business) return NextResponse.json({ error: "No business found for this account." }, { status: 404 });
+
+  const rateLimit = await checkAiRateLimit(business.id);
+  if (rateLimit.limited) {
+    return NextResponse.json(
+      { error: "That's a lot of test messages in a short time — give it a moment and try again." },
+      { status: 429, headers: { "Retry-After": String(rateLimit.retryAfterSeconds) } }
+    );
+  }
 
   const nowIso = new Date().toISOString();
 

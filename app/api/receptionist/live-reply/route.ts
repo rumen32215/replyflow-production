@@ -4,6 +4,7 @@ import { parseKnowledge } from "@/lib/knowledge";
 import { parseAvailability, describeBookingReply, nextAvailableSlot } from "@/lib/availability";
 import { generateLiveReply } from "@/lib/reply-engine/live-reply";
 import { toConversationState } from "@/lib/reply-engine/understanding";
+import { checkAiRateLimit } from "@/lib/ai-rate-limit";
 
 export const dynamic = "force-dynamic";
 
@@ -72,6 +73,14 @@ export async function POST(request: Request) {
     .maybeSingle();
   if (businessError) return NextResponse.json({ error: businessError.message }, { status: 500 });
   if (!business) return NextResponse.json({ error: "No business found" }, { status: 404 });
+
+  const rateLimit = await checkAiRateLimit(business.id);
+  if (rateLimit.limited) {
+    return NextResponse.json(
+      { error: "That's a lot of changes in a short time — give it a moment and it'll catch up." },
+      { status: 429, headers: { "Retry-After": String(rateLimit.retryAfterSeconds) } }
+    );
+  }
 
   const { data: config } = await supabase.from("ai_configurations").select("faqs").eq("business_id", business.id).maybeSingle();
 

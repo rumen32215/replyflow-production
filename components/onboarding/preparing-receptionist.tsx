@@ -271,6 +271,19 @@ export function PreparingReceptionist() {
         }),
       });
       if (!res.ok) throw new Error("prepare_failed");
+      const data: { alreadyCompleted?: boolean } = await res.json().catch(() => ({}));
+
+      // Master Execution Plan 0.2 — onboarding was already completed
+      // for this business before this mount (a refresh, or navigating
+      // back to this screen). The proof conversation is a one-time
+      // reveal: replaying it would re-spend real OpenAI calls to show
+      // the exact same kind of thing again, for no one's benefit. Skip
+      // straight to ready — the learned facts still animate in.
+      if (data.alreadyCompleted) {
+        setStage("ready");
+        return;
+      }
+
       setStage("proof");
       void runProofConversation();
     } catch {

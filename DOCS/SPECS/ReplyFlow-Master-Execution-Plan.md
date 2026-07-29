@@ -97,7 +97,7 @@ Every task states: **Objective**, **Why** (the specific Founder Constitution lin
 
 *The safety net. Nothing in Phase 3 or 4 should ship ahead of this — a real customer should never be the first one to discover a gap here.*
 
-### 1.1 Monitoring and error reporting
+### 1.1 Monitoring and error reporting — capture implemented; active alerting still open
 - **Objective:** Adopt a hosted error/APM tool (Sentry-class), wire it into every API route and reply-engine catch block, add uptime monitoring for the app and the WhatsApp webhook.
 - **Why:** *"ReplyFlow will never leave a business owner wondering whether their business is being looked after."* Requires ReplyFlow to know first.
 - **Dependencies:** 0.3 (targets to alert against).
@@ -106,6 +106,9 @@ Every task states: **Objective**, **Why** (the specific Founder Constitution lin
 - **Risk if postponed:** An outage or a systematic bad-reply pattern could run for days, discovered only when a customer complains.
 - **Success criteria:** A simulated webhook failure and a simulated OpenAI error both produce a real alert within minutes.
 - **Blocks:** Incident response (1.3), and responsibly enabling billing (Phase 4).
+- **Shipped as:** a first-party `error_events` ledger (migration 0017, `lib/error-events.ts`) instead of the hosted APM tool this item originally named — no external account/DSN exists in this environment to wire one up and verify end-to-end, so the real, verifiable foundation got built first; adopting Sentry (or staying first-party) is a short, distinct decision once an account exists, not blocked by this choice. Wired into every real reply-engine/webhook catch block (`generate-reply.ts` critical outer catch, `classify.ts`/`generate.ts` warnings, `send.ts` error, the webhook route's four failure paths, the live-reply route's outer catch) with a severity convention and zero customer content ever logged. `/api/health` (real DB check) plus `scripts/monitoring/error-summary.mjs` (plain queryable summary, not a dashboard). Verified end-to-end against real production: a genuinely triggered webhook signature failure produced a real, correctly-shaped `error_events` row within seconds; the 18-scenario adversarial suite passed 0 failures post-deploy; and the run incidentally proved the wiring works against a real failure that already existed (the QA business's stale WhatsApp token, previously only visible in `reply_drafts.error_message`, now also surfaced in the durable ledger for the first time).
+
+  **Honest gap, not glossed over: this does not yet produce an "alert."** The original success criteria ("produce a real alert within minutes") isn't fully met — what exists is the prerequisite (structured, queryable, durable capture), not push notification. Active alerting needs either a notification channel the founder provides (an email address or Slack webhook — the same kind of external, founder-actioned dependency as the Sentry account) or adopting the hosted APM tool, whichever is decided first. Recommended as the very next increment, most naturally alongside or as part of Incident response (1.3) rather than reopening this item.
 
 ### 1.2 Backup and recovery
 - **Objective:** Confirm or enable Supabase point-in-time recovery; perform and document one real restore; define a rough tolerable data-loss window.

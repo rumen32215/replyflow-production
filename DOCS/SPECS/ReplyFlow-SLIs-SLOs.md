@@ -31,6 +31,8 @@ Each SLI below states: **what it measures**, **whether it's measurable today** (
 
 **Target (aspirational, for Phase 1 to build against):** detect and surface a broken connection within 15 minutes of expiry, without the owner needing to open the app. This SLI stays unmeasurable — not "measured at 0%" or any other invented number — until Monitoring & error reporting (1.1) ships an active check. Building that check is explicitly out of scope for 0.3 (a documentation task); this target exists so 1.1 has a concrete number to build against rather than inventing one later.
 
+**Update (1.1, 2026-07-29):** still not measurable. 1.1 shipped `error_events` and a health endpoint, but neither actively polls WhatsApp token expiry — `error_events` only captures failures that already threw somewhere in the pipeline, and a connection quietly expiring isn't one of those (nothing calls WhatsApp *proactively* to notice). This target remains open work, most naturally a small scheduled check added alongside the existing `describeConnectionHealth()` logic.
+
 ---
 
 ## 3. Reply-engine silent-drop rate
@@ -50,11 +52,14 @@ All 6 instances happened in one long-running real conversation (the founder's ow
 This means the 5% figure, read literally as "customers ignored," overstates the real severity — but it's still a genuine, reproducible gap (not every inbound message gets its own audit trail, which matters for anything downstream that reads `facts_used`/`reply_drafts` per-message, e.g. a future Work Card assembled from a specific message). **Flagged as a follow-up, deliberately not fixed here** — this is exactly the "reveal an improvement outside 0.3's scope, document it separately" case:
 
 - **Candidate fix:** ensure every inbound message gets its own `reply_drafts` row even when consolidated into one drafted reply (e.g. write linked rows sharing the same draft text), so the SLI and any downstream per-message consumer are both accurate.
-- **Where it belongs:** Phase 1 (closest to Monitoring/1.1 — this is precisely the kind of gap active monitoring should have caught on its own) or a small standalone fix; not scoped or estimated here.
+- **Where it belongs:** Phase 1 (closest to Monitoring/1.1) or a small standalone fix; not scoped or estimated here.
+- **Update (1.1, 2026-07-29):** still open. 1.1's `reply-engine.pipeline_failure` event covers the *throwing* half of "silent drop" — a real uncaught exception in `generateReplyForMessage`. The rapid-consecutive-message consolidation pattern described above never throws (the code runs successfully, it just doesn't write a row for the earlier message), so it's a different mechanism and 1.1 doesn't close it. Two related but distinct gaps, not one.
 
 ### The other real gap this surfaced
 
-A genuine LLM call failure inside `classifyMessage()`/`generateReplyDraft()` (their own internal `catch` blocks) degrades gracefully into the same low-confidence/escalated path as a genuinely uncertain real message, by design (`classify.ts`, `generate.ts`) — logged to Vercel's function logs via `console.error`, never persisted anywhere queryable. Today, **"the model call itself errored" and "the model was just genuinely unsure" are indistinguishable in the data.** This is the same underlying gap Monitoring & error reporting (1.1) already exists to close (structured error capture, e.g. Sentry) — noted here because it's exactly the kind of thing this task's investigation surfaced, not because 0.3 should build it.
+A genuine LLM call failure inside `classifyMessage()`/`generateReplyDraft()` (their own internal `catch` blocks) degrades gracefully into the same low-confidence/escalated path as a genuinely uncertain real message, by design (`classify.ts`, `generate.ts`) — logged to Vercel's function logs via `console.error`, never persisted anywhere queryable. Today, **"the model call itself errored" and "the model was just genuinely unsure" are indistinguishable in the data.**
+
+**Update (1.1, 2026-07-29): closed, partially.** Both catch blocks now also report to `error_events` (`reply-engine.classify_failed`/`reply-engine.generate_failed`, `warning` severity) — a genuine call failure is queryable now, not just a discarded log line. What's still true: the *drafted reply itself* still can't distinguish "the model call errored, so this is the fallback" from "the model answered but was genuinely unsure" purely by looking at `reply_drafts` — that distinction now lives in a separate table (`error_events`), correlatable by time/business but not joined automatically. Good enough to know *that* it's happening and *how often*; a deeper fix (e.g. a flag on the draft itself) would be a further, smaller follow-up, not needed to close the original observability gap.
 
 ---
 

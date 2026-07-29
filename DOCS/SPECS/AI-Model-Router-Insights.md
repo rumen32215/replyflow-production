@@ -28,6 +28,12 @@
 
 ---
 
+## Observation from 1.1's monitoring implementation (2026-07-29)
+
+**`error_events` (1.1) is a partial answer to the outcome-quality gap 0.4 flagged.** 0.4 noted a future router can't tell "would a cheaper model have worked here" without an outcome-quality signal, not just cost/tokens. `error_events` now records `reply-engine.classify_failed`/`reply-engine.generate_failed` per call, which — once there's more than one real model in play — would let a future router see whether a given model correlates with more LLM-call failures at a given call site, not just cost. Still not sufficient on its own (a "failure" here means the API call itself errored, not "the reply was low quality but technically succeeded"), but it's a real, existing signal a router design should incorporate rather than duplicate. No routing logic implemented here — this is 1.1's monitoring infrastructure, not router design.
+
+---
+
 ## When to pick this back up
 
 Per the founder's own framing: when a real milestone is reached (meaningful production volume, or a concrete quality/latency/cost problem observed in the wild), design the Model Router from `ai_usage_events` data at that point, and add it to `DOCS/SPECS/ReplyFlow-Master-Execution-Plan.md` as a new, explicitly-scoped task — citing the real numbers gathered here plus whatever's accumulated since.

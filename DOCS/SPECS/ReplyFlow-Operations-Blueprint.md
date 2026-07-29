@@ -10,6 +10,8 @@ This blueprint exists because the Constitution Compliance Audit found the same t
 
 ## 1. Monitoring & Observability
 
+**Shipped (Master Execution Plan 1.1):** first-party, not the hosted APM tool this section originally recommended — see the Master Execution Plan's 1.1 entry for the full reasoning (no external account was available to wire up and verify end-to-end this session). `error_events` (migration 0017) is the durable sink; `/api/health` is the target for external uptime monitoring, which still needs a founder-actioned signup (UptimeRobot/Better Uptime, both have free tiers) to actually watch it from outside — documented as a short, distinct follow-up, not done.
+
 **Why it matters:** Confirmed in the Business Blueprint: no error tracking, no APM, no uptime monitoring, no log aggregation beyond whatever Vercel retains by default. Today, if something breaks, the first person to know is the customer.
 
 **How it supports the Founder Constitution:** Directly serves *"ReplyFlow will never leave a business owner wondering whether their business is being looked after."* That promise requires ReplyFlow to know first — this is the single most literal piece of infrastructure the Constitution's central claim depends on.
@@ -23,6 +25,8 @@ This blueprint exists because the Constitution Compliance Audit found the same t
 ---
 
 ## 2. Error Reporting
+
+**Shipped (Master Execution Plan 1.1):** every reply-engine/webhook catch block now reports to `error_events` via `lib/error-events.ts`, tagged with `business_id` where known, with a severity convention (`warning`/`error`/`critical`) and never customer message content or PII, exactly as this section anticipated.
 
 **Why it matters:** Distinct from general monitoring — this is specifically about turning a caught exception (a webhook failure, an OpenAI call failure, a database error) into an actionable signal with enough context to actually debug, rather than a line of console output.
 

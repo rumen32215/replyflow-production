@@ -328,6 +328,9 @@ export function BusinessMemory({
       title: "Business details",
       content: (
         <div className="space-y-3">
+          <p className="text-[12.5px] leading-relaxed text-muted-foreground">
+            This is what I&apos;ll use to introduce your business — the first thing a customer hears from me.
+          </p>
           <div className="flex items-center gap-3.5 pb-1">
             <button
               type="button"
@@ -384,12 +387,17 @@ export function BusinessMemory({
       group: "identity",
       title: "What makes you different",
       content: (
-        <ChipEditor
-          suggestions={[...PERSONALITY_SUGGESTIONS]}
-          items={knowledge.personality}
-          onChange={(next) => patchKnowledge({ personality: next })}
-          addPlaceholder="Add your own"
-        />
+        <>
+          <p className="mb-3 text-[12.5px] leading-relaxed text-muted-foreground">
+            I&apos;ll bring this up naturally when it helps a customer decide to go with you.
+          </p>
+          <ChipEditor
+            suggestions={[...PERSONALITY_SUGGESTIONS]}
+            items={knowledge.personality}
+            onChange={(next) => patchKnowledge({ personality: next })}
+            addPlaceholder="Add your own"
+          />
+        </>
       ),
     },
     {
@@ -397,12 +405,17 @@ export function BusinessMemory({
       group: "scope",
       title: "Services you offer",
       content: (
-        <ChipEditor
-          suggestions={[...serviceSuggestions]}
-          items={services}
-          onChange={(next) => learn("services", () => setServices(next))}
-          addPlaceholder="Add another service"
-        />
+        <>
+          <p className="mb-3 text-[12.5px] leading-relaxed text-muted-foreground">
+            I&apos;ll only take on enquiries that match what&apos;s here — anything else, I&apos;ll say so honestly.
+          </p>
+          <ChipEditor
+            suggestions={[...serviceSuggestions]}
+            items={services}
+            onChange={(next) => learn("services", () => setServices(next))}
+            addPlaceholder="Add another service"
+          />
+        </>
       ),
     },
     {
@@ -446,12 +459,17 @@ export function BusinessMemory({
       group: "commercial",
       title: "Ways to pay",
       content: (
-        <ChipEditor
-          suggestions={[...PAYMENT_SUGGESTIONS]}
-          items={knowledge.paymentMethods}
-          onChange={(next) => patchKnowledge({ paymentMethods: next })}
-          addPlaceholder="Add another way to pay"
-        />
+        <>
+          <p className="mb-3 text-[12.5px] leading-relaxed text-muted-foreground">
+            So I can answer straight away when someone asks how they can pay.
+          </p>
+          <ChipEditor
+            suggestions={[...PAYMENT_SUGGESTIONS]}
+            items={knowledge.paymentMethods}
+            onChange={(next) => patchKnowledge({ paymentMethods: next })}
+            addPlaceholder="Add another way to pay"
+          />
+        </>
       ),
     },
     {
@@ -459,12 +477,17 @@ export function BusinessMemory({
       group: "commercial",
       title: "Guarantees",
       content: (
-        <ChipEditor
-          suggestions={[...GUARANTEE_SUGGESTIONS]}
-          items={knowledge.guarantees}
-          onChange={(next) => patchKnowledge({ guarantees: next })}
-          addPlaceholder="Add a guarantee"
-        />
+        <>
+          <p className="mb-3 text-[12.5px] leading-relaxed text-muted-foreground">
+            I&apos;ll mention these when they&apos;ll actually reassure someone, not just as a list.
+          </p>
+          <ChipEditor
+            suggestions={[...GUARANTEE_SUGGESTIONS]}
+            items={knowledge.guarantees}
+            onChange={(next) => patchKnowledge({ guarantees: next })}
+            addPlaceholder="Add a guarantee"
+          />
+        </>
       ),
     },
     {
@@ -540,20 +563,32 @@ export function BusinessMemory({
       group: "goodToKnow",
       title: "Parking & access",
       content: (
-        <SuggestibleTextarea
-          label="Parking, access, or preparation"
-          value={knowledge.parkingAccess}
-          onChange={(v) => patchKnowledge({ parkingAccess: v })}
-          suggestions={accessSuggestions}
-          placeholder="Or add your own — e.g. Please make sure the stopcock is accessible before we arrive."
-        />
+        <>
+          <p className="mb-3 text-[12.5px] leading-relaxed text-muted-foreground">
+            So I already know before the day, instead of asking the customer to repeat themselves.
+          </p>
+          <SuggestibleTextarea
+            label="Parking, access, or preparation"
+            value={knowledge.parkingAccess}
+            onChange={(v) => patchKnowledge({ parkingAccess: v })}
+            suggestions={accessSuggestions}
+            placeholder="Or add your own — e.g. Please make sure the stopcock is accessible before we arrive."
+          />
+        </>
       ),
     },
     {
       id: "faqs",
       group: "goodToKnow",
       title: "What's something customers ask you almost every day?",
-      content: <FaqEditor faqs={faqs} onChange={(next, ack) => learn("faqs", () => setFaqs(next), ack)} />,
+      content: (
+        <>
+          <p className="mb-3 text-[12.5px] leading-relaxed text-muted-foreground">
+            The fewer times you have to answer the same question yourself, the more this is working.
+          </p>
+          <FaqEditor faqs={faqs} onChange={(next, ack) => learn("faqs", () => setFaqs(next), ack)} />
+        </>
+      ),
     },
   ];
 

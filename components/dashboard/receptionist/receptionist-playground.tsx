@@ -685,6 +685,9 @@ export function ReceptionistPlayground({
              * customer message, answered in each real tone by the real
              * reasoning engine, using whatever's actually been taught
              * so far. Never a hardcoded example line. */}
+            <p className="mb-2.5 text-[12px] leading-relaxed text-muted-foreground">
+              How I sound shapes how much a customer trusts what I say next.
+            </p>
             <div className="space-y-2">
               {TONES.map((t) => {
                 const on = tone === t.value;
@@ -753,6 +756,9 @@ export function ReceptionistPlayground({
             open={open === "behaviours"}
             onToggle={() => setOpen(open === "behaviours" ? null : "behaviours")}
           >
+            <p className="mb-3 text-[12.5px] leading-relaxed text-muted-foreground">
+              These are the things I&apos;ll do every time, without you having to ask.
+            </p>
             <OptionChips
               options={BEHAVIOUR_OPTIONS}
               selected={behaviours}
@@ -784,6 +790,9 @@ export function ReceptionistPlayground({
             open={open === "rules"}
             onToggle={() => setOpen(open === "rules" ? null : "rules")}
           >
+            <p className="mb-3 text-[12.5px] leading-relaxed text-muted-foreground">
+              I&apos;ll never bend on these, even if a customer pushes.
+            </p>
             <RuleList
               options={RULE_OPTIONS}
               selected={rules}
@@ -816,6 +825,9 @@ export function ReceptionistPlayground({
             open={open === "escalation"}
             onToggle={() => setOpen(open === "escalation" ? null : "escalation")}
           >
+            <p className="mb-3 text-[12.5px] leading-relaxed text-muted-foreground">
+              So I know exactly when to stop replying and get you directly, instead of guessing.
+            </p>
             {offersEmergency === false && (
               <p className="mb-3 rounded-lg bg-amber-100/60 px-3 py-2 text-[12px] leading-relaxed text-amber-800">
                 You told me you don&apos;t take emergency call-outs — I already won&apos;t promise a visit. This is just about

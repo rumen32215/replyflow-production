@@ -18,6 +18,16 @@
 
 ---
 
+## Observations from 0.4's tier-consolidation investigation (2026-07-29)
+
+**The tier abstraction is exactly the plumbing a router will need — this is the finding, not a side note.** 0.4 asked "should the small/large tier split be consolidated away, since both resolve to the same model?" The investigation's answer was no (see the Master Execution Plan's 0.4 entry for the full reasoning) — and the reason why is directly relevant here: `ModelTier`, the per-call-site `tier` argument already threaded through `classify.ts`/`generate.ts`, and the env-var-based model mapping in `providers/openai.ts` are already a complete, working routing seam. A future Model Router doesn't need new plumbing to attach to — it needs (a) a real second model worth routing to, and (b) evidence about where it's safe to send traffic. Both are still missing; the wiring isn't.
+
+**Confirmed with full telemetry, not a sample: every real call ever recorded used the same model.** All 122 `ai_usage_events` rows since 0.1 shipped show exactly one distinct `model` value (`gpt-4o-mini`), regardless of `tier`. This isn't a "some calls differ" situation — the two tiers have never once actually diverged in production. Whatever a router eventually optimises for, it's optimising from a genuine blank slate, not adjusting an existing imbalance.
+
+**A concrete gap for router design, surfaced by trying to reason about the tone-preview candidate again:** to know whether the three tone-example calls (or any other call site) could safely move to a cheaper model, a router needs to compare *outcome quality* between models — but `ai_usage_events` has no link to `reply_drafts.confidence`/`requires_escalation`, and tone-preview calls aren't persisted as drafts at all (they're preview-only, never saved). There's currently no way to answer "would a cheaper model have produced an equally good reply here" from data — only cost/token data exists, not quality data. **Recommendation for whoever scopes the Model Router:** decide how outcome quality gets measured per call (even a lightweight signal — e.g. whether a human later edited/rejected a draft that came from a given model) before designing routing rules, not after.
+
+---
+
 ## When to pick this back up
 
 Per the founder's own framing: when a real milestone is reached (meaningful production volume, or a concrete quality/latency/cost problem observed in the wild), design the Model Router from `ai_usage_events` data at that point, and add it to `DOCS/SPECS/ReplyFlow-Master-Execution-Plan.md` as a new, explicitly-scoped task — citing the real numbers gathered here plus whatever's accumulated since.

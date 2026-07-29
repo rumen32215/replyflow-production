@@ -6,11 +6,14 @@ import { decisionCategoryFor, meetsConfidence } from "./decision-categories";
 /**
  * The deterministic Safety Layer (Sprint 9 §6) — not AI. Three checks,
  * all must pass before a reply could ever be considered for auto-send:
- * confidence gate, fact-grounding, escalation category. Sprint 10A's
- * own scope: this evaluates the real logic and persists the result for
- * transparency, but the orchestrator always creates a draft requiring
- * approval regardless of the outcome — auto-send is not implemented
- * until a later sprint (Sprint 9 §14, build-order step 7).
+ * confidence gate, fact-grounding, escalation category. This function
+ * only ever computes and returns `wouldAutoSend`; it never sends
+ * anything itself. The orchestrator (generate-reply.ts) is what
+ * actually acts on it — auto-send is real, but deliberately narrow: a
+ * single lowest-risk category ("general"), and only when the owner has
+ * explicitly opted in via `auto_reply_general_enabled`. Every other
+ * category always creates a draft requiring approval regardless of
+ * this evaluation's outcome.
  */
 export interface SafetyEvaluation {
   category: string;

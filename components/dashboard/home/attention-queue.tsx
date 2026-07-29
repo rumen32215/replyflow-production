@@ -51,15 +51,41 @@ function isEmergencyItem(item: AttentionItem): boolean {
   return item.kind === "waiting_conversation" && item.isEmergency;
 }
 
-export function AttentionQueue({ items }: { items: AttentionItem[] }) {
+/** Master Execution Plan 2.4 — reused as-is for the dedicated
+ * Approvals page (title made configurable, default unchanged so Front
+ * Desk's own rendering is byte-for-byte the same as before).
+ * `totalCount` defaults to `items.length`, but Front Desk passes the
+ * real, uncapped total — this list itself may be capped to an
+ * interruption budget, and the heading should never quietly understate
+ * how many things are actually pending. `seeAllHref` only renders when
+ * there's more than what's shown. */
+export function AttentionQueue({
+  items,
+  title = "Needs your attention",
+  totalCount,
+  seeAllHref,
+}: {
+  items: AttentionItem[];
+  title?: string;
+  totalCount?: number;
+  seeAllHref?: string;
+}) {
   if (items.length === 0) return null;
+  const total = totalCount ?? items.length;
 
   return (
     <SettleCard delay={0.06}>
-      <h2 className="mb-2.5 text-[15px] font-bold tracking-tight">
-        Needs your attention
-        <span className="ml-1.5 font-semibold text-muted-foreground">({items.length})</span>
-      </h2>
+      <div className="mb-2.5 flex items-center justify-between">
+        <h2 className="text-[15px] font-bold tracking-tight">
+          {title}
+          <span className="ml-1.5 font-semibold text-muted-foreground">({total})</span>
+        </h2>
+        {seeAllHref && total > items.length && (
+          <Link href={seeAllHref} className="flex items-center gap-1 text-[12.5px] font-semibold text-primary hover:underline">
+            See all {total} <ArrowRight className="h-3 w-3" />
+          </Link>
+        )}
+      </div>
       <div className="space-y-2">
         {items.map((item, i) => {
           const key = item.kind === "waiting_conversation" ? item.conversationId : item.kind === "draft_work_card" ? item.workCardId : item.draftId;

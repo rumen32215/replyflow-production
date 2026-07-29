@@ -3,34 +3,37 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { motion } from "framer-motion";
-import { CalendarDays, Settings, type LucideIcon } from "lucide-react";
+import { ClipboardCheck, CalendarDays, Settings, type LucideIcon } from "lucide-react";
 import { DASHBOARD_NAV } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 
 /**
  * ReplyFlow v1 Product Blueprint, checklist 2.6 — mobile-only. The
- * desktop sidebar shows all six destinations; a thumb-reachable
- * bottom bar tops out around four, so Hours and Settings (the two
+ * desktop sidebar shows all destinations; a thumb-reachable bottom bar
+ * tops out around four, so Approvals, Hours, and Settings (the
  * non-`primary` DASHBOARD_NAV entries) live here instead — one tap
- * further, in the topbar, never a seventh item competing for the
- * bottom bar's limited room. Was `TopbarNav` (Sprint 8.5) when it
- * carried three desktop-and-mobile secondary destinations; renamed
- * now that its whole reason to exist is mobile-only.
+ * further, in the topbar, never competing for the bottom bar's limited
+ * room. Was `TopbarNav` (Sprint 8.5) when it carried three
+ * desktop-and-mobile secondary destinations; renamed now that its
+ * whole reason to exist is mobile-only.
  */
-const ICONS: Record<"CalendarDays" | "Settings", LucideIcon> = {
+const ICONS: Record<"ClipboardCheck" | "CalendarDays" | "Settings", LucideIcon> = {
+  ClipboardCheck,
   CalendarDays,
   Settings,
 };
 
 const SECONDARY_NAV = DASHBOARD_NAV.filter(
-  (item): item is (typeof DASHBOARD_NAV)[number] & { icon: "CalendarDays" | "Settings" } => !item.primary
+  (item): item is (typeof DASHBOARD_NAV)[number] & { icon: "ClipboardCheck" | "CalendarDays" | "Settings" } => !item.primary
 );
 
 function isActive(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-export function MobileSecondaryNav() {
+/** Master Execution Plan 2.4 — same always-visible-item, badge-carries-urgency
+ * pattern as the desktop sidebar (see sidebar.tsx). */
+export function MobileSecondaryNav({ approvalsCount = 0 }: { approvalsCount?: number }) {
   const pathname = usePathname();
 
   return (
@@ -38,11 +41,12 @@ export function MobileSecondaryNav() {
       {SECONDARY_NAV.map((item) => {
         const Icon = ICONS[item.icon];
         const active = isActive(pathname, item.href);
+        const showBadge = item.href === "/dashboard/approvals" && approvalsCount > 0;
         return (
           <Link
             key={item.href}
             href={item.href}
-            aria-label={item.label}
+            aria-label={showBadge ? `${item.label} (${approvalsCount})` : item.label}
             className={cn(
               "relative flex h-9 w-9 items-center justify-center rounded-full transition-colors",
               active ? "text-primary" : "text-muted-foreground hover:bg-muted hover:text-foreground"
@@ -56,6 +60,9 @@ export function MobileSecondaryNav() {
               />
             )}
             <Icon className="relative h-[17px] w-[17px]" />
+            {showBadge && (
+              <span className="absolute right-0.5 top-0.5 h-2 w-2 rounded-full bg-attention" />
+            )}
           </Link>
         );
       })}

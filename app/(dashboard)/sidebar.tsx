@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { motion } from "framer-motion";
-import { Home, MessagesSquare, Users, Headset, CalendarDays, Settings, type LucideIcon } from "lucide-react";
+import { Home, MessagesSquare, Users, Headset, ClipboardCheck, CalendarDays, Settings, type LucideIcon } from "lucide-react";
 import { Logo } from "@/components/shared/logo";
 import { DASHBOARD_NAV } from "@/lib/constants";
 import { cn } from "@/lib/utils";
@@ -21,6 +21,7 @@ const ICONS: Record<(typeof DASHBOARD_NAV)[number]["icon"], LucideIcon> = {
   MessagesSquare,
   Users,
   Headset,
+  ClipboardCheck,
   CalendarDays,
   Settings,
 };
@@ -30,7 +31,14 @@ function isActive(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-export function Sidebar() {
+/**
+ * Master Execution Plan 2.4 — Approvals is always in the list, not
+ * conditionally shown "only when non-empty" (Experience Architecture
+ * §9's original wording): a nav item that vanishes is a location the
+ * owner can never learn. The count badge carries the "only when there's
+ * something to do" signal instead, without ever moving the item itself.
+ */
+export function Sidebar({ approvalsCount = 0 }: { approvalsCount?: number }) {
   const pathname = usePathname();
 
   return (
@@ -62,6 +70,11 @@ export function Sidebar() {
               )}
               <Icon className="relative h-4 w-4" />
               <span className="relative truncate">{item.label}</span>
+              {item.href === "/dashboard/approvals" && approvalsCount > 0 && (
+                <span className="relative ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-attention px-1 text-[10.5px] font-bold text-attention-foreground">
+                  {approvalsCount}
+                </span>
+              )}
             </Link>
           );
         })}

@@ -273,6 +273,11 @@ export default async function HomePage() {
     draftWorkCards: draftWorkCardItems,
     pendingReplies: pendingReplyItems,
   });
+  // Master Execution Plan 2.4 — the real total, before the interruption
+  // budget caps what's actually shown here (buildAttentionQueue's own
+  // default limit of 8) — the heading below must never quietly
+  // understate how many things are genuinely pending.
+  const attentionQueueTotal = waitingConversationItems.length + draftWorkCardItems.length + pendingReplyItems.length;
 
   /* -------------------------------- Today's work -------------------------------- */
 
@@ -457,7 +462,7 @@ export default async function HomePage() {
 
       {journeyComplete && (
         <div className="space-y-6">
-          <AttentionQueue items={attentionQueue} />
+          <AttentionQueue items={attentionQueue} totalCount={attentionQueueTotal} seeAllHref="/dashboard/approvals" />
           <TodaysWork items={todaysWorkItems} />
           <WaitingForCustomer items={waitingForCustomerItems} />
           <RecentlyCompleted items={recentlyCompletedItems} />

@@ -13,9 +13,11 @@ import { MobileSecondaryNav } from "@/app/(dashboard)/mobile-secondary-nav";
 export function Topbar({
   businessName,
   logoUrl,
+  approvalsCount = 0,
 }: {
   businessName: string;
   logoUrl: string | null;
+  approvalsCount?: number;
 }) {
   return (
     <header className="flex h-[60px] shrink-0 items-center justify-between border-b border-border bg-card px-4 md:h-[73px] md:px-8">
@@ -25,7 +27,7 @@ export function Topbar({
       <div className="hidden md:block" />
       <div className="flex items-center gap-2 md:gap-3">
         <div className="flex items-center gap-1 md:hidden">
-          <MobileSecondaryNav />
+          <MobileSecondaryNav approvalsCount={approvalsCount} />
         </div>
         <Avatar className="h-9 w-9 border border-border">
           {logoUrl && <AvatarImage src={logoUrl} alt={businessName} />}

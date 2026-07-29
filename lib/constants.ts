@@ -28,6 +28,7 @@ export const DASHBOARD_NAV = [
   { href: "/dashboard/conversations", label: "Conversations", icon: "MessagesSquare", primary: true },
   { href: "/dashboard/customers", label: "Customers", icon: "Users", primary: true },
   { href: "/dashboard/receptionist", label: "Receptionist", icon: "Headset", primary: true },
+  { href: "/dashboard/approvals", label: "Approvals", icon: "ClipboardCheck", primary: false },
   { href: "/dashboard/availability", label: "Hours", icon: "CalendarDays", primary: false },
   { href: "/dashboard/settings", label: "Settings", icon: "Settings", primary: false },
 ] as const;

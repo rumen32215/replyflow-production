@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
-import { Bell, Lock, UserCircle } from "lucide-react";
+import { Bell, LifeBuoy, Lock, UserCircle } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { SettleCard } from "@/components/shared/motion";
 import { SettingsPasswordForm } from "@/components/dashboard/settings-password-form";
@@ -27,6 +27,8 @@ export default async function SettingsPage() {
   if (!business) {
     redirect("/welcome");
   }
+
+  const supportEmail = process.env.SUPPORT_EMAIL || null;
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">
@@ -70,7 +72,32 @@ export default async function SettingsPage() {
         <SettingsNotifications />
       </SettleCard>
 
-      <SettleCard delay={0.17}>
+      {/* Master Execution Plan 1.5 — only shown once a real inbox is
+       * actually monitored (SUPPORT_EMAIL set). Never claim a support
+       * channel exists before someone's genuinely watching it — that
+       * would be the opposite of "the owner should always feel
+       * supported," a claim with no backing. */}
+      {supportEmail && (
+        <SettleCard delay={0.17} className="rounded-2xl border border-border bg-card p-6">
+          <div className="mb-1 flex items-center gap-2.5">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+              <LifeBuoy className="h-4 w-4" />
+            </div>
+            <h2 className="text-[15px] font-bold">Get help</h2>
+          </div>
+          <p className="mb-3 text-[13px] text-muted-foreground">
+            Something wrong, or just unsure about anything — reach out directly. We reply within one business day, usually sooner.
+          </p>
+          <a
+            href={`mailto:${supportEmail}`}
+            className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-muted/40 px-4 py-2.5 text-[13.5px] font-semibold text-primary hover:bg-muted"
+          >
+            {supportEmail}
+          </a>
+        </SettleCard>
+      )}
+
+      <SettleCard delay={0.21}>
         <SettingsDangerZone businessName={business.business_name} />
       </SettleCard>
     </div>

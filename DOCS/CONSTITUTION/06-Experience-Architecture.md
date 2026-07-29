@@ -69,15 +69,17 @@ A calendar answers "what's on this date." A diary answers "what does my day look
 
 Already correctly reframed — an explicit "teaching playground," already the post-onboarding landing point. Endorse and finish, don't rebuild.
 
-**Still missing:** why each question matters, stated in-page next to the field, not just a label. And visible improvement over time — a short, honest "she's gotten better at X" sourced from real correction history, never invented. This depends on the correction/learning loop described in document 07, which is currently the least mature part of the whole pipeline — this specific improvement can't ship honestly before that exists.
+**"Why each question matters" — done (Master Execution Plan 2.5).** Audited field-by-field: the highest-stakes fields (emergency call-outs, service areas, declined jobs) already carried a real explanatory line, added during the Hiring Experience redesign — the gap was real but partial, not the every-field absence this section originally implied. The remaining fields that had a label or a question and nothing else — tone, behaviours, house rules, and escalation on the Receptionist page; business details, personality, services, ways to pay, guarantees, parking & access, and FAQs on the Business page — each now carry the same one-line, in-her-voice treatment (e.g. "I'll only take on enquiries that match what's here — anything else, I'll say so honestly"), matching the exact pattern already established for the fields that had it. No new component: every line reuses the existing `<p className="text-muted-foreground">` placed above the field's editor, the same convention "Areas you cover" and the emergency call-out toggle already used.
+
+**Still missing:** visible improvement over time — a short, honest "she's gotten better at X" sourced from real correction history, never invented. This depends on the correction/learning loop described in document 07, which is currently the least mature part of the whole pipeline — this specific improvement can't ship honestly before that exists.
 
 ---
 
-## 6. Knowledge — reconciling input and output
+## 6. Knowledge — reconciling input and output — superseded, not built as described (see below)
 
-Two real pages already do real jobs but their relationship isn't obvious: `business` holds what the owner taught — the input. `everything-i-know` shows confidence, gaps, and recent changes — the output.
+This section described an earlier state of the product. `business` and `everything-i-know` are no longer two real pages with an unclear relationship — the V1 First-Run redesign (`DOCS/SPECS/ReplyFlow-V1-First-Run-Proposal.md` §3) merged both into one page, `/dashboard/receptionist` ("Teach your receptionist"): `business-memory.tsx` (the input — what the owner taught) and `receptionist-playground.tsx` (the output — confidence, gaps, tone) are rendered together on that single page, in that order. `business` and `everything-i-know` are now themselves the legacy redirect stubs — see §9.
 
-**Don't merge them** — the distinction is real. Make the relationship explicit instead: **Knowledge** is one nav destination that opens on the confidence view (because "what does she know" is the actual question an owner asks), with teaching one tap away from any gap it identifies.
+This is a *stronger* answer to the original question than the one this section proposed: rather than one nav destination linking between two still-separate pages, there's no navigation required at all — a gap identified anywhere (Front Desk's Recommendations, a Work Card, a customer record) already deep-links straight to the exact field via `/dashboard/receptionist?topic=<id>` (`lib/brain/reasoning.ts`), and the page itself scrolls to and highlights that field on arrival. No code change was needed for Master Execution Plan 2.5 — this section is corrected to describe reality rather than superseded work being redone.
 
 ---
 
@@ -111,12 +113,12 @@ The load-bearing structural change: **Test real conversations** and **See exactl
 | **Work Cards** | What work do I have? | Detail page built (§2); no nav destination yet, deliberately | Done for now — nav list only if a real need emerges |
 | **Diary** | Where am I going? | Real schedule + rules, both conversational (§3) | Done |
 | **Customers** | Who are these people? | List and detail both real and complete (§4) | Done |
-| **Receptionist** | What have I taught her? | Exists, already well-framed | Keep, extend (§5) |
-| **Knowledge** | What does she know? | Exists as two pages, relationship unclear | Keep both, connect them (§6) |
+| **Receptionist** | What have I taught her? | Exists, well-framed, "why it matters" copy complete (§5) | Done — Master Execution Plan 2.5 |
+| **Knowledge** | What does she know? | Merged into Receptionist entirely, not a separate nav item (§6) | Done, superseded (§6) |
 | **Approvals** | What needs my judgement? | Dedicated queue, always in nav, real pending-count badge (§7) | Done — Master Execution Plan 2.4 |
 | **Settings** | How does my business operate? | Exists, not in main nav | Keep out of primary nav |
 
-**Two legacy stubs worth a formal removal pass:** `business-profile` and `ai-receptionist` are dead pages that only redirect to their real counterparts (`business` and `receptionist`). Costs nothing functionally, but every lingering redirect is a small tax on anyone reading the codebase — worth cleaning up once nothing external still links to the old URLs.
+**Two legacy redirect stubs, verified — kept deliberately, not removed (Master Execution Plan 2.5).** This section previously named `business-profile` and `ai-receptionist`; those specific routes no longer exist under those names — investigation found the current stubs are `business` and `everything-i-know` (both `redirect()`-only pages into `/dashboard/receptionist`, see §6), and confirmed nothing internal (no component, nav config, or doc-referenced link) still points at either old URL — every gap-to-teach link already targets `/dashboard/receptionist?topic=...` directly. They're being kept rather than deleted: both were real, live, bookmarkable destinations for a meaningful stretch of the product's life, so a genuine returning owner's saved link is a real possibility this redirect protects against at zero ongoing cost — deleting them would trade that protection for a marginal codebase-tidiness gain with no corresponding benefit.
 
 **On the eight-item nav:** eight is more than the "four things, always visible" the sidebar was originally built around. Not every item needs equal permanence — Front Desk, Jobs, Diary, and Approvals are the four an owner needs open constantly; Customers, Receptionist, Knowledge, and Settings are visited with intent, not glanced at. Approvals shipped always-visible with a count badge rather than the "only when non-empty" wording originally here — see §7 for why. The nav should reflect that weight difference.
 
@@ -126,9 +128,9 @@ The load-bearing structural change: **Test real conversations** and **See exactl
 
 1. ~~**Work Cards (page and object)**~~ — shipped (Master Execution Plan 2.1), object fully specified in `DOCS/SPECS/Work-Card-Object.md`.
 2. ~~**Approvals (dedicated queue)**~~ — shipped (Master Execution Plan 2.4, §7).
-3. **Handover ("Meet Your Receptionist")** — fully designed in document 04, not yet built.
-4. **Test conversations in onboarding** — fully designed in document 04, not yet built.
-5. **Customer communication preferences and previous quotations** — no data home currently exists (§4).
+3. ~~**Handover ("Meet Your Receptionist")**~~ — shipped; confirmed live in the Master Execution Plan's "Already complete" table (A1) and directly against the codebase (`components/dashboard/receptionist/meet-your-receptionist.tsx`). This section's "not yet built" was stale, corrected during Master Execution Plan 2.5.
+4. ~~**Test conversations in onboarding**~~ — shipped; confirmed live (A2), `/dashboard/receptionist/try`, routed to directly from the handover flow. Corrected alongside item 3.
+5. ~~**Customer communication preferences and previous quotations**~~ — shipped (Master Execution Plan 2.3, §4): a real communication-preference column plus a previous-quotations card, both on the customer detail page. Stale entry corrected during Master Execution Plan 2.5.
 6. **"What changed" as an explicit diary signal** — today's diary shows state, not change (§3).
 7. **Visible receptionist improvement over time** — blocked on the correction/learning loop (document 07) not existing yet (§5).
 

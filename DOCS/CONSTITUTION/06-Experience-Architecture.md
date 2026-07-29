@@ -20,7 +20,7 @@ Not "wrong eventually." Wrong today, regardless of how much real data is on it. 
 
 **Cut, as specified:** "Business Health" as owner-facing language is gone entirely — no tile grid anywhere on the page. The counts it used to show now live implicitly in each section's own count (e.g. "Needs your attention (3)"), never a separate block competing for attention.
 
-**Not fully done — see §7:** the Approvals queue described in §7 as its own dedicated page still doesn't exist as a nav destination; approvals are aggregated business-wide for the first time (a real gap this closed — pending reply drafts were never counted anywhere before), but they live inside Front Desk's attention queue, not a separate screen. Left open deliberately, not guessed at.
+**Approvals — done, see §7:** the dedicated queue §7 called for now exists at `/dashboard/approvals`, reusing this section's own attention queue completely unchanged. Front Desk's own heading here is honest about its interruption-budget cap now too — it shows the real total (never silently understating it once more than 8 things are pending) with a "See all" link into the full list.
 
 ---
 
@@ -81,13 +81,13 @@ Two real pages already do real jobs but their relationship isn't obvious: `busin
 
 ---
 
-## 7. Approvals — the missing dedicated queue
+## 7. Approvals — the missing dedicated queue — implemented (Master Execution Plan 2.4)
 
-No page currently shows every pending decision across the business in one place — approval only happens inline, one conversation at a time, with Front Desk showing an aggregate count but no way to act on it directly.
+No page used to show every pending decision across the business in one place — approval only happened inline, one conversation at a time, with Front Desk showing an aggregate count but no way to act on it directly.
 
-This is the interruption-budget principle (document 01) made literal: **the fewer things land here, the better the product is working.** A long queue isn't a sign this page needs better design — it's a signal the receptionist isn't yet trusted with enough, and should point the owner toward autonomy expansion (document 08), not toward a better inbox. Each item should carry the same Work-Card discipline as §2 — full context to decide in one glance, never a bare message requiring the owner to go find the conversation to understand what's even being asked.
+This is the interruption-budget principle (document 01) made literal: **the fewer things land here, the better the product is working.** A long queue isn't a sign this page needs better design — it's a signal the receptionist isn't yet trusted with enough, and should point the owner toward autonomy expansion (document 08), not toward a better inbox. Each item carries the same Work-Card discipline as §2 — full context to decide in one glance, never a bare message requiring the owner to go find the conversation to understand what's even being asked.
 
-**Partially built (Owner Experience 01):** the aggregation problem is solved — draft Work Cards and pending AI-drafted replies are now counted and ranked business-wide for the first time, inside Front Desk's Needs Your Attention queue (§1). What's still missing is this as its own dedicated nav destination, separate from Front Desk's daily view — left open deliberately rather than built ahead of a real need for it.
+**Built.** `/dashboard/approvals` reuses `buildAttentionQueue()`/`AttentionQueue` from §1 completely unchanged, with its own independent, uncapped data fetch (deliberately not shared with Front Desk's own query, so nothing on this page can affect what Front Desk shows). One deliberate deviation from this section's original phrasing, stated plainly rather than silently: Approvals is **always** in the nav, not shown only when non-empty. A nav item that vanishes is a location the owner can never actually learn — the "fewer things land here" signal is instead carried by a real pending-count badge (computed once in the dashboard layout, shared by the nav badge, Front Desk's own heading, and this page's total, so all three always agree), which simply isn't there when the count is zero.
 
 ---
 
@@ -113,19 +113,19 @@ The load-bearing structural change: **Test real conversations** and **See exactl
 | **Customers** | Who are these people? | List and detail both real and complete (§4) | Done |
 | **Receptionist** | What have I taught her? | Exists, already well-framed | Keep, extend (§5) |
 | **Knowledge** | What does she know? | Exists as two pages, relationship unclear | Keep both, connect them (§6) |
-| **Approvals** | What needs my judgement? | Doesn't exist; only inline | **Build** (§7) |
+| **Approvals** | What needs my judgement? | Dedicated queue, always in nav, real pending-count badge (§7) | Done — Master Execution Plan 2.4 |
 | **Settings** | How does my business operate? | Exists, not in main nav | Keep out of primary nav |
 
 **Two legacy stubs worth a formal removal pass:** `business-profile` and `ai-receptionist` are dead pages that only redirect to their real counterparts (`business` and `receptionist`). Costs nothing functionally, but every lingering redirect is a small tax on anyone reading the codebase — worth cleaning up once nothing external still links to the old URLs.
 
-**On the eight-item nav:** eight is more than the "four things, always visible" the sidebar was originally built around. Not every item needs equal permanence — Front Desk, Jobs, Diary, and Approvals are the four an owner needs open constantly (Approvals only when non-empty); Customers, Receptionist, Knowledge, and Settings are visited with intent, not glanced at. The nav should reflect that weight difference.
+**On the eight-item nav:** eight is more than the "four things, always visible" the sidebar was originally built around. Not every item needs equal permanence — Front Desk, Jobs, Diary, and Approvals are the four an owner needs open constantly; Customers, Receptionist, Knowledge, and Settings are visited with intent, not glanced at. Approvals shipped always-visible with a count badge rather than the "only when non-empty" wording originally here — see §7 for why. The nav should reflect that weight difference.
 
 ---
 
 ## 10. Missing concepts — the complete list
 
 1. ~~**Work Cards (page and object)**~~ — shipped (Master Execution Plan 2.1), object fully specified in `DOCS/SPECS/Work-Card-Object.md`.
-2. **Approvals (dedicated queue)** — doesn't exist (§7).
+2. ~~**Approvals (dedicated queue)**~~ — shipped (Master Execution Plan 2.4, §7).
 3. **Handover ("Meet Your Receptionist")** — fully designed in document 04, not yet built.
 4. **Test conversations in onboarding** — fully designed in document 04, not yet built.
 5. **Customer communication preferences and previous quotations** — no data home currently exists (§4).

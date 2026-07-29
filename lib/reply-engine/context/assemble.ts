@@ -39,7 +39,7 @@ export async function assembleContext(input: AssembleContextInput): Promise<Repl
   const jobRowsPromise = needsJobRows
     ? supabase
         .from("work_cards")
-        .select("id, issue, status, scheduled_for, completed_at, notes, created_at")
+        .select("id, issue, status, scheduled_for, completed_at, notes, created_at, estimated_value")
         .eq("business_id", businessId)
         .eq("customer_name", displayName)
         .order("created_at", { ascending: true })
@@ -92,6 +92,10 @@ export async function assembleContext(input: AssembleContextInput): Promise<Repl
     completedAt: j.completed_at,
     notes: j.notes,
     createdAt: j.created_at,
+    // Present on the shared type for the Customers page (2.3); facts.ts
+    // deliberately never reads this field into the prompt — "price is
+    // never her territory" (Work-Card-Object.md §3).
+    estimatedValue: j.estimated_value,
   }));
 
   const context: ReplyContext = {

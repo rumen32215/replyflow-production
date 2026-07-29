@@ -23,6 +23,9 @@ export interface CustomerJob {
   completedAt: string | null;
   notes: string | null;
   createdAt: string;
+  /** Owner-entered only (Work-Card-Object.md §3: "price is never her
+   * territory") — never AI-suggested. Master Execution Plan 2.3. */
+  estimatedValue: number | null;
 }
 
 /**

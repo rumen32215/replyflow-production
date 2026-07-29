@@ -39,7 +39,7 @@ export default async function CustomerDetailPage({ params }: { params: { id: str
 
   const { data: conversation } = await supabase
     .from("conversations")
-    .select("id, business_id, customer_name, customer_phone, status, last_message_at, created_at")
+    .select("id, business_id, customer_name, customer_phone, status, last_message_at, created_at, communication_preference")
     .eq("id", params.id)
     .maybeSingle();
   if (!conversation) notFound();
@@ -47,7 +47,7 @@ export default async function CustomerDetailPage({ params }: { params: { id: str
   const [{ data: jobRows }, { data: business }, { data: config }] = await Promise.all([
     supabase
       .from("work_cards")
-      .select("id, issue, status, scheduled_for, completed_at, notes, created_at")
+      .select("id, issue, status, scheduled_for, completed_at, notes, created_at, estimated_value")
       .eq("conversation_id", conversation.id)
       .order("created_at", { ascending: true }),
     supabase
@@ -70,6 +70,7 @@ export default async function CustomerDetailPage({ params }: { params: { id: str
     completedAt: j.completed_at,
     notes: j.notes,
     createdAt: j.created_at,
+    estimatedValue: j.estimated_value,
   }));
 
   const name = conversation.customer_name || conversation.customer_phone;
@@ -193,7 +194,13 @@ export default async function CustomerDetailPage({ params }: { params: { id: str
 
       <div className="grid flex-1 grid-cols-1 gap-5 p-5 lg:grid-cols-[1fr_320px] lg:p-6">
         <div className="space-y-5">
-          <RelationshipOverview summary={summary} completedJobCount={completedJobCount} jobs={jobs} />
+          <RelationshipOverview
+            summary={summary}
+            completedJobCount={completedJobCount}
+            jobs={jobs}
+            conversationId={conversation.id}
+            communicationPreference={conversation.communication_preference}
+          />
           <RelationshipTimeline events={timeline} />
         </div>
         <AIInsightsPanel

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { ensureBusinessRow } from "@/lib/business";
 import { DAY_KEYS, defaultAvailability, type DayKey } from "@/lib/availability";
+import { recordProductEvent } from "@/lib/product-events";
 
 export const dynamic = "force-dynamic";
 
@@ -114,6 +115,14 @@ export async function POST(request: Request) {
   if (updateError) {
     return NextResponse.json({ error: updateError.message }, { status: 500 });
   }
+
+  // Master Execution Plan 3.2 — genuinely new: onboarding_completed is
+  // a boolean with no history behind it (every prior update just
+  // overwrites it) — this is the only durable record of when a
+  // business actually finished the signup wizard. The early return
+  // above (business.onboarding_completed already true) guarantees this
+  // line only runs on a genuine first completion, never a repeat visit.
+  await recordProductEvent({ eventType: "onboarding.signup_completed", businessId: business.id });
 
   return NextResponse.json({ ok: true, alreadyCompleted: false });
 }

@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { sendReplyToCustomer } from "@/lib/reply-engine/send";
+import { recordProductEvent } from "@/lib/product-events";
 
 export const runtime = "nodejs";
 
@@ -62,6 +63,12 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
       .eq("id", draft.id)
       .select()
       .single();
+    // Master Execution Plan 3.2 — status='rejected'/resolved_at already
+    // make this queryable directly from reply_drafts; recorded here too
+    // so approve/edit/reject live in one consistent stream for the
+    // approve/edit/reject ratio 3.4 wants, rather than three different
+    // derivations.
+    await recordProductEvent({ eventType: "draft.rejected", businessId: draft.business_id, context: { draftId: draft.id } });
     return NextResponse.json({ draft: updated });
   }
 
@@ -75,6 +82,10 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
       .eq("id", draft.id)
       .select()
       .single();
+    // Master Execution Plan 3.2 — genuinely new: editing never touched
+    // status/resolved_at before this, so "a draft was edited, and when"
+    // had no queryable trace anywhere prior to this event.
+    await recordProductEvent({ eventType: "draft.edited", businessId: draft.business_id, context: { draftId: draft.id } });
     return NextResponse.json({ draft: updated });
   }
 
@@ -102,6 +113,15 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     .eq("id", draft.id)
     .select()
     .single();
+
+  // Master Execution Plan 3.2 — genuinely new: reply_drafts.status
+  // lands on the identical 'sent' value whether an owner explicitly
+  // approved this or the reply engine auto-sent it (generate-reply.ts's
+  // own auto-send path) — status alone can't distinguish "an owner
+  // took this action" from "the system did," which is exactly what
+  // "draft approve/edit/reject" is meant to measure. Only ever fired
+  // here, on this owner-facing route, never from auto-send.
+  await recordProductEvent({ eventType: "draft.approved", businessId: draft.business_id, context: { draftId: draft.id } });
 
   return NextResponse.json({ draft: updated });
 }

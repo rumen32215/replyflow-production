@@ -11,7 +11,15 @@ const PUBLIC_PATHS = ["/login", "/signup", "/forgot-password", "/verify-email"];
  * bounced to / (which then routes them onward — see app/page.tsx).
  */
 export async function middleware(request: NextRequest) {
-  let response = NextResponse.next({ request: { headers: request.headers } });
+  // Master Execution Plan 3.1 — the dashboard layout needs to know the
+  // current path (to exempt /dashboard/settings from the subscription
+  // gate, so a blocked owner can always reach billing to fix it), and
+  // Server Components have no built-in way to read it. Passing it
+  // through as a request header is the standard, documented way to
+  // make it available to next/headers() downstream.
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.set("x-pathname", request.nextUrl.pathname);
+  let response = NextResponse.next({ request: { headers: requestHeaders } });
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,

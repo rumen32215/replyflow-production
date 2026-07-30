@@ -54,7 +54,17 @@ export async function POST(request: Request) {
       const placeholderName = user.email ? `${user.email.split("@")[0]}'s Business` : "My Business";
       const { data: created, error: createError } = await service
         .from("businesses")
-        .insert({ owner_id: user.id, business_name: placeholderName, phone: phoneDetails.display_phone_number })
+        .insert({
+          owner_id: user.id,
+          business_name: placeholderName,
+          phone: phoneDetails.display_phone_number,
+          // Master Execution Plan 3.1 — this route is a second, real
+          // business-creation path outside lib/business.ts's own
+          // ensureBusinessRow (used when WhatsApp connects before any
+          // businesses row exists yet); it needs the same trial window
+          // a normal signup gets, not a silent gap that never expires.
+          trial_ends_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+        })
         .select("id")
         .single();
       if (createError) throw createError;

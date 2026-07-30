@@ -26,6 +26,12 @@ const NEW_BUSINESS_DEFAULTS = {
   onboarding_completed: false,
 } as const;
 
+// Master Execution Plan 3.1 — matches the "7-day free trial" already
+// promised at signup (components/auth/signup-form.tsx). Computed fresh
+// per call, never a column default, so it's always anchored to the
+// real moment this specific business was created.
+const TRIAL_DURATION_MS = 7 * 24 * 60 * 60 * 1000;
+
 export type BusinessRow = {
   id: string;
   business_name: string;
@@ -50,7 +56,11 @@ export async function ensureBusinessRow(
 
   const { data: created, error: insertError } = await supabase
     .from("businesses")
-    .insert({ owner_id: ownerId, ...NEW_BUSINESS_DEFAULTS })
+    .insert({
+      owner_id: ownerId,
+      ...NEW_BUSINESS_DEFAULTS,
+      trial_ends_at: new Date(Date.now() + TRIAL_DURATION_MS).toISOString(),
+    })
     .select(select)
     .single();
 

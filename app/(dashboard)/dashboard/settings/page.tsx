@@ -1,11 +1,13 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
-import { Bell, LifeBuoy, Lock, UserCircle } from "lucide-react";
+import { Bell, CreditCard, LifeBuoy, Lock, UserCircle } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { SettleCard } from "@/components/shared/motion";
 import { SettingsPasswordForm } from "@/components/dashboard/settings-password-form";
 import { SettingsNotifications } from "@/components/dashboard/settings-notifications";
+import { SettingsBilling } from "@/components/dashboard/settings-billing";
 import { SettingsDangerZone } from "@/components/dashboard/settings-danger-zone";
+import { describeSubscriptionGate, type SubscriptionStatus } from "@/lib/billing";
 
 export const metadata: Metadata = { title: "Settings — ReplyFlow" };
 
@@ -18,7 +20,7 @@ export default async function SettingsPage() {
 
   const { data: business, error: businessError } = await supabase
     .from("businesses")
-    .select("id, business_name")
+    .select("id, business_name, subscription_status, trial_ends_at, stripe_customer_id")
     .eq("owner_id", user.id)
     .maybeSingle();
   // A real query error is not "onboarding incomplete" — see the
@@ -29,6 +31,11 @@ export default async function SettingsPage() {
   }
 
   const supportEmail = process.env.SUPPORT_EMAIL || null;
+  const subscriptionGate = describeSubscriptionGate({
+    status: business.subscription_status as SubscriptionStatus,
+    trialEndsAt: business.trial_ends_at,
+    now: new Date(),
+  });
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">
@@ -72,13 +79,28 @@ export default async function SettingsPage() {
         <SettingsNotifications />
       </SettleCard>
 
+      <SettleCard delay={0.17} className="rounded-2xl border border-border bg-card p-6">
+        <div className="mb-1 flex items-center gap-2.5">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+            <CreditCard className="h-4 w-4" />
+          </div>
+          <h2 className="text-[15px] font-bold">Billing</h2>
+        </div>
+        <p className="mb-4 text-[13px] text-muted-foreground">Manage your subscription.</p>
+        <SettingsBilling
+          status={business.subscription_status as SubscriptionStatus}
+          daysLeftInTrial={subscriptionGate.daysLeftInTrial}
+          hasStripeCustomer={Boolean(business.stripe_customer_id)}
+        />
+      </SettleCard>
+
       {/* Master Execution Plan 1.5 — only shown once a real inbox is
        * actually monitored (SUPPORT_EMAIL set). Never claim a support
        * channel exists before someone's genuinely watching it — that
        * would be the opposite of "the owner should always feel
        * supported," a claim with no backing. */}
       {supportEmail && (
-        <SettleCard delay={0.17} className="rounded-2xl border border-border bg-card p-6">
+        <SettleCard delay={0.21} className="rounded-2xl border border-border bg-card p-6">
           <div className="mb-1 flex items-center gap-2.5">
             <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
               <LifeBuoy className="h-4 w-4" />
@@ -97,7 +119,7 @@ export default async function SettingsPage() {
         </SettleCard>
       )}
 
-      <SettleCard delay={0.21}>
+      <SettleCard delay={0.25}>
         <SettingsDangerZone businessName={business.business_name} />
       </SettleCard>
     </div>

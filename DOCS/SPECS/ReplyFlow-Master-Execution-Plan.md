@@ -300,7 +300,7 @@ Every task states: **Objective**, **Why** (the specific Founder Constitution lin
 
 *The actual cutover — not more building, but turning on what Phases 0–3 made responsible to turn on.*
 
-### 4.1 Go/no-go review against this plan
+### 4.1 Go/no-go review against this plan — audit complete; verdict is NO-GO pending founder action
 - **Objective:** Confirm every Phase 0 and Phase 1 item is genuinely complete, not just scheduled, before opening billing to real customers.
 - **Why:** The whole point of sequencing this plan the way it's sequenced — skipping this check defeats the purpose of the ordering.
 - **Dependencies:** All of Phase 0, Phase 1, and 3.1.
@@ -309,6 +309,7 @@ Every task states: **Objective**, **Why** (the specific Founder Constitution lin
 - **Risk if postponed:** N/A — this is the gate itself.
 - **Success criteria:** A named person confirms each Phase 0/1 item's success criteria has actually been met.
 - **Blocks:** Enabling real billing.
+- **Shipped as:** `DOCS/SPECS/ReplyFlow-Go-No-Go-Review.md`. This task's own success criteria explicitly wants a named person's confirmation, not an engineering check — so this session's contribution is the honest, re-verified input that confirmation needs, with a literal sign-off block at the end for the founder, not a self-issued pass. Every Phase 0/1 item plus 3.1 (the plan's own named dependency) was checked against its real current state, re-verified against live production today rather than trusted from each task's own older completion notes — the `product_events` migration is still unapplied, `SUPPORT_EMAIL`/`ADMIN_EMAILS`/Stripe keys are all still unset (confirmed via zero real Stripe customers across all 21 real businesses), and one real `critical` error_events row was found and correctly identified as this session's own Task 3.1 test artifact rather than mistaken for a real incident. **Overall verdict: NO-GO today** — every item that was engineering's to build is built and verified; what remains is entirely founder-or-external action (Stripe keys, a Supabase plan decision, an alert webhook URL, a real support address, a qualified legal review), none of which further engineering work can substitute for.
 
 ### 4.2 Initial pilot cohort
 - **Objective:** A small, founder-led first cohort (per the existing `DOCS/SPECS/ReplyFlow-Pilot-Plan.md`), sourced via direct outreach and trade-specific communities rather than any wide channel, matching the Business Blueprint's own marketing findings.

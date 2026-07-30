@@ -57,11 +57,16 @@ export function SettingsBilling({
           ? "Your last payment didn't go through. Update your card to avoid any interruption."
           : "Your subscription has been cancelled.";
 
-  // Once a Stripe customer exists (they've been through Checkout at
-  // least once), all management — including resubscribing after a
-  // cancellation — happens in Stripe's own portal rather than a second
-  // custom checkout flow.
-  const showManage = hasStripeCustomer && status !== "trialing";
+  // Stripe's Customer Portal manages a *live* subscription (update
+  // card, cancel) — it's not the right surface to start a brand new
+  // one. A cancelled subscription (even though a stripe_customer_id
+  // still exists from before) needs real Checkout instead, same as
+  // trialing. A business grandfathered active with no Stripe customer
+  // at all (every pre-billing account) has nothing to do and no button
+  // that could honestly do anything — Checkout would just reject it as
+  // already active.
+  const showManage = hasStripeCustomer && (status === "active" || status === "past_due");
+  const showSubscribe = !showManage && (status === "trialing" || status === "canceled" || hasStripeCustomer);
 
   return (
     <div className="space-y-3">
@@ -70,15 +75,17 @@ export function SettingsBilling({
         <span className={cn("rounded-full px-2.5 py-1 text-[11.5px] font-bold", statusInfo.className)}>{statusInfo.label}</span>
       </div>
       <p className="text-[13px] text-muted-foreground">{description}</p>
-      <button
-        type="button"
-        onClick={() => go(showManage ? "portal" : "checkout")}
-        disabled={loading}
-        className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-[13.5px] font-semibold text-primary-foreground shadow-sm hover:bg-primary/90 disabled:opacity-60"
-      >
-        {loading && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-        {showManage ? "Manage billing" : "Subscribe now"}
-      </button>
+      {(showManage || showSubscribe) && (
+        <button
+          type="button"
+          onClick={() => go(showManage ? "portal" : "checkout")}
+          disabled={loading}
+          className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-[13.5px] font-semibold text-primary-foreground shadow-sm hover:bg-primary/90 disabled:opacity-60"
+        >
+          {loading && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+          {showManage ? "Manage billing" : "Subscribe now"}
+        </button>
+      )}
       {error && <p className="text-[12.5px] text-destructive">{error}</p>}
     </div>
   );

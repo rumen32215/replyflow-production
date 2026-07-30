@@ -32,9 +32,14 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     <div className="min-h-screen bg-slate-950 text-slate-100">
       <header className="border-b border-slate-800 bg-slate-900 px-6 py-3">
         <div className="mx-auto flex max-w-6xl items-center justify-between">
-          <Link href="/admin" className="text-[14px] font-bold tracking-tight">
-            ReplyFlow Admin
-          </Link>
+          <div className="flex items-center gap-5">
+            <Link href="/admin" className="text-[14px] font-bold tracking-tight">
+              ReplyFlow Admin
+            </Link>
+            <Link href="/admin/metrics" className="text-[12.5px] text-slate-400 hover:text-slate-200">
+              Metrics
+            </Link>
+          </div>
           <div className="flex items-center gap-4 text-[12.5px] text-slate-400">
             <span>{user.email}</span>
             <Link href="/dashboard" className="hover:text-slate-200">

@@ -45,7 +45,12 @@ export async function middleware(request: NextRequest) {
 
   const path = request.nextUrl.pathname;
   const isPublicPath = PUBLIC_PATHS.some((p) => path.startsWith(p));
-  const isProtectedPath = path.startsWith("/onboarding") || path.startsWith("/dashboard");
+  // Master Execution Plan 3.3 — /admin needs a real authenticated
+  // session at minimum (defence in depth, before the request even
+  // reaches app/admin/layout.tsx); the actual admin-allowlist check
+  // happens there, not here, since it needs a real DB-adjacent lookup
+  // (lib/admin.ts) that's simpler to keep out of the edge runtime.
+  const isProtectedPath = path.startsWith("/onboarding") || path.startsWith("/dashboard") || path.startsWith("/admin");
 
   if (!user && isProtectedPath) {
     return NextResponse.redirect(new URL("/login", request.url));

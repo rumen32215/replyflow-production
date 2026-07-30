@@ -10,9 +10,15 @@ import { Acknowledgement, useAcknowledgement } from "@/components/shared/acknowl
 import { TypingDots } from "@/components/shared/typed-message";
 import { createClient } from "@/lib/supabase/client";
 import { buildStory, groupForStatus } from "@/lib/conversations";
-import { joinList } from "@/lib/knowledge";
 import type { WorkCardDraftFields } from "@/lib/work-card";
 import { cn } from "@/lib/utils";
+// Imported AND re-exported — receptionist-playground.tsx and
+// test-conversation.tsx already import factSourceSummary from this
+// file specifically; kept working unchanged rather than touching two
+// more files for a rename that isn't otherwise needed, while this file
+// still uses it directly below.
+import { factSourceSummary } from "@/lib/fact-source-summary";
+export { factSourceSummary } from "@/lib/fact-source-summary";
 
 interface ExistingWorkCard {
   id: string;
@@ -84,24 +90,6 @@ export function ConfidenceTag({ confidence }: { confidence: string }) {
       Worth a check
     </span>
   );
-}
-
-/** What this draft actually leans on, in plain terms — turns the
- * Reply Engine's internal fact-grounding ids (Sprint 10A) into the
- * one trust signal that matters to the owner: not *that* it's
- * grounded, but *in what*. Category-level only — never claims a
- * specific fact wasn't shown here to keep the summary honest. */
-const FACT_SOURCE_LABELS: Record<string, string> = {
-  profile: "your business details",
-  receptionist: "your FAQs",
-  diary: "your diary",
-  customer: "this customer's history",
-};
-export function factSourceSummary(factsUsed: string[] | null | undefined): string | null {
-  if (!Array.isArray(factsUsed) || factsUsed.length === 0) return null;
-  const prefixes = Array.from(new Set(factsUsed.map((id) => id.split(".")[0])));
-  const labels = prefixes.map((p) => (p ? FACT_SOURCE_LABELS[p] : undefined)).filter((l): l is string => Boolean(l));
-  return labels.length > 0 ? joinList(labels) : null;
 }
 
 function formatScheduled(iso: string | null): string | null {

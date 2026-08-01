@@ -6,6 +6,7 @@ import { generateReplyForMessage } from "@/lib/reply-engine/generate-reply";
 import { markMessageAsRead } from "@/lib/whatsapp/graph";
 import type { WhatsAppWebhookPayload } from "@/lib/whatsapp/types";
 import { recordErrorEvent } from "@/lib/error-events";
+import { buildConnectionHealthAlert } from "@/lib/whatsapp/connection-health-alert";
 
 // Needs the Node.js runtime (not Edge) for node:crypto in verify-signature.ts.
 export const runtime = "nodejs";
@@ -142,7 +143,7 @@ async function processWebhookPayload(payload: WhatsAppWebhookPayload) {
 
       const { data: connection } = await supabase
         .from("whatsapp_connections")
-        .select("business_id, access_token")
+        .select("business_id, access_token, token_expires_at")
         .eq("phone_number_id", metadata.phone_number_id)
         .maybeSingle();
 
@@ -150,6 +151,16 @@ async function processWebhookPayload(payload: WhatsAppWebhookPayload) {
         console.warn(`[whatsapp webhook] no business found for phone_number_id ${metadata.phone_number_id}`);
         continue;
       }
+
+      // SLI follow-up (ReplyFlow-SLIs-SLOs.md §2) — every real inbound
+      // message already reaches this exact point, regardless of
+      // whether our own access token can still call the Graph API to
+      // send/read-receipt back. That makes it the one chokepoint where
+      // a broken connection can be caught without any new polling
+      // infrastructure. Best-effort and never blocking (mirrors every
+      // other observability call in this handler) — a failed check
+      // here must never affect a real customer's message.
+      await maybeRecordConnectionHealthAlert(supabase, connection.business_id, connection.token_expires_at);
 
       for (const message of messages) {
         const customerName = contacts?.find((c) => c.wa_id === message.from)?.profile.name ?? null;
@@ -225,5 +236,55 @@ async function processWebhookPayload(payload: WhatsAppWebhookPayload) {
         }
       }
     }
+  }
+}
+
+type ServiceClient = ReturnType<typeof createServiceClient>;
+
+/**
+ * Dedup window: a broken connection stays broken across many inbound
+ * messages, and an active business could otherwise generate one
+ * critical error_events row (and one incident-alert webhook POST, once
+ * INCIDENT_ALERT_WEBHOOK_URL is configured) per message. One row per
+ * window keeps the incident visible without flooding whatever channel
+ * ends up watching it. Critical (already broken) gets a tighter window
+ * than warning (expiring soon, no customer impact yet) since it's the
+ * more urgent, more actionable of the two.
+ */
+const ALERT_DEDUP_WINDOW_MS: Record<"critical" | "warning" | "error", number> = {
+  critical: 60 * 60 * 1000,
+  warning: 24 * 60 * 60 * 1000,
+  error: 60 * 60 * 1000,
+};
+
+async function maybeRecordConnectionHealthAlert(
+  supabase: ServiceClient,
+  businessId: string,
+  tokenExpiresAt: string | null
+): Promise<void> {
+  const alert = buildConnectionHealthAlert({ tokenExpiresAt, now: new Date() });
+  if (!alert) return;
+
+  try {
+    const since = new Date(Date.now() - ALERT_DEDUP_WINDOW_MS[alert.severity]).toISOString();
+    const { data: recent } = await supabase
+      .from("error_events")
+      .select("id")
+      .eq("business_id", businessId)
+      .eq("source", alert.source)
+      .gte("created_at", since)
+      .limit(1);
+    if (recent && recent.length > 0) return; // already recorded (and, if configured, alerted) recently
+
+    await recordErrorEvent({
+      severity: alert.severity,
+      source: alert.source,
+      businessId,
+      message: alert.message,
+    });
+  } catch (err) {
+    // Observability, not a pipeline dependency — must never affect the
+    // real message this webhook call is otherwise processing.
+    console.error("[whatsapp webhook] connection health check failed:", err);
   }
 }

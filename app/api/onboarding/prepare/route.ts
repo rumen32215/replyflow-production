@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { ensureBusinessRow } from "@/lib/business";
 import { DAY_KEYS, defaultAvailability, type DayKey } from "@/lib/availability";
 import { recordProductEvent } from "@/lib/product-events";
+import { recordErrorEvent } from "@/lib/error-events";
 
 export const dynamic = "force-dynamic";
 
@@ -69,6 +70,15 @@ export async function POST(request: Request) {
 
   const { business, error: ensureError } = await ensureBusinessRow(supabase, user.id);
   if (ensureError || !business) {
+    // A business with no row can never reach the dashboard — this is
+    // the one step every signup passes through, so a silent failure
+    // here means someone stuck at onboarding forever with no trace.
+    await recordErrorEvent({
+      severity: "error",
+      source: "onboarding.prepare_failed",
+      businessId: null,
+      message: `ensureBusinessRow failed during onboarding completion: ${ensureError ?? "no business returned"}`,
+    });
     return NextResponse.json({ error: ensureError ?? "Business lookup failed" }, { status: 500 });
   }
 
@@ -113,6 +123,13 @@ export async function POST(request: Request) {
     .eq("id", business.id);
 
   if (updateError) {
+    await recordErrorEvent({
+      severity: "error",
+      source: "onboarding.prepare_failed",
+      businessId: business.id,
+      message: "Failed to save onboarding facts and flip onboarding_completed — this business is stuck at onboarding.",
+      error: updateError,
+    });
     return NextResponse.json({ error: updateError.message }, { status: 500 });
   }
 

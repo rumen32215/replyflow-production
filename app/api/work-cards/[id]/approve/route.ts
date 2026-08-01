@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { sendReplyToCustomer } from "@/lib/reply-engine/send";
+import { recordErrorEvent } from "@/lib/error-events";
 
 export const runtime = "nodejs";
 
@@ -54,12 +55,38 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     .from("work_cards")
     .update({ status: "booked", approved_by: user.id, approved_at: new Date().toISOString() })
     .eq("id", workCard.id);
-  if (workCardError) return NextResponse.json({ error: workCardError.message }, { status: 500 });
+  if (workCardError) {
+    await recordErrorEvent({
+      severity: "error",
+      source: "work-cards.approve_failed",
+      businessId: workCard.business_id,
+      message: "Failed to mark a Work Card as booked when the owner approved it.",
+      error: workCardError,
+      context: { workCardId: workCard.id },
+    });
+    return NextResponse.json({ error: workCardError.message }, { status: 500 });
+  }
 
   // The Work Card is real either way past this point — a failed send
   // below never un-books it. The owner sees exactly what happened via
-  // `sent`.
-  await service.from("conversations").update({ status: "booked" }).eq("id", workCard.conversation_id);
+  // `sent`. This status flip is a secondary/cosmetic field on the
+  // conversation, not the Work Card record itself, so a failure here
+  // doesn't block anything further — but it used to be fully invisible
+  // (error not even read), not just unrecorded.
+  const { error: conversationStatusError } = await service
+    .from("conversations")
+    .update({ status: "booked" })
+    .eq("id", workCard.conversation_id);
+  if (conversationStatusError) {
+    await recordErrorEvent({
+      severity: "warning",
+      source: "work-cards.conversation_status_update_failed",
+      businessId: workCard.business_id,
+      message: "A Work Card was booked, but its conversation's status didn't update to reflect it.",
+      error: conversationStatusError,
+      context: { workCardId: workCard.id, conversationId: workCard.conversation_id },
+    });
+  }
 
   const scheduledLabel = workCard.scheduled_for
     ? new Date(workCard.scheduled_for).toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "short" })

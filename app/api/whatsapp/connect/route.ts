@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { exchangeCodeForToken, getPhoneNumberDetails, subscribeAppToWaba } from "@/lib/whatsapp/graph";
+import { recordErrorEvent } from "@/lib/error-events";
 
 export const runtime = "nodejs";
 
@@ -41,6 +42,12 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
 
+  // Tracked outside the try block so the catch handler can still report
+  // which business this was for even when the failure happens after the
+  // business row is resolved/created but before the connection itself is
+  // saved — `business` below is scoped to the try block.
+  let resolvedBusinessId: string | null = null;
+
   try {
     const tokenResponse = await exchangeCodeForToken(code);
     const phoneDetails = await getPhoneNumberDetails(phoneNumberId, tokenResponse.access_token);
@@ -74,6 +81,7 @@ export async function POST(request: Request) {
     if (!business) {
       throw new Error("Failed to create business record");
     }
+    resolvedBusinessId = business.id;
 
     const { error: upsertError } = await service.from("whatsapp_connections").upsert(
       {
@@ -101,6 +109,18 @@ export async function POST(request: Request) {
     return NextResponse.json({ connected: true, displayPhoneNumber: phoneDetails.display_phone_number });
   } catch (err) {
     console.error("[whatsapp connect] failed:", err);
+    // Same severity as the equally single-flow-scoped billing.checkout_failed
+    // — this blocks exactly one business's own onboarding, not everyone's,
+    // but it's a real functional failure, not noise. A business that fails
+    // here can't use ReplyFlow at all until they retry successfully; today
+    // that failure exists only in Vercel's ephemeral logs.
+    await recordErrorEvent({
+      severity: "error",
+      source: "whatsapp.connect_failed",
+      businessId: resolvedBusinessId,
+      message: "WhatsApp Embedded Signup failed to complete — this business could not connect WhatsApp.",
+      error: err,
+    });
     const message = err instanceof Error ? err.message : "Unknown error";
     return NextResponse.json({ error: message }, { status: 500 });
   }

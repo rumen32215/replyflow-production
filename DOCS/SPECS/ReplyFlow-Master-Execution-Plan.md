@@ -353,6 +353,17 @@ Second task chosen under Architecture-Led Development. A direct audit of every `
 
 **Verification, honestly scoped:** tsc/lint/128 unit tests/production build all pass; confirmed against real production that the deploy is live and the route's auth gate still correctly returns 401 before reaching any new code (no regression). The catch block itself reuses `recordErrorEvent` unchanged — the same function already verified end-to-end against production earlier this session (the WhatsApp-disconnect-detection task) — but the connect route's own catch path could not be live-triggered here: it requires a real authenticated Supabase session plus a real Meta Embedded Signup OAuth code, and this environment has no login credentials. Stated plainly rather than skipped, per this plan's own evidence-over-assumption rule.
 
+### "If this fails in production, will ReplyFlow know about it?" — two more silent gaps closed
+
+Founder-adopted standing principle (2026-08-01, on approving the task above): apply that question to every business-critical journey, and treat "no" as a candidate task. Applying it as a systematic audit across every `app/api/**/route.ts` (not just the one already-known connect-route gap) found two more real, confirmed exceptions:
+
+- **`app/api/onboarding/prepare/route.ts`** — the one step every real signup passes through to reach the dashboard (flips `onboarding_completed`). A failed `ensureBusinessRow` or a failed `businesses` update both returned a bare 500 with nothing recorded — an owner stuck at onboarding forever, invisible to the founder.
+- **`app/api/work-cards/[id]/approve/route.ts`** — the `work_cards` status update (the actual "approve this booking" action) returned a bare 500 on failure with nothing recorded; worse, the `conversations` status update immediately after it wasn't even checked for an error at all — not console.error, not anything.
+
+**Shipped:** both routes now call `recordErrorEvent`, same pattern as every other chokepoint. The two truly business-blocking failures (onboarding stuck, a booking approval not actually saving) are `severity: "error"`, matching `billing.checkout_failed`/`whatsapp.connect_failed`. The conversation-status flip is `severity: "warning"` — it's a secondary/cosmetic field (the Work Card itself is already correctly booked and the confirmation already sends regardless), so it's worth knowing about but isn't the same class of failure.
+
+**Verification, same honest scope as the connect-route task:** tsc/lint/128 tests/build all pass; confirmed against real production that the deploy is live and both routes' auth gates still correctly 401 before reaching any new code. Neither route's actual catch path could be live-triggered — both need a real authenticated session this environment doesn't have — so, as before, that's stated rather than skipped. `app/api/account/delete/route.ts` was also audited and found to already return detailed step-by-step error info to the caller; left out of this task's scope (it's a compliance/deletion action, not part of the core reliability journeys the Handbook and SLI doc are about) rather than folded in as a third fix — a candidate for its own look later, not silently absorbed here.
+
 ## Phase 5 — Growth
 
 *Deliberately last. Nothing here is a Constitution violation to leave unbuilt — these are capabilities, not gaps, and building them before Phase 4 would be exactly the kind of "feature before foundation" this whole consolidation exists to prevent.*

@@ -14,6 +14,11 @@
  * is directly testable, matching every other lib/*.ts convention here.
  * `generate-reply.ts` is the only caller; this file exists purely to
  * make that one insert's shape verifiable in isolation.
+ *
+ * This is a temporary bridge, not the final experience (founder
+ * direction, 2026-08-01): once ReplyFlow can genuinely understand
+ * attachments, this path should become real understanding, not stay a
+ * fixed acknowledgment forever. Honest silence-avoidance until then.
  */
 export interface AttachmentAcknowledgmentInput {
   businessId: string;

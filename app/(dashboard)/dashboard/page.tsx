@@ -9,6 +9,7 @@ import {
 } from "@/components/dashboard/home/home-experience";
 import { AttentionQueue } from "@/components/dashboard/home/attention-queue";
 import { ConnectionAlert } from "@/components/dashboard/home/connection-alert";
+import { InsightList } from "@/components/shared/insight";
 import { TodaysWork, type TodaysWorkItem } from "@/components/dashboard/home/todays-work";
 import { WaitingForCustomer, type WaitingForCustomerItem } from "@/components/dashboard/home/waiting-for-customer";
 import { RecentlyCompleted, type RecentlyCompletedItem } from "@/components/dashboard/home/recently-completed";
@@ -26,7 +27,7 @@ import {
 } from "@/lib/front-desk-signals";
 import { parseAvailability } from "@/lib/availability";
 import { parseKnowledge } from "@/lib/knowledge";
-import { getBrainContext, selectTodaysPriority } from "@/lib/brain";
+import { getBrainContext, selectTodaysPriority, type OrganiseCandidate } from "@/lib/brain";
 import { groupForStatus, type ConversationGroup } from "@/lib/conversations";
 import { TEST_CONVERSATION_PHONE } from "@/lib/test-conversation";
 import { toConversationState } from "@/lib/reply-engine/understanding/state";
@@ -100,6 +101,7 @@ export default async function HomePage() {
     { data: config },
     { data: whatsappConnection },
     { count: realTestExchangeCount },
+    { data: workCardConversations },
   ] = await Promise.all([
     // Real, already-live conversation state for every recent
     // conversation — the one fetch every section below reads from for
@@ -206,6 +208,13 @@ export default async function HomePage() {
     testConversationId
       ? supabase.from("reply_drafts").select("id", { count: "exact", head: true }).eq("conversation_id", testConversationId)
       : Promise.resolve({ count: 0 }),
+    // Organise Checkpoint (Brain Loop step 7) — existence only, any
+    // status, for every conversation this business has. Deliberately
+    // its own lightweight query rather than reusing any of the
+    // date/status-filtered work_cards queries above, none of which is
+    // exhaustive enough to answer "does a Work Card already exist for
+    // this conversation at all."
+    supabase.from("work_cards").select("conversation_id").eq("business_id", businessId),
   ]);
 
   // One map, built once, every section below reads from it — a
@@ -221,12 +230,29 @@ export default async function HomePage() {
           status: c.status,
           group: groupForStatus(c.status) as ConversationGroup,
           isEmergency: state.goal.type === "handle_emergency" && state.goal.status !== "completed" && state.goal.status !== "abandoned",
+          // Organise Checkpoint (Brain Loop step 7) — the real,
+          // already-computed goal, never inferred from message text.
+          // Still true once completed or escalated: either one still
+          // genuinely implies a Work Card should exist; only an
+          // abandoned booking goal doesn't.
+          impliesBooking: state.goal.type === "book_appointment" && state.goal.status !== "abandoned",
           lastMessageAt: c.last_message_at as string | null,
           lastMessagePreview: c.last_message_preview as string | null,
         },
       ];
     })
   );
+
+  // Organise Checkpoint (Brain Loop step 7) — one candidate per
+  // conversation already fetched above; the rule itself (lib/brain/organise.ts)
+  // decides which ones actually produce a gap.
+  const workCardConversationIds = new Set((workCardConversations ?? []).map((w) => w.conversation_id).filter((id): id is string => Boolean(id)));
+  const organiseCandidates: OrganiseCandidate[] = Array.from(conversationById.entries()).map(([id, entry]) => ({
+    conversationId: id,
+    customerName: entry.name,
+    impliesBooking: entry.impliesBooking,
+    hasWorkCard: workCardConversationIds.has(id),
+  }));
 
   /* ------------------------------ Attention queue ------------------------------ */
 
@@ -397,6 +423,7 @@ export default async function HomePage() {
       completedToday,
       bookedToday: jobsBookedToday,
     },
+    organise: { candidates: organiseCandidates },
   });
 
   // V1 First-Run redesign (DOCS/SPECS/ReplyFlow-V1-First-Run-Proposal.md):
@@ -462,6 +489,18 @@ export default async function HomePage() {
 
       {journeyComplete && (
         <div className="space-y-6">
+          {/* Brain Loop step 7 — Organise (Founder Handbook Ch.4).
+           * Reuses the same generic Insight/InsightList primitive
+           * already rendered on Receptionist and Diary — one continuous
+           * intelligence, not a new component. Filtered to organise
+           * gaps specifically: unlike Receptionist/Diary, Front Desk
+           * already has its own dedicated signals for waiting
+           * customers and today's activity (TodaysPriorityCard,
+           * AttentionQueue below) — showing the Brain's full unfiltered
+           * observation stream here would repeat those, not add to
+           * them. Renders nothing when there's genuinely nothing to
+           * organise. */}
+          <InsightList observations={brain.observations.filter((o) => o.id.startsWith("organise:"))} limit={1} />
           <AttentionQueue items={attentionQueue} totalCount={attentionQueueTotal} seeAllHref="/dashboard/approvals" />
           <TodaysWork items={todaysWorkItems} />
           <WaitingForCustomer items={waitingForCustomerItems} />

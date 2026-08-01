@@ -26,6 +26,7 @@ import type { BusinessKnowledge } from "@/lib/knowledge";
 import { type BookingRules, defaultAvailability, hasCustomizedBookingRules } from "@/lib/availability";
 import { formatWaitingTime } from "@/lib/dashboard-signals";
 import { confidenceLabelFor } from "./confidence";
+import { runOrganiseCheckpoint, type OrganiseCandidate } from "./organise";
 
 export type TopicDomain = "knowledge" | "receptionist" | "diary";
 
@@ -74,6 +75,14 @@ export interface BrainInput {
     oldestWaitingMinutes: number | null;
     completedToday: number;
     bookedToday: number;
+  };
+  /** Brain Loop step 7 — Organise (Founder Handbook Ch.4). Optional for
+   * the same reason as `activity`: only a page that already has real
+   * conversation state and Work Card data to hand (Front Desk, today)
+   * can supply this honestly. Omitted entirely means "not evaluated
+   * here," never "nothing to organise." */
+  organise?: {
+    candidates: OrganiseCandidate[];
   };
 }
 
@@ -301,6 +310,23 @@ export function buildBrain(input: BrainInput): Brain {
     });
   }
 
+  // Brain Loop step 7 — Organise (Founder Handbook Ch.4). Ranks just
+  // below a real waiting customer (still more urgent than an abstract
+  // teaching gap) — a real, concrete thing to organise about a
+  // conversation that already happened outranks not yet knowing a
+  // house rule. Capped to the single top gap, same discipline as every
+  // other observation here: one calm thing at a time, never a list.
+  const topOrganiseGap = input.organise ? runOrganiseCheckpoint(input.organise.candidates)[0] : undefined;
+  if (topOrganiseGap) {
+    observations.push({
+      id: topOrganiseGap.id,
+      text: topOrganiseGap.text,
+      tone: "watching",
+      href: topOrganiseGap.href,
+      priority: 2,
+    });
+  }
+
   const topWorry = relevantWorries[0];
   if (topWorry) {
     observations.push({
@@ -308,7 +334,7 @@ export function buildBrain(input: BrainInput): Brain {
       text: `I still don't know ${topWorry.label} — that's worth teaching me soon`,
       tone: "worry",
       href: topWorry.href,
-      priority: 2,
+      priority: 3,
     });
   }
 
@@ -319,7 +345,7 @@ export function buildBrain(input: BrainInput): Brain {
       text: `I'd like to learn ${topLearning.label} next`,
       tone: "learning",
       href: topLearning.href,
-      priority: 3,
+      priority: 4,
     });
   }
 
@@ -328,7 +354,7 @@ export function buildBrain(input: BrainInput): Brain {
       id: "handled:completed",
       text: `${activity.completedToday} ${activity.completedToday === 1 ? "job" : "jobs"} completed today`,
       tone: "handled",
-      priority: 4,
+      priority: 5,
     });
   }
   if (activity?.bookedToday) {
@@ -336,7 +362,7 @@ export function buildBrain(input: BrainInput): Brain {
       id: "handled:booked",
       text: `${activity.bookedToday} ${activity.bookedToday === 1 ? "job" : "jobs"} booked in today`,
       tone: "handled",
-      priority: 4,
+      priority: 5,
     });
   }
 
@@ -351,7 +377,7 @@ export function buildBrain(input: BrainInput): Brain {
         : providedDomains.has("knowledge")
           ? "I know everything I need about your business"
           : "I know how you like your diary managed";
-    observations.push({ id: "confident:complete", text, tone: "confident", priority: 5 });
+    observations.push({ id: "confident:complete", text, tone: "confident", priority: 6 });
   }
 
   observations.sort((a, b) => a.priority - b.priority);

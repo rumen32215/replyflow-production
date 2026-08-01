@@ -33,6 +33,7 @@ export type {
 export { selectTodaysPriority } from "./reasoning";
 export type { TodaysPriority, TodaysPriorityInput } from "./reasoning";
 export { confidenceLabelFor } from "./confidence";
+export type { OrganiseCandidate, OrganiseGap } from "./organise";
 
 /**
  * Assembles a business's Shared Brain context for whichever domains

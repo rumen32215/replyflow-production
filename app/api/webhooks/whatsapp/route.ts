@@ -206,17 +206,20 @@ async function processWebhookPayload(payload: WhatsAppWebhookPayload) {
         }
 
         // Reply Engine trigger (Sprint 10A) — deferred via waitUntil so
-        // the LLM call never delays this handler's ACK to Meta. Text
-        // messages only for this milestone; other message types are
-        // stored (with an honest placeholder body above) but not yet
-        // understood or replied to (Sprint 9.1 §8).
-        if (insertedMessage && message.type === "text") {
+        // the LLM call never delays this handler's ACK to Meta. Real
+        // understanding/generation is still text-only (Sprint 9.1 §8) —
+        // generateReplyForMessage's own messageType check routes any
+        // other type straight to a fixed, honest acknowledgment instead
+        // of the LLM pipeline, closing a real, evidenced gap (a
+        // non-text message used to get no reply drafted at all).
+        if (insertedMessage) {
           waitUntil(
             generateReplyForMessage({
               businessId: connection.business_id,
               conversationId: conversation.id,
               customerMessageId: insertedMessage.id,
               messageBody: body,
+              messageType: message.type,
             })
           );
         }

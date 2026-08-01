@@ -7,6 +7,7 @@ import { generateReplyDraft } from "./prompt/generate";
 import { evaluateSafety } from "./safety/evaluate";
 import { sendReplyToCustomer } from "./send";
 import { recordErrorEvent } from "@/lib/error-events";
+import { buildAttachmentAcknowledgmentDraft } from "./attachment-acknowledgment";
 
 const STATE_HISTORY_WINDOW = 4;
 
@@ -27,8 +28,13 @@ export async function generateReplyForMessage(params: {
   conversationId: string;
   customerMessageId: string;
   messageBody: string;
+  /** Meta's message type ("text", "image", "video", "document", ...).
+   * Optional and defaults to "text" so the other two real callers
+   * (Test Conversations, the live-reply preview) — which only ever
+   * send real typed text — need no changes. */
+  messageType?: string;
 }): Promise<void> {
-  const { businessId, conversationId, customerMessageId, messageBody } = params;
+  const { businessId, conversationId, customerMessageId, messageBody, messageType = "text" } = params;
   const supabase = createServiceClient();
 
   try {
@@ -40,6 +46,18 @@ export async function generateReplyForMessage(params: {
       .eq("customer_message_id", customerMessageId)
       .maybeSingle();
     if (existingDraft) return;
+
+    // Non-text messages never reach Understanding/Generation — see
+    // attachment-acknowledgment.ts for why, and for what gets written
+    // instead of the silence this used to produce.
+    if (messageType !== "text") {
+      await supabase
+        .from("reply_drafts")
+        .upsert(buildAttachmentAcknowledgmentDraft({ businessId, conversationId, customerMessageId }), {
+          onConflict: "customer_message_id",
+        });
+      return;
+    }
 
     const { data: conversation } = await supabase
       .from("conversations")

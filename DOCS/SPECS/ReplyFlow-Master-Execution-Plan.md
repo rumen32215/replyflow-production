@@ -372,6 +372,16 @@ Fourth task under Architecture-Led Development, applying the founder's "will Rep
 
 **Verified live, not just reasoned about:** rather than stopping at "this should work," deliberately reproduced the exact failure in real production — a real signed webhook POST, racing a delete of the just-created conversation row against the pipeline's own asynchronous read. Won on the second genuine attempt, confirming the event fires with the correct severity, source, message, and context (real conversation/message IDs), then fully cleaned up. The race not landing on the first attempt is itself informative: the real window is tight, consistent with this explaining a small number of historical cases rather than being common. Full detail, and the honest limit of what this proves (a real reachable mechanism, not a confirmed retroactive cause), in `DOCS/SPECS/ReplyFlow-SLIs-SLOs.md` §3.
 
+### The last silent business-row-creation failure, closed
+
+Fifth task under Architecture-Led Development, following a new refinement to the founder's standing principle: not just "will ReplyFlow know about it," but "whenever a branch exits early without completing its responsibility, that silence should be an explicit decision — recorded, surfaced, or documented as intentional." Audited the rest of the reply-engine pipeline (`context/assemble.ts`, `safety/evaluate.ts`, `understanding/classify.ts`, `prompt/generate.ts`) under this exact lens and found it clean — every fallback path already degrades to a real, safe result, and every LLM-call failure already records through `recordErrorEvent`. Confirms the `generate-reply.ts` fix from the previous task was the one real gap in that pipeline, not one of several.
+
+Following `ensureBusinessRow` (`lib/business.ts`) to both of its real callers found one more genuine gap: `app/auth/callback/route.ts` — the very first point a business row can be created, right after email verification — called `ensureBusinessRow` and discarded its `{ error }` return value entirely. The existing comment already explained *why* this is intentionally non-blocking (the other caller, `onboarding/prepare`, repeats the same guarantee later) — it never explained why the failure itself went unrecorded. That's exactly the gap this principle targets: a silent branch with real reasoning behind *not blocking*, but no reasoning at all behind *not recording*.
+
+**Shipped:** `auth/callback` now records a `warning`-severity `auth.ensure_business_row_failed` event on failure — still fully non-blocking (never delays the redirect), but a sustained problem is now visible from the earliest point it can occur, not only if it also happens to fail again later at `onboarding/prepare`.
+
+**Verification, same honest scope as today's other route fixes:** tsc/lint/128 tests/build all pass, confirmed live against production that the deploy shipped and the no-code redirect path is unaffected. The actual failure path needs a real Supabase email-verification code, which this environment can't produce — stated plainly rather than claimed.
+
 ## Phase 5 — Growth
 
 *Deliberately last. Nothing here is a Constitution violation to leave unbuilt — these are capabilities, not gaps, and building them before Phase 4 would be exactly the kind of "feature before foundation" this whole consolidation exists to prevent.*

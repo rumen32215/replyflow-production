@@ -9,6 +9,7 @@ function candidate(overrides: Partial<OrganiseCandidate> = {}): OrganiseCandidat
     customerName: "Dave",
     impliesBooking: true,
     hasWorkCard: false,
+    hasRecentPipelineFailure: false,
     ...overrides,
   };
 }

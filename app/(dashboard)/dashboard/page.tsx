@@ -102,6 +102,7 @@ export default async function HomePage() {
     { data: whatsappConnection },
     { count: realTestExchangeCount },
     { data: workCardConversations },
+    { data: recentPipelineFailures },
   ] = await Promise.all([
     // Real, already-live conversation state for every recent
     // conversation — the one fetch every section below reads from for
@@ -215,6 +216,18 @@ export default async function HomePage() {
     // exhaustive enough to answer "does a Work Card already exist for
     // this conversation at all."
     supabase.from("work_cards").select("conversation_id").eq("business_id", businessId),
+    // Organise Checkpoint v1.1 (2026-08-02) — "if this fails, should the
+    // owner eventually know?" A real customer message that got zero
+    // reply (already confirmed, already recorded — never a guess) is
+    // the clearest case where the answer is yes. Bounded to the same
+    // 7-day window every other "recent" Front Desk signal already uses.
+    supabase
+      .from("error_events")
+      .select("context")
+      .eq("business_id", businessId)
+      .eq("severity", "critical")
+      .in("source", ["reply-engine.pipeline_failure", "reply-engine.conversation_not_found"])
+      .gte("created_at", sevenDaysAgo.toISOString()),
   ]);
 
   // One map, built once, every section below reads from it — a
@@ -247,11 +260,20 @@ export default async function HomePage() {
   // conversation already fetched above; the rule itself (lib/brain/organise.ts)
   // decides which ones actually produce a gap.
   const workCardConversationIds = new Set((workCardConversations ?? []).map((w) => w.conversation_id).filter((id): id is string => Boolean(id)));
+  // context is jsonb; conversationId is only ever a plain string when
+  // present (lib/reply-engine/generate-reply.ts's own recordErrorEvent
+  // calls are the only writers of these two sources).
+  const unrepliedMessageConversationIds = new Set(
+    (recentPipelineFailures ?? [])
+      .map((e) => (e.context as { conversationId?: unknown } | null)?.conversationId)
+      .filter((id): id is string => typeof id === "string")
+  );
   const organiseCandidates: OrganiseCandidate[] = Array.from(conversationById.entries()).map(([id, entry]) => ({
     conversationId: id,
     customerName: entry.name,
     impliesBooking: entry.impliesBooking,
     hasWorkCard: workCardConversationIds.has(id),
+    hasRecentPipelineFailure: unrepliedMessageConversationIds.has(id),
   }));
 
   /* ------------------------------ Attention queue ------------------------------ */

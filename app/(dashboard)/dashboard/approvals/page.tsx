@@ -8,9 +8,11 @@ import { minutesSince } from "@/lib/dashboard-signals";
 import {
   buildAttentionQueue,
   groupPendingRepliesByConversation,
+  isNoteworthyRelationship,
   type AttentionWaitingConversation,
   type AttentionDraftWorkCard,
 } from "@/lib/front-desk-signals";
+import { relationshipStrengthFor } from "@/lib/customer-memory-signals";
 import { groupForStatus } from "@/lib/conversations";
 import { TEST_CONVERSATION_PHONE } from "@/lib/test-conversation";
 import { toConversationState } from "@/lib/reply-engine/understanding/state";
@@ -44,29 +46,44 @@ export default async function ApprovalsPage() {
     .maybeSingle();
   const testConversationId = testConversation?.id ?? null;
 
-  const [{ data: conversations }, { data: draftWorkCards }, { data: pendingReplyDrafts }] = await Promise.all([
-    supabase
-      .from("conversations")
-      .select("id, customer_name, customer_phone, last_message_preview, last_message_at, status, ai_state")
-      .eq("business_id", businessId)
-      .neq("customer_phone", TEST_CONVERSATION_PHONE)
-      .order("last_message_at", { ascending: false, nullsFirst: false }),
-    supabase
-      .from("work_cards")
-      .select("id, conversation_id, customer_name, issue, created_at")
-      .eq("business_id", businessId)
-      .eq("status", "draft")
-      .order("created_at", { ascending: true }),
-    (() => {
-      let q = supabase
-        .from("reply_drafts")
-        .select("id, conversation_id, requires_escalation, created_at")
+  const [{ data: conversations }, { data: draftWorkCards }, { data: pendingReplyDrafts }, { data: completedWorkCardConversations }] =
+    await Promise.all([
+      supabase
+        .from("conversations")
+        .select("id, customer_name, customer_phone, last_message_preview, last_message_at, status, ai_state")
         .eq("business_id", businessId)
-        .eq("status", "pending");
-      if (testConversationId) q = q.neq("conversation_id", testConversationId);
-      return q.order("created_at", { ascending: true });
-    })(),
-  ]);
+        .neq("customer_phone", TEST_CONVERSATION_PHONE)
+        .order("last_message_at", { ascending: false, nullsFirst: false }),
+      supabase
+        .from("work_cards")
+        .select("id, conversation_id, customer_name, issue, created_at")
+        .eq("business_id", businessId)
+        .eq("status", "draft")
+        .order("created_at", { ascending: true }),
+      (() => {
+        let q = supabase
+          .from("reply_drafts")
+          .select("id, conversation_id, requires_escalation, created_at")
+          .eq("business_id", businessId)
+          .eq("status", "pending");
+        if (testConversationId) q = q.neq("conversation_id", testConversationId);
+        return q.order("created_at", { ascending: true });
+      })(),
+      // "Surface, don't build" (2026-08-02) — same real signal, same
+      // reasoning as Front Desk's own identical query.
+      supabase.from("work_cards").select("conversation_id").eq("business_id", businessId).eq("status", "completed"),
+    ]);
+
+  const completedCountByConversation = new Map<string, number>();
+  for (const row of completedWorkCardConversations ?? []) {
+    if (!row.conversation_id) continue;
+    completedCountByConversation.set(row.conversation_id, (completedCountByConversation.get(row.conversation_id) ?? 0) + 1);
+  }
+  const noteworthyStrengthFor = (conversationId: string | null) => {
+    if (!conversationId) return undefined;
+    const strength = relationshipStrengthFor(completedCountByConversation.get(conversationId) ?? 0);
+    return isNoteworthyRelationship(strength) ? strength : undefined;
+  };
 
   const conversationById = new Map(
     (conversations ?? []).map((c) => {
@@ -92,6 +109,7 @@ export default async function ApprovalsPage() {
         reason: c.last_message_preview || "New enquiry",
         minutes: minutesSince(c.last_message_at as string),
         isEmergency: entry.isEmergency,
+        relationshipStrength: noteworthyStrengthFor(c.id),
       };
     })
     .sort((a, b) => b.minutes - a.minutes);
@@ -103,6 +121,7 @@ export default async function ApprovalsPage() {
     issue: j.issue,
     customerName: j.customer_name,
     minutes: minutesSince(j.created_at),
+    relationshipStrength: noteworthyStrengthFor(j.conversation_id),
   }));
 
   const pendingReplyItems = groupPendingRepliesByConversation(
@@ -112,6 +131,7 @@ export default async function ApprovalsPage() {
       customerName: conversationById.get(d.conversation_id)?.name ?? "A customer",
       minutes: minutesSince(d.created_at),
       requiresEscalation: d.requires_escalation,
+      relationshipStrength: noteworthyStrengthFor(d.conversation_id),
     }))
   );
 

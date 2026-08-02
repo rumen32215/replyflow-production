@@ -16,7 +16,21 @@
  * to lib/work-card-state.ts.
  */
 
+import type { RelationshipStrength } from "./customer-memory-signals";
+
 /* ------------------------------ Attention queue -------------------------------- */
+
+/** "Surface, don't build" (founder principle, 2026-08-02) — the exact
+ * same `RelationshipStrength` `lib/customer-memory-signals.ts` already
+ * computes, reused here rather than a second relationship concept.
+ * Deliberately optional and only ever worth setting for the top two
+ * tiers (see `isNoteworthyRelationship` below) — every row computing
+ * and rendering a strength badge would be noise for the common "New
+ * Customer" case; only the genuinely elevated ones earn a marker,
+ * matching Ch.02's "quiet intelligence over visible intelligence." */
+export function isNoteworthyRelationship(strength: RelationshipStrength | null | undefined): boolean {
+  return strength === "Trusted Customer" || strength === "VIP Customer";
+}
 
 export interface AttentionWaitingConversation {
   kind: "waiting_conversation";
@@ -25,6 +39,7 @@ export interface AttentionWaitingConversation {
   reason: string;
   minutes: number;
   isEmergency: boolean;
+  relationshipStrength?: RelationshipStrength;
 }
 
 export interface AttentionDraftWorkCard {
@@ -34,6 +49,7 @@ export interface AttentionDraftWorkCard {
   issue: string;
   customerName: string;
   minutes: number;
+  relationshipStrength?: RelationshipStrength;
 }
 
 export interface AttentionPendingReply {
@@ -50,6 +66,7 @@ export interface AttentionPendingReply {
    * a customer who messaged three times before anyone looked is one
    * real backlog, not three identical-looking rows. */
   count: number;
+  relationshipStrength?: RelationshipStrength;
 }
 
 /**
@@ -62,7 +79,14 @@ export interface AttentionPendingReply {
  * if any drafts in the group need it.
  */
 export function groupPendingRepliesByConversation(
-  drafts: readonly { draftId: string; conversationId: string; customerName: string; minutes: number; requiresEscalation: boolean }[]
+  drafts: readonly {
+    draftId: string;
+    conversationId: string;
+    customerName: string;
+    minutes: number;
+    requiresEscalation: boolean;
+    relationshipStrength?: RelationshipStrength;
+  }[]
 ): AttentionPendingReply[] {
   const byConversation = new Map<string, typeof drafts[number][]>();
   for (const draft of drafts) {
@@ -83,6 +107,7 @@ export function groupPendingRepliesByConversation(
       minutes: oldest.minutes,
       requiresEscalation: group.some((d) => d.requiresEscalation),
       count: group.length,
+      relationshipStrength: oldest.relationshipStrength,
     };
   });
 }

@@ -22,9 +22,11 @@ import {
   buildReceptionistActivity,
   groupPendingRepliesByConversation,
   describeConnectionHealth,
+  isNoteworthyRelationship,
   type AttentionWaitingConversation,
   type AttentionDraftWorkCard,
 } from "@/lib/front-desk-signals";
+import { relationshipStrengthFor } from "@/lib/customer-memory-signals";
 import { parseAvailability } from "@/lib/availability";
 import { parseKnowledge } from "@/lib/knowledge";
 import { getBrainContext, selectTodaysPriority, type OrganiseCandidate } from "@/lib/brain";
@@ -103,6 +105,7 @@ export default async function HomePage() {
     { count: realTestExchangeCount },
     { data: workCardConversations },
     { data: recentPipelineFailures },
+    { data: completedWorkCardConversations },
   ] = await Promise.all([
     // Real, already-live conversation state for every recent
     // conversation — the one fetch every section below reads from for
@@ -228,6 +231,12 @@ export default async function HomePage() {
       .eq("severity", "critical")
       .in("source", ["reply-engine.pipeline_failure", "reply-engine.conversation_not_found"])
       .gte("created_at", sevenDaysAgo.toISOString()),
+    // "Surface, don't build" (2026-08-02) — the same real completed-job
+    // count relationshipStrengthFor() already turns into a strength
+    // label on the Customer/Conversation pages, fetched once here so
+    // the Attention Queue can quietly mark the already-earned
+    // relationships (Trusted/VIP) without adding a new concept.
+    supabase.from("work_cards").select("conversation_id").eq("business_id", businessId).eq("status", "completed"),
   ]);
 
   // One map, built once, every section below reads from it — a
@@ -278,6 +287,22 @@ export default async function HomePage() {
 
   /* ------------------------------ Attention queue ------------------------------ */
 
+  // "Surface, don't build" — completed-job counts per conversation,
+  // turned into the exact same relationshipStrengthFor() label the
+  // Customer/Conversation pages use, but only ever attached when it's
+  // genuinely noteworthy (Trusted/VIP) — every other conversation gets
+  // no marker at all, deliberately, so the common case stays quiet.
+  const completedCountByConversation = new Map<string, number>();
+  for (const row of completedWorkCardConversations ?? []) {
+    if (!row.conversation_id) continue;
+    completedCountByConversation.set(row.conversation_id, (completedCountByConversation.get(row.conversation_id) ?? 0) + 1);
+  }
+  const noteworthyStrengthFor = (conversationId: string | null) => {
+    if (!conversationId) return undefined;
+    const strength = relationshipStrengthFor(completedCountByConversation.get(conversationId) ?? 0);
+    return isNoteworthyRelationship(strength) ? strength : undefined;
+  };
+
   // `conversations` is fetched newest-first (needed for the activity
   // feed and the emergency/group lookup map) — re-sorted here so
   // "oldest waiting" below is actually the longest wait, not whichever
@@ -293,6 +318,7 @@ export default async function HomePage() {
         reason: c.last_message_preview || "New enquiry",
         minutes: minutesSince(c.last_message_at as string),
         isEmergency: entry.isEmergency,
+        relationshipStrength: noteworthyStrengthFor(c.id),
       };
     })
     .sort((a, b) => b.minutes - a.minutes);
@@ -304,6 +330,7 @@ export default async function HomePage() {
     issue: j.issue,
     customerName: j.customer_name,
     minutes: minutesSince(j.created_at),
+    relationshipStrength: noteworthyStrengthFor(j.conversation_id),
   }));
 
   const pendingReplyItems = groupPendingRepliesByConversation(
@@ -313,6 +340,7 @@ export default async function HomePage() {
       customerName: conversationById.get(d.conversation_id)?.name ?? "A customer",
       minutes: minutesSince(d.created_at),
       requiresEscalation: d.requires_escalation,
+      relationshipStrength: noteworthyStrengthFor(d.conversation_id),
     }))
   );
 

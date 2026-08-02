@@ -6,6 +6,7 @@ import { AlertTriangle, ArrowRight, Briefcase, MessageCircle, Sparkles } from "l
 import { SettleCard, Reveal, press } from "@/components/shared/motion";
 import { formatWaitingTime } from "@/lib/dashboard-signals";
 import { attentionReason, type AttentionItem } from "@/lib/front-desk-signals";
+import { STRENGTH_STYLE } from "@/components/dashboard/customers/ai-insights-panel";
 import { cn } from "@/lib/utils";
 
 /**
@@ -109,7 +110,25 @@ export function AttentionQueue({
                     <IconFor item={item} />
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-[14px] font-semibold">{nameFor(item)}</p>
+                    <p className="flex items-center gap-1.5 truncate text-[14px] font-semibold">
+                      <span className="truncate">{nameFor(item)}</span>
+                      {/* "Surface, don't build" (2026-08-02) — the exact
+                       * same relationship-strength label the Customer/
+                       * Conversation pages already compute, quietly
+                       * marked here only for the two tiers worth
+                       * knowing about before deciding who to reply to
+                       * first; every other row stays exactly as before. */}
+                      {item.relationshipStrength && (
+                        <span
+                          className={cn(
+                            "shrink-0 rounded-full px-1.5 py-0.5 text-[9.5px] font-bold uppercase tracking-wide",
+                            STRENGTH_STYLE[item.relationshipStrength]
+                          )}
+                        >
+                          {item.relationshipStrength === "VIP Customer" ? "VIP" : "Trusted"}
+                        </span>
+                      )}
+                    </p>
                     <p className="truncate text-[12.5px] text-muted-foreground">
                       {attentionReason(item)}
                       {item.minutes > 0 && ` · waiting ${formatWaitingTime(item.minutes)}`}

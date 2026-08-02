@@ -6,6 +6,7 @@ import {
   attentionReason,
   groupPendingRepliesByConversation,
   describeConnectionHealth,
+  isNoteworthyRelationship,
   type AttentionItem,
 } from "./front-desk-signals";
 
@@ -80,6 +81,34 @@ test("groupPendingRepliesByConversation: different conversations stay separate",
     { draftId: "d2", conversationId: "c2", customerName: "Priya", minutes: 5, requiresEscalation: false },
   ]);
   assert.equal(grouped.length, 2);
+});
+
+test("groupPendingRepliesByConversation: relationshipStrength is carried over from the anchoring (oldest) draft", () => {
+  const grouped = groupPendingRepliesByConversation([
+    { draftId: "d1", conversationId: "c1", customerName: "Rumen", minutes: 100, requiresEscalation: false, relationshipStrength: "VIP Customer" },
+    { draftId: "d2", conversationId: "c1", customerName: "Rumen", minutes: 10, requiresEscalation: false },
+  ]);
+  assert.equal(grouped[0]!.relationshipStrength, "VIP Customer");
+});
+
+test("groupPendingRepliesByConversation: relationshipStrength is undefined when not set, never fabricated", () => {
+  const grouped = groupPendingRepliesByConversation([
+    { draftId: "d1", conversationId: "c1", customerName: "Rumen", minutes: 10, requiresEscalation: false },
+  ]);
+  assert.equal(grouped[0]!.relationshipStrength, undefined);
+});
+
+test("isNoteworthyRelationship: only Trusted and VIP customers are noteworthy", () => {
+  assert.equal(isNoteworthyRelationship("New Customer"), false);
+  assert.equal(isNoteworthyRelationship("Growing Relationship"), false);
+  assert.equal(isNoteworthyRelationship("Regular Customer"), false);
+  assert.equal(isNoteworthyRelationship("Trusted Customer"), true);
+  assert.equal(isNoteworthyRelationship("VIP Customer"), true);
+});
+
+test("isNoteworthyRelationship: null/undefined is never noteworthy", () => {
+  assert.equal(isNoteworthyRelationship(null), false);
+  assert.equal(isNoteworthyRelationship(undefined), false);
 });
 
 test("attentionReason: multiple pending replies in one conversation read as a count, not a duplicate row", () => {

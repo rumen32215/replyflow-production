@@ -1,8 +1,10 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { waitUntil } from "@vercel/functions";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { sendReplyToCustomer } from "@/lib/reply-engine/send";
 import { recordProductEvent } from "@/lib/product-events";
+import { detectAndProposeLearning } from "@/lib/reply-engine/learning/detect-and-propose";
 
 export const runtime = "nodejs";
 
@@ -38,7 +40,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
 
   const { data: draft } = await service
     .from("reply_drafts")
-    .select("id, business_id, conversation_id, draft_text, final_text, status")
+    .select("id, business_id, conversation_id, draft_text, final_text, status, category, customer_message_id")
     .eq("id", params.id)
     .maybeSingle();
   if (!draft) return NextResponse.json({ error: "Draft not found" }, { status: 404 });
@@ -86,6 +88,22 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     // status/resolved_at before this, so "a draft was edited, and when"
     // had no queryable trace anywhere prior to this event.
     await recordProductEvent({ eventType: "draft.edited", businessId: draft.business_id, context: { draftId: draft.id } });
+
+    // Learning Memory Stage 8 (doc 12) — deferred, non-blocking, same
+    // waitUntil pattern the WhatsApp webhook already uses for
+    // generateReplyForMessage: the owner's save must never wait on this.
+    waitUntil(
+      detectAndProposeLearning({
+        supabase: service,
+        businessId: draft.business_id,
+        replyDraftId: draft.id,
+        customerMessageId: draft.customer_message_id,
+        category: draft.category,
+        originalDraft: draft.draft_text ?? "",
+        editedDraft: body.text.trim(),
+      })
+    );
+
     return NextResponse.json({ draft: updated });
   }
 

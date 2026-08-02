@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { ReceptionistPlayground } from "@/components/dashboard/receptionist/receptionist-playground";
+import { LearningProposalCard } from "@/components/dashboard/receptionist/learning-proposal-card";
 import { BusinessMemory, type Faq } from "@/components/dashboard/business/business-memory";
 import { parseKnowledge } from "@/lib/knowledge";
 import type { Tone } from "@/lib/receptionist";
@@ -131,6 +132,20 @@ export default async function TeachYourReceptionistPage({
   }));
   const ownerTrust = computeOwnerTrust(ownerTrustInputs);
 
+  // Learning Memory V1 (doc 12) — the single top pending/deferred
+  // proposal, oldest first (fairness — a proposal an owner already
+  // deferred once shouldn't get bumped by a newer one). Never more than
+  // one shown at a time, same "one thing at a time" discipline as
+  // every other Observation on this page.
+  const { data: learningProposal } = await supabase
+    .from("learning_proposals")
+    .select("id, proposed_lesson")
+    .eq("business_id", business.id)
+    .in("status", ["pending", "deferred"])
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+
   const faqs: Faq[] = Array.isArray(config?.faqs)
     ? (config!.faqs as unknown[])
         .filter(
@@ -146,6 +161,9 @@ export default async function TeachYourReceptionistPage({
 
   return (
     <div className="space-y-8">
+      {learningProposal && (
+        <LearningProposalCard proposal={{ id: learningProposal.id, proposedLesson: learningProposal.proposed_lesson }} />
+      )}
       <ReceptionistPlayground
         businessId={business.id}
         businessName={business.business_name}

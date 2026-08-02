@@ -19,7 +19,10 @@ const CONFIDENCE_STYLE: Record<ConfidenceLevel, string> = {
   Complete: "bg-success/10 text-success",
 };
 
-const STRENGTH_STYLE: Record<RelationshipStrength, string> = {
+/** Exported so the conversation view can show the exact same badge for
+ * the exact same relationship stage — one visual language, not two
+ * (Ch.08 Principle 9, "consistency builds trust"). */
+export const STRENGTH_STYLE: Record<RelationshipStrength, string> = {
   "New Customer": "bg-muted text-muted-foreground",
   "Growing Relationship": "bg-learning/10 text-learning",
   "Regular Customer": "bg-primary/10 text-primary",

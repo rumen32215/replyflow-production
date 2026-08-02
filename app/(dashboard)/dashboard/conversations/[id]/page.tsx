@@ -8,6 +8,7 @@ import { statusLabel, groupForStatus } from "@/lib/conversations";
 import { parseAvailability, nextAvailableSlot, toDateString } from "@/lib/availability";
 import { toConversationState } from "@/lib/reply-engine/understanding/state";
 import { buildWorkCardDraft } from "@/lib/work-card";
+import { relationshipStrengthFor, buildRelationshipSummary, type CustomerJob } from "@/lib/customer-memory-signals";
 import { cn } from "@/lib/utils";
 
 export const metadata: Metadata = { title: "Conversation — ReplyFlow" };
@@ -28,13 +29,13 @@ export default async function ConversationDetailPage({ params }: { params: { id:
   // RLS (0003) scopes this to the signed-in owner's business.
   const { data: conversation } = await supabase
     .from("conversations")
-    .select("id, business_id, customer_name, customer_phone, status, ai_state")
+    .select("id, business_id, customer_name, customer_phone, status, ai_state, created_at")
     .eq("id", params.id)
     .maybeSingle();
 
   if (!conversation) notFound();
 
-  const [{ data: existingWorkCards }, { data: messages }, { data: business }, { data: pendingDrafts }] = await Promise.all([
+  const [{ data: existingWorkCards }, { data: allWorkCards }, { data: messages }, { data: business }, { data: pendingDrafts }] = await Promise.all([
     // A rejected draft can be followed by a fresh one on the same
     // conversation — most-recent-first + limit(1) so this never
     // breaks once more than one Work Card row exists here
@@ -45,6 +46,20 @@ export default async function ConversationDetailPage({ params }: { params: { id:
       .eq("conversation_id", conversation.id)
       .order("created_at", { ascending: false })
       .limit(1),
+    // Trust Ladder V1 companion (Candidate 1) — the same real job
+    // history relationshipStrengthFor()/buildRelationshipSummary()
+    // already read on the Customer page (app/(dashboard)/dashboard/
+    // customers/[id]/page.tsx), fetched here too so that same, exact
+    // computation can run where the owner is actually deciding how to
+    // handle this customer. A conversation is unique per
+    // (business_id, customer_phone), so this conversation_id's full
+    // work_cards history *is* this customer's full history — no new
+    // relationship concept, the same one the Customer page already uses.
+    supabase
+      .from("work_cards")
+      .select("id, issue, status, scheduled_for, completed_at, notes, created_at, estimated_value")
+      .eq("conversation_id", conversation.id)
+      .order("created_at", { ascending: true }),
     supabase
       .from("messages")
       .select("id, direction, body, message_type, created_at")
@@ -73,6 +88,39 @@ export default async function ConversationDetailPage({ params }: { params: { id:
   const photoCount = allMessages.filter((m) => m.message_type !== "text").length;
   const group = groupForStatus(conversation.status);
   const latestCustomerMessage = [...allMessages].reverse().find((m) => m.direction === "inbound")?.body ?? null;
+
+  // Trust Ladder V1 companion (Candidate 1) — reusing
+  // relationshipStrengthFor()/buildRelationshipSummary() exactly as
+  // the Customer page already does, not a second version of either.
+  // waitingMinutes is deliberately passed as null: this page's own
+  // status badge (rendered just above) already shows whether the
+  // conversation is waiting, so repeating it in the summary sentence
+  // would be exactly the kind of detail that doesn't help the owner's
+  // decision here, per the founder's own instruction to leave out
+  // whatever doesn't earn its place.
+  const customerJobs: CustomerJob[] = (allWorkCards ?? []).map((j) => ({
+    id: j.id,
+    jobTitle: j.issue,
+    status: j.status,
+    scheduledFor: j.scheduled_for,
+    completedAt: j.completed_at,
+    notes: j.notes,
+    createdAt: j.created_at,
+    estimatedValue: j.estimated_value,
+  }));
+  const completedJobCount = customerJobs.filter((j) => j.status === "completed").length;
+  const mostRecentJob =
+    [...customerJobs]
+      .filter((j) => j.status === "completed")
+      .sort((a, b) => new Date(b.completedAt ?? 0).getTime() - new Date(a.completedAt ?? 0).getTime())[0] ?? null;
+  const relationshipStrength = relationshipStrengthFor(completedJobCount);
+  const relationshipSummary = buildRelationshipSummary({
+    name: conversation.customer_name || conversation.customer_phone,
+    conversationStartedAt: conversation.created_at,
+    completedJobCount,
+    mostRecentJob,
+    waitingMinutes: null,
+  });
 
   // A real, honest suggestion — the same diary rules the Diary page's
   // own preview line uses, never a fabricated understanding of this
@@ -135,6 +183,8 @@ export default async function ConversationDetailPage({ params }: { params: { id:
         suggestedSlotDate={suggestedSlot ? toDateString(suggestedSlot.date) : null}
         suggestedSlotLabel={suggestedSlot?.label ?? null}
         pendingDraft={pendingDrafts?.[0] ?? null}
+        relationshipStrength={relationshipStrength}
+        relationshipSummary={relationshipSummary}
       />
 
       <div className="flex-1 space-y-3 overflow-y-auto p-5 md:p-6">

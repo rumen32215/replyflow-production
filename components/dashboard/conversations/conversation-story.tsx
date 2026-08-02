@@ -11,6 +11,8 @@ import { TypingDots } from "@/components/shared/typed-message";
 import { createClient } from "@/lib/supabase/client";
 import { buildStory, groupForStatus } from "@/lib/conversations";
 import type { WorkCardDraftFields } from "@/lib/work-card";
+import type { RelationshipStrength } from "@/lib/customer-memory-signals";
+import { STRENGTH_STYLE } from "@/components/dashboard/customers/ai-insights-panel";
 import { cn } from "@/lib/utils";
 // Imported AND re-exported — receptionist-playground.tsx and
 // test-conversation.tsx already import factSourceSummary from this
@@ -133,6 +135,8 @@ export function ConversationStory({
   suggestedSlotDate,
   suggestedSlotLabel,
   pendingDraft,
+  relationshipStrength,
+  relationshipSummary,
 }: {
   conversationId: string;
   businessId: string;
@@ -148,6 +152,12 @@ export function ConversationStory({
   suggestedSlotDate: string | null;
   suggestedSlotLabel: string | null;
   pendingDraft: PendingReplyDraft | null;
+  /** Trust Ladder V1 companion (Candidate 1) — the exact same
+   * relationship computation the Customer page already shows,
+   * surfaced here instead, at the moment the owner is actually
+   * deciding how to handle this customer. */
+  relationshipStrength: RelationshipStrength;
+  relationshipSummary: string;
 }) {
   const router = useRouter();
   const supabase = createClient();
@@ -404,6 +414,23 @@ export function ConversationStory({
 
   return (
     <div className="border-b border-border bg-muted/30 px-5 py-4">
+      {/* Who the owner is actually talking to — first, before the
+       * story or the actions below, the same way a good receptionist
+       * would recognise a customer before discussing anything else.
+       * Reuses the exact strength badge and summary sentence the
+       * Customer page already computes; nothing new is inferred here. */}
+      <div className="mb-3 flex items-start gap-2">
+        <span
+          className={cn(
+            "mt-0.5 shrink-0 whitespace-nowrap rounded-full px-2.5 py-1 text-[11px] font-semibold",
+            STRENGTH_STYLE[relationshipStrength]
+          )}
+        >
+          {relationshipStrength}
+        </span>
+        <p className="text-[12.5px] leading-relaxed text-muted-foreground">{relationshipSummary}</p>
+      </div>
+
       <div className="space-y-1.5">
         {story.map((moment, i) => (
           <Reveal key={moment.label} index={i}>

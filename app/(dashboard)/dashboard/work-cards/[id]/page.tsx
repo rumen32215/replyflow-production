@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { WorkCardDetail } from "@/components/dashboard/work-cards/work-card-detail";
 import { groupForStatus, type ConversationGroup } from "@/lib/conversations";
 import { toConversationState } from "@/lib/reply-engine/understanding/state";
+import { buildCommunicationGuidance } from "@/lib/customer-memory-signals";
 
 export const metadata: Metadata = { title: "Work Card — ReplyFlow" };
 
@@ -43,7 +44,7 @@ export default async function WorkCardDetailPage({ params }: { params: { id: str
     workCard.conversation_id
       ? supabase
           .from("conversations")
-          .select("id, customer_phone, status, ai_state")
+          .select("id, customer_phone, status, ai_state, communication_preference")
           .eq("id", workCard.conversation_id)
           .maybeSingle()
       : Promise.resolve({ data: null }),
@@ -71,6 +72,15 @@ export default async function WorkCardDetailPage({ params }: { params: { id: str
 
   const completedSiblingCount = (siblingCards ?? []).filter((c) => c.status === "completed").length;
 
+  // "Surface, don't build" — the exact same, already-built function the
+  // conversation view uses (lib/customer-memory-signals.ts), reused
+  // unchanged: this page has its own direct `tel:` call link with the
+  // identical blind spot the conversation view had before it.
+  const communicationGuidance = buildCommunicationGuidance(
+    workCard.customer_name,
+    conversation?.communication_preference ?? null
+  );
+
   return (
     <WorkCardDetail
       workCard={{
@@ -94,6 +104,7 @@ export default async function WorkCardDetailPage({ params }: { params: { id: str
       conversationGroup={conversationGroup}
       isEmergency={isEmergency}
       completedSiblingCount={completedSiblingCount}
+      communicationGuidance={communicationGuidance}
     />
   );
 }

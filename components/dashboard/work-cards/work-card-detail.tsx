@@ -50,11 +50,16 @@ export function WorkCardDetail({
   conversationGroup,
   isEmergency,
   completedSiblingCount,
+  communicationGuidance,
 }: {
   workCard: WorkCardDetailData;
   conversationGroup: ConversationGroup | null;
   isEmergency: boolean;
   completedSiblingCount: number;
+  /** "Surface, don't build" — null when nothing's stored, rendered
+   * exactly nowhere in that case. Already phrased as guidance by the
+   * caller (buildCommunicationGuidance), never a raw field value. */
+  communicationGuidance: string | null;
 }) {
   const router = useRouter();
   const supabase = createClient();
@@ -315,6 +320,12 @@ export function WorkCardDetail({
                 <a href={`tel:${card.customerPhone}`} className="flex items-center gap-2 text-[13.5px] text-primary hover:underline">
                   <Phone className="h-3.5 w-3.5" /> {card.customerPhone}
                 </a>
+              )}
+              {/* "Surface, don't build" — only ever appears when the
+               * owner genuinely stored a preference; consistent with
+               * the identical treatment on the conversation view. */}
+              {communicationGuidance && (
+                <p className="text-[12.5px] leading-relaxed text-muted-foreground">{communicationGuidance}</p>
               )}
               {!editing && (
                 <div className="flex items-start gap-2">

@@ -5,6 +5,12 @@ import { ReceptionistPlayground } from "@/components/dashboard/receptionist/rece
 import { BusinessMemory, type Faq } from "@/components/dashboard/business/business-memory";
 import { parseKnowledge } from "@/lib/knowledge";
 import type { Tone } from "@/lib/receptionist";
+import {
+  computeOwnerTrust,
+  groupDecisionCategory,
+  OWNER_TRUST_CATEGORIES,
+  type OwnerTrustCategoryInput,
+} from "@/lib/brain/trust";
 
 export const metadata: Metadata = { title: "Teach your receptionist — ReplyFlow" };
 
@@ -74,6 +80,57 @@ export default async function TeachYourReceptionistPage({
 
   const tone = (config?.tone ?? business.greeting_style ?? "friendly") as Tone;
 
+  // Owner Trust (Trust Ladder V1, DOCS/CONSTITUTION/11-ReplyFlow-Trust-Architecture.md)
+  // — real, confirmed outcomes only. `draft.approved`/`draft.edited`
+  // are only ever recorded on the owner's own approve/edit route
+  // (app/api/reply-drafts/[id]/route.ts), never from auto-send, so an
+  // auto-sent draft correctly never contributes here — this reports
+  // what the owner did, not what the system handled on its own.
+  const { data: recentDraftEvents } = await supabase
+    .from("product_events")
+    .select("event_type, context")
+    .eq("business_id", business.id)
+    .in("event_type", ["draft.approved", "draft.edited", "draft.rejected"])
+    .order("created_at", { ascending: false })
+    .limit(500);
+
+  const draftOutcomeById = new Map<string, { approved: boolean; edited: boolean; rejected: boolean }>();
+  for (const event of recentDraftEvents ?? []) {
+    const draftId = (event.context as { draftId?: unknown } | null)?.draftId;
+    if (typeof draftId !== "string") continue;
+    const existing = draftOutcomeById.get(draftId) ?? { approved: false, edited: false, rejected: false };
+    if (event.event_type === "draft.approved") existing.approved = true;
+    if (event.event_type === "draft.edited") existing.edited = true;
+    if (event.event_type === "draft.rejected") existing.rejected = true;
+    draftOutcomeById.set(draftId, existing);
+  }
+  const resolvedDraftIds = Array.from(draftOutcomeById.entries())
+    .filter(([, o]) => o.approved || o.rejected)
+    .map(([id]) => id);
+
+  const { data: resolvedDraftCategories } = resolvedDraftIds.length
+    ? await supabase.from("reply_drafts").select("id, category").in("id", resolvedDraftIds)
+    : { data: [] as { id: string; category: string }[] };
+
+  const countsByGroup = new Map<string, { unchangedCount: number; editedCount: number; rejectedCount: number }>();
+  for (const draft of resolvedDraftCategories ?? []) {
+    const outcome = draftOutcomeById.get(draft.id);
+    if (!outcome) continue;
+    const group = groupDecisionCategory(draft.category);
+    const counts = countsByGroup.get(group) ?? { unchangedCount: 0, editedCount: 0, rejectedCount: 0 };
+    if (outcome.rejected) counts.rejectedCount += 1;
+    else if (outcome.edited) counts.editedCount += 1;
+    else counts.unchangedCount += 1;
+    countsByGroup.set(group, counts);
+  }
+
+  const ownerTrustInputs: OwnerTrustCategoryInput[] = OWNER_TRUST_CATEGORIES.map(({ id, label }) => ({
+    category: id,
+    label,
+    ...(countsByGroup.get(id) ?? { unchangedCount: 0, editedCount: 0, rejectedCount: 0 }),
+  }));
+  const ownerTrust = computeOwnerTrust(ownerTrustInputs);
+
   const faqs: Faq[] = Array.isArray(config?.faqs)
     ? (config!.faqs as unknown[])
         .filter(
@@ -104,6 +161,7 @@ export default async function TeachYourReceptionistPage({
           autoReplyGeneralEnabled: config?.auto_reply_general_enabled ?? false,
         }}
         initialTopic={receptionistTopic}
+        ownerTrust={ownerTrust}
       />
       {/* Product Guarantee 1: no fallback coercion below — null means
        * genuinely unconfirmed and must stay that way, never silently

@@ -13,6 +13,7 @@ import { InsightList } from "@/components/shared/insight";
 import { ConfidenceTag, intentLabel, factSourceSummary } from "@/components/dashboard/conversations/conversation-story";
 import { Switch } from "@/components/ui/switch";
 import { buildBrain } from "@/lib/intelligence";
+import { TRUST_STAGE_LABELS, type OwnerTrustCategoryResult, type TrustStage } from "@/lib/brain/trust";
 import { Textarea } from "@/components/ui/textarea";
 import { createClient } from "@/lib/supabase/client";
 import {
@@ -145,6 +146,17 @@ const AUTONOMY_ROWS: {
   { id: "emergencies", label: "Emergencies", helper: "Flagged the moment you open the app.", level: "escalate" },
 ];
 
+/** Owner Trust stage → dot colour, progressing muted-to-confident —
+ * matching AUTONOMY_ROWS' own leading-dot pattern rather than
+ * inventing a second visual language on the same page. */
+const TRUST_STAGE_DOT: Record<TrustStage, string> = {
+  help: "bg-muted-foreground/40",
+  recommend: "bg-blue-400",
+  prepare: "bg-amber-500",
+  handle_routine_work: "bg-lime-500",
+  operate_quietly: "bg-success",
+};
+
 const TONES: { value: Tone; label: string; description: string; icon: LucideIcon; accent: string }[] = [
   { value: "friendly", label: "Friendly", description: "Warm and personal", icon: Smile, accent: "bg-purple-500 shadow-purple-500/25" },
   { value: "professional", label: "Professional", description: "Polished and courteous", icon: Briefcase, accent: "bg-blue-600 shadow-blue-600/25" },
@@ -168,6 +180,7 @@ export function ReceptionistPlayground({
   receptionistName,
   initial,
   initialTopic = null,
+  ownerTrust,
 }: {
   businessId: string;
   businessName: string;
@@ -180,6 +193,11 @@ export function ReceptionistPlayground({
    * link (?topic=) — see the identical pattern and rationale in
    * business-memory.tsx. Already validated by the Server Component page. */
   initialTopic?: string | null;
+  /** Trust Ladder V1 (DOCS/CONSTITUTION/11-ReplyFlow-Trust-Architecture.md)
+   * — Owner Trust, computed server-side from real product_events +
+   * reply_drafts rows. Read-only: rendering this never changes what's
+   * allowed to auto-send. */
+  ownerTrust: OwnerTrustCategoryResult[];
 }) {
   const supabase = createClient();
   const router = useRouter();
@@ -628,6 +646,46 @@ export function ReceptionistPlayground({
               </div>
             )}
             <InsightList observations={brain.observations} limit={1} className="mt-3.5" />
+          </SettleCard>
+
+          {/* Trust Ladder V1 (11-ReplyFlow-Trust-Architecture.md) — Owner
+           * Trust, deliberately its own card, not merged into "How well
+           * I know your style" above or "Receptionist autonomy" below.
+           * Those two are Business Understanding and Authority; this is
+           * what's actually been earned so far — three separate things
+           * per the architecture, shown separately here too. Read-only:
+           * nothing on this card changes what's allowed to auto-send. */}
+          <SettleCard delay={0.035} className="rounded-2xl border border-border bg-card p-5 shadow-sm">
+            <p className="text-[13.5px] font-bold">What I&apos;ve earned so far</p>
+            <p className="mb-3.5 mt-1 text-[12px] leading-relaxed text-muted-foreground">
+              Built from what you&apos;ve actually approved, edited, or sent back — never a guess.
+            </p>
+            <div className="divide-y divide-border overflow-hidden rounded-xl border border-border">
+              {ownerTrust.map((row) => (
+                <div key={row.category} className="flex items-center justify-between gap-3 bg-card px-3.5 py-3">
+                  <div className="flex min-w-0 items-start gap-2.5">
+                    <span
+                      className={cn(
+                        "mt-1.5 h-2 w-2 shrink-0 rounded-full",
+                        row.stage ? TRUST_STAGE_DOT[row.stage] : "bg-muted-foreground/25"
+                      )}
+                    />
+                    <div className="min-w-0">
+                      <p className="text-[12.5px] font-semibold leading-snug">{row.label}</p>
+                      <p className="text-[11px] leading-snug text-muted-foreground">{row.reason}</p>
+                    </div>
+                  </div>
+                  <span
+                    className={cn(
+                      "shrink-0 whitespace-nowrap rounded-full px-2.5 py-1 text-[10.5px] font-bold",
+                      row.stage ? "bg-muted text-foreground/80" : "bg-muted/60 text-muted-foreground"
+                    )}
+                  >
+                    {row.stage ? TRUST_STAGE_LABELS[row.stage] : "Still learning"}
+                  </span>
+                </div>
+              ))}
+            </div>
           </SettleCard>
 
           <SettleCard delay={0.04} className="rounded-2xl border border-primary/15 bg-card p-5 shadow-sm">

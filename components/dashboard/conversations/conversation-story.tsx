@@ -137,6 +137,7 @@ export function ConversationStory({
   pendingDraft,
   relationshipStrength,
   relationshipSummary,
+  communicationGuidance,
 }: {
   conversationId: string;
   businessId: string;
@@ -158,6 +159,10 @@ export function ConversationStory({
    * deciding how to handle this customer. */
   relationshipStrength: RelationshipStrength;
   relationshipSummary: string;
+  /** null when nothing's stored — render nothing at all in that case,
+   * never an empty-state line. Already phrased as guidance by the
+   * caller (buildCommunicationGuidance), never a raw field value. */
+  communicationGuidance: string | null;
 }) {
   const router = useRouter();
   const supabase = createClient();
@@ -430,6 +435,14 @@ export function ConversationStory({
         </span>
         <p className="text-[12.5px] leading-relaxed text-muted-foreground">{relationshipSummary}</p>
       </div>
+
+      {/* "Surface, don't build" — only ever appears when the owner
+       * genuinely stored a preference; the common case (nothing set)
+       * shows nothing here at all. Deliberately placed above the
+       * actions below, which is where "Call customer" actually lives. */}
+      {communicationGuidance && (
+        <p className="mb-3.5 text-[12.5px] leading-relaxed text-foreground">{communicationGuidance}</p>
+      )}
 
       <div className="space-y-1.5">
         {story.map((moment, i) => (

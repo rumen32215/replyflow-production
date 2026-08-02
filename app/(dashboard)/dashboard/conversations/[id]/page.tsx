@@ -8,7 +8,12 @@ import { statusLabel, groupForStatus } from "@/lib/conversations";
 import { parseAvailability, nextAvailableSlot, toDateString } from "@/lib/availability";
 import { toConversationState } from "@/lib/reply-engine/understanding/state";
 import { buildWorkCardDraft } from "@/lib/work-card";
-import { relationshipStrengthFor, buildRelationshipSummary, type CustomerJob } from "@/lib/customer-memory-signals";
+import {
+  relationshipStrengthFor,
+  buildRelationshipSummary,
+  buildCommunicationGuidance,
+  type CustomerJob,
+} from "@/lib/customer-memory-signals";
 import { cn } from "@/lib/utils";
 
 export const metadata: Metadata = { title: "Conversation — ReplyFlow" };
@@ -29,7 +34,7 @@ export default async function ConversationDetailPage({ params }: { params: { id:
   // RLS (0003) scopes this to the signed-in owner's business.
   const { data: conversation } = await supabase
     .from("conversations")
-    .select("id, business_id, customer_name, customer_phone, status, ai_state, created_at")
+    .select("id, business_id, customer_name, customer_phone, status, ai_state, created_at, communication_preference")
     .eq("id", params.id)
     .maybeSingle();
 
@@ -122,6 +127,18 @@ export default async function ConversationDetailPage({ params }: { params: { id:
     waitingMinutes: null,
   });
 
+  // "Surface, don't build" (2026-08-02) — the owner's own stored
+  // communication_preference, already editable on the Customer page,
+  // shown here as guidance rather than a raw field precisely because
+  // this is the screen with the "Call customer" button right on it —
+  // the one moment that preference could actually change what the
+  // owner does next. null when nothing's stored, so the common case
+  // renders nothing extra at all.
+  const communicationGuidance = buildCommunicationGuidance(
+    conversation.customer_name || conversation.customer_phone,
+    conversation.communication_preference
+  );
+
   // A real, honest suggestion — the same diary rules the Diary page's
   // own preview line uses, never a fabricated understanding of this
   // specific conversation's content. Scoped to a day, never a time.
@@ -185,6 +202,7 @@ export default async function ConversationDetailPage({ params }: { params: { id:
         pendingDraft={pendingDrafts?.[0] ?? null}
         relationshipStrength={relationshipStrength}
         relationshipSummary={relationshipSummary}
+        communicationGuidance={communicationGuidance}
       />
 
       <div className="flex-1 space-y-3 overflow-y-auto p-5 md:p-6">

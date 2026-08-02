@@ -153,6 +153,24 @@ export function buildRelationshipSummary(input: {
   return parts.join(" ");
 }
 
+/**
+ * "Surface, don't build" (2026-08-02) — turns the owner's own stored
+ * `communication_preference` fragment (free text, e.g. "Prefers a text
+ * over a call") into a natural sentence, never a raw "Field: value"
+ * label. Same name+fragment stitching already used for chip
+ * acknowledgements (receptionist-playground.tsx's `chipAck`) — no AI
+ * call, no rewriting of what the owner actually wrote, only a
+ * deterministic lead-in and capitalisation fix so it reads as one
+ * sentence. Returns null when there's nothing stored — the caller
+ * should render nothing at all in that case, not an empty state.
+ */
+export function buildCommunicationGuidance(name: string, preference: string | null): string | null {
+  const trimmed = preference?.trim();
+  if (!trimmed) return null;
+  const sentence = `${name} ${trimmed.charAt(0).toLowerCase()}${trimmed.slice(1)}`;
+  return /[.!?]$/.test(sentence) ? sentence : `${sentence}.`;
+}
+
 /** One genuinely useful, rule-based suggestion — never random (Feature
  * 12 UI: "No recommendation should feel random"). Every branch only
  * fires from a real, checkable fact. */

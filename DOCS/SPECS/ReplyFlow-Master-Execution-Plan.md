@@ -423,6 +423,14 @@ Founder adopted a new standing principle after Candidate 1: whenever existing in
 
 **Verification:** tsc/lint/146 tests (4 new)/build all pass; deploy confirmed live. Built a real, temporary fixture against production (a conversation with 4 completed jobs) and ran the exact query + grouping logic both pages now run — confirmed it correctly resolved to "Trusted Customer" and would render the marker, and confirmed a same-shape zero-job conversation correctly stays quiet (no marker, matching the common case); fully cleaned up.
 
+### Communication preference surfaced as guidance, not a field — product-intelligence review, third pass
+
+Founder refined the surface-don't-build principle further: *"surface understanding, not information... translate data into advice rather than displaying data."* Continued the same search and found `conversations.communication_preference` — a real, owner-entered fact already editable on the Customer page — invisible on the one screen with a prominent, unconditional "Call customer" button: the conversation view. The clearest remaining case where hidden understanding could directly change a decision (don't call someone who asked not to be called), and the smallest of the three surfacing tasks so far — one additional column on an already-existing query, no new fetch.
+
+**Shipped:** `buildCommunicationGuidance()` (`lib/customer-memory-signals.ts`) turns the owner's own stored fragment into a natural sentence — name first, then their own words, re-cased only at the join point, never rewritten or paraphrased — reusing the exact deterministic name+fragment stitching pattern already established for chip acknowledgements elsewhere in the codebase, not a new logic concept. No raw field label anywhere, no AI call. Returns `null` when nothing's stored; the conversation view renders nothing at all in that case, so the common case (no preference set yet) looks exactly as it did before.
+
+**Verification:** tsc/lint/153 tests (7 new)/build all pass; deploy confirmed live. Built two real fixtures against production — a conversation with a stored preference (confirmed the query + function together produced exactly *"Dave prefers a text over a call."*) and one without (confirmed it correctly resolved to `null`); both cleaned up.
+
 ## Phase 5 — Growth
 
 *Deliberately last. Nothing here is a Constitution violation to leave unbuilt — these are capabilities, not gaps, and building them before Phase 4 would be exactly the kind of "feature before foundation" this whole consolidation exists to prevent.*

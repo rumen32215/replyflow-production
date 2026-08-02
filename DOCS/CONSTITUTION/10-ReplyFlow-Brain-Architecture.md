@@ -10,7 +10,7 @@
 
 ## The Brain Loop
 
-Nine stages, per Handbook Ch.4. Every real customer interaction passes through the first six every time; **Organise** is now a permanent seventh stage; **Learn** and **Adapt** are named, intentional gaps — not oversights, deferred to Phase 5 pending real pilot data (see `DOCS/SPECS/ReplyFlow-Master-Execution-Plan.md`).
+Nine stages, per Handbook Ch.4 — all nine now have a permanent architecture, though not all nine are built. Every real customer interaction passes through the first six every time; **Organise** is a permanent seventh stage, implemented. **Learn** (doc 12) and **Adapt** (doc 13) have approved architectures but no code yet — named, intentional gaps, not oversights. They differ in why: Learn's mechanism needs no pilot data (it asks the owner directly, every time); Adapt genuinely does, to calibrate how much confirmed pattern is real versus coincidence (see `DOCS/SPECS/ReplyFlow-Master-Execution-Plan.md`).
 
 ```mermaid
 flowchart TD
@@ -21,11 +21,11 @@ flowchart TD
     E --> F["6. Act<br/>Reply, book, escalate, or wait"]
     F --> G["7. Organise<br/>Does this need a destination?"]
     G -.-> H["8. Learn<br/>ARCHITECTURE APPROVED"]
-    H -.-> I["9. Adapt<br/>NOT YET BUILT"]
+    H -.-> I["9. Adapt<br/>ARCHITECTURE APPROVED"]
 
     style G fill:#d4edda,stroke:#28a745
     style H fill:#fff3cd,stroke:#d4a017,stroke-dasharray: 5 5
-    style I fill:#f8d7da,stroke:#dc3545,stroke-dasharray: 5 5
+    style I fill:#fff3cd,stroke:#d4a017,stroke-dasharray: 5 5
 ```
 
 ### Stage-by-stage
@@ -40,7 +40,7 @@ flowchart TD
 | 6 | **Act** | "Reply, book, escalate, notify, or wait." | `lib/reply-engine/send.ts` (`sendReplyToCustomer`) for auto-send; the `reply_drafts` row itself for owner-reviewed replies; `app/api/reply-drafts/[id]/route.ts` for the owner's own approve/edit/reject action. | Implemented |
 | 7 | **Organise** | "Does this need a destination? Should a Work Card update? Nothing should disappear." | `lib/brain/organise.ts` — `runOrganiseCheckpoint()`, a stable rule-list stage. Evaluated at Brain-build time (`app/(dashboard)/dashboard/page.tsx`), not inside the message pipeline — see `DOCS/SPECS/ReplyFlow-Organise-Checkpoint.md` for why. v1: one rule (a booking-shaped conversation with no Work Card). v1.1 (2026-08-02) added a second: a real customer message with an already-recorded `error_events` critical row (zero reply drafted) surfaces to the owner — an already-confirmed fact, not a pilot-data-gated heuristic, so it didn't need the same gating as future rules. | **Implemented (v1.1, two rules)** |
 | 8 | **Learn** | "Every correction, every approval, every decision should make ReplyFlow a little better than yesterday." | Stub only: `lib/brain/index.ts`'s `recordCorrection()`/`recordOutcome()` both throw — explicitly reserved, not implemented. `product_events` (Task 3.2) captures the raw facts (`draft.edited`, `draft.approved`, `draft.rejected`) but nothing reads them back into future behaviour yet. Full permanent architecture now approved: [12-ReplyFlow-Learning-Memory-Architecture.md](12-ReplyFlow-Learning-Memory-Architecture.md) (2026-08-02) — "infer to propose, ask to confirm," not automatic pattern-detection, so unlike the fuller Adapt stage below it does **not** need pilot data to become buildable. | **Architecture approved, not yet implemented** |
-| 9 | **Adapt** | "Recognise repeated owner behaviour and change accordingly — every business should slowly become unique." | No code exists. Depends on Learn existing first. | **Not built** — deferred to Phase 5, after Learn |
+| 9 | **Adapt** | "Recognise repeated owner behaviour and change accordingly — every business should slowly become unique." | No code exists. Full permanent architecture now approved: [13-ReplyFlow-Adaptation-Architecture.md](13-ReplyFlow-Adaptation-Architecture.md) (2026-08-02) — "Adaptation proposes, the owner decides." Reads only already-confirmed Learning/Trust history, never raw signals; every proposal must include evidence the owner can understand, or it isn't made. Genuinely pilot-gated: not the propose-then-confirm mechanism itself, but calibrating how much confirmed pattern is real versus coincidence needs real cross-business evidence. | **Architecture approved, not yet implemented — completes all nine Brain Loop stages** |
 
 ---
 

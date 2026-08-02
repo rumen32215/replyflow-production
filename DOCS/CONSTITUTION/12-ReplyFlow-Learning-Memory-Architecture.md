@@ -2,7 +2,7 @@
 
 **How ReplyFlow turns a real correction into durable business knowledge — Brain Loop Stage 8.** Companion to [10-ReplyFlow-Brain-Architecture.md](10-ReplyFlow-Brain-Architecture.md) (which names Learn/Adapt as the two remaining Brain Loop gaps) and [11-ReplyFlow-Trust-Architecture.md](11-ReplyFlow-Trust-Architecture.md) (which reads the same underlying signal this document writes).
 
-**Status: approved architecture, not yet implemented (2026-08-02).** Founder-approved across three review rounds. No code exists yet; implementation will be planned as a separate task. Check `10-ReplyFlow-Brain-Architecture.md`'s own status table for what's actually built.
+**Status: V1 implemented (2026-08-02).** Founder-approved across three review rounds, then built end to end the same day: `lib/brain/learning.ts` (the deterministic gate), `lib/reply-engine/learning/propose-lesson.ts` (the scoped, hedged LLM proposal), `lib/reply-engine/learning/detect-and-propose.ts` (orchestration, wired into `app/api/reply-drafts/[id]/route.ts`'s edit action), `learning_proposals` (migration 0022), `app/api/learning-proposals/[id]/route.ts` (the four-outcome resolution route), and `components/dashboard/receptionist/learning-proposal-card.tsx` (the owner-facing card). Verified end to end against production with a real fixture. Check `10-ReplyFlow-Brain-Architecture.md`'s own status table for the full picture across all nine Brain Loop stages.
 
 **The Founder Handbook is the authority this document answers to.** Primary source chapters: Ch.03 (*"Learning From Every Gap"*), Ch.04 (Brain Loop Stage 8, *"Learn"*), Ch.05 (*"Learning Through Correction"*), Ch.06 Principle 9 (*"Learn, Then Adapt"*).
 

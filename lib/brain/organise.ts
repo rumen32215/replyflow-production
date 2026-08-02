@@ -38,6 +38,22 @@
  * (`recordErrorEvent`) but only ever readable by the founder's own
  * admin pages — the owner, whose actual customer this was, never finds
  * out. See `unrepliedMessageRule` below.
+ *
+ * Standing architectural rule for every future Organise rule (founder,
+ * 2026-08-02) — this checkpoint surfaces confirmed realities, never
+ * predictions. The two kinds of candidate rule stay on opposite sides
+ * of one line, permanently:
+ *   - A CONFIRMED FACT (something that already, definitely happened —
+ *     a real error already recorded, a real row that does or doesn't
+ *     exist) needs no pilot evidence. It's true today, for real,
+ *     regardless of how many businesses have used ReplyFlow.
+ *   - A BUSINESS-PROCESS RECOMMENDATION (a heuristic guess about what
+ *     an owner would probably want — quote-stage gaps, stale
+ *     follow-ups, unresolved commitments) needs real pilot evidence
+ *     first, precisely because it's a guess, not yet a fact.
+ * When adding a rule, name out loud which side of that line it's on
+ * before writing it — never assume "it feels useful" is enough on its
+ * own to skip the pilot-data bar.
  */
 
 export interface OrganiseCandidate {

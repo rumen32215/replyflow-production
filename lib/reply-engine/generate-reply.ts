@@ -64,7 +64,24 @@ export async function generateReplyForMessage(params: {
       .select("customer_phone, customer_name, created_at")
       .eq("id", conversationId)
       .maybeSingle();
-    if (!conversation) return;
+    if (!conversation) {
+      // Real, unexplained silent-drop shape (SLI doc §3, 2026-08-01
+      // correction): a `return` here is not a thrown exception, so it
+      // never reached reply-engine.pipeline_failure below — a genuine
+      // gap in the SLI's own instrumentation, not just in this code
+      // path. The webhook always creates this exact conversation row
+      // moments before calling here, so this "should" never be null;
+      // recording it rather than assuming makes the next real
+      // occurrence diagnosable instead of invisible.
+      await recordErrorEvent({
+        severity: "critical",
+        source: "reply-engine.conversation_not_found",
+        businessId,
+        message: "generateReplyForMessage could not find its own conversation row — this customer message has no reply_drafts row.",
+        context: { conversationId, customerMessageId },
+      });
+      return;
+    }
 
     const { data: aiConfig } = await supabase
       .from("ai_configurations")

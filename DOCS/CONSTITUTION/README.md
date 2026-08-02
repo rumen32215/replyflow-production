@@ -19,6 +19,7 @@ A note on the name: the brief for this sprint suggested `/docs`. This folder is 
 | [08-Implementation-Roadmap.md](08-Implementation-Roadmap.md) | What gets built next, in what order, and why? |
 | [09-Receptionist-Intelligence-Architecture.md](09-Receptionist-Intelligence-Architecture.md) | How does she actually reason, turn by turn, right now — and what does that leave still undecided? |
 | [10-ReplyFlow-Brain-Architecture.md](10-ReplyFlow-Brain-Architecture.md) | What are the nine Brain Loop stages and four Business Brain memory types, and exactly where does each one live in the code — built, partial, or not yet? |
+| [11-ReplyFlow-Trust-Architecture.md](11-ReplyFlow-Trust-Architecture.md) | What does trust actually mean inside ReplyFlow, how is Business Understanding separate from Owner Trust, and how does the Trust Ladder relate to the Brain without becoming a fifth Business Brain memory type? Approved architecture, not yet implemented. |
 
 ## Relationship to `DOCS/SPECS/`
 

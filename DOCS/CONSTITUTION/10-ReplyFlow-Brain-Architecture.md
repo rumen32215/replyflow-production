@@ -84,9 +84,9 @@ flowchart LR
 Two further pieces from the 2026-08-01 architecture design review have no code yet, by deliberate choice, pending real pilot data:
 
 - **Granular Authority** — per-decision-type owner control, replacing today's single `ai_configurations.auto_reply_general_enabled` toggle. The Receptionist page's `AUTONOMY_ROWS` UI already visually presents three categories (General/Booking/Quotes & pricing); only General is a real, wired toggle today.
-- **Trust Ladder** — a real, computed representation of Help → Recommend → Prepare → Handle Routine Work → Operate Quietly. Depends on both Learning Memory and Granular Authority existing first; deliberately the last piece to become buildable.
+- **Trust Ladder** — now has its own full, founder-approved permanent specification: [11-ReplyFlow-Trust-Architecture.md](11-ReplyFlow-Trust-Architecture.md) (2026-08-02). A derived capability, not a fifth Business Brain memory type — reads from the four memory types above plus `product_events`/`error_events`. Splits into two separately-tracked dimensions (Business Understanding, Owner Trust) rather than one score. Architecture only; not yet implemented.
 
-Full reasoning for both in the architecture design review recorded in this project's session history (2026-08-01) and summarized in `DOCS/SPECS/ReplyFlow-Master-Execution-Plan.md`'s Phase 5 list.
+Full reasoning for Granular Authority in the architecture design review recorded in this project's session history (2026-08-01) and summarized in `DOCS/SPECS/ReplyFlow-Master-Execution-Plan.md`'s Phase 5 list.
 
 ---
 

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { ensureBusinessRow } from "@/lib/business";
+import { recordErrorEvent } from "@/lib/error-events";
 
 export const dynamic = "force-dynamic";
 
@@ -41,8 +42,22 @@ export async function GET(request: Request) {
       if (user) {
         // Best-effort here: if this insert ever fails (transient DB
         // hiccup), /api/onboarding/prepare repeats the same guarantee
-        // at the end of onboarding, so the journey still completes.
-        await ensureBusinessRow(supabase, user.id);
+        // at the end of onboarding, so the journey still completes —
+        // silence here is intentional. Recording the failure itself is
+        // not: still non-blocking (never delays the redirect), but a
+        // sustained problem (not a one-off transient hiccup) should be
+        // visible from the earliest point it can occur, not only if it
+        // also happens to fail again later at onboarding/prepare.
+        const { error: ensureError } = await ensureBusinessRow(supabase, user.id);
+        if (ensureError) {
+          await recordErrorEvent({
+            severity: "warning",
+            source: "auth.ensure_business_row_failed",
+            businessId: null,
+            message: `ensureBusinessRow failed right after email verification (non-blocking — retried at onboarding/prepare): ${ensureError}`,
+            context: { ownerId: user.id },
+          });
+        }
       }
       return NextResponse.redirect(`${origin}${next}`);
     }

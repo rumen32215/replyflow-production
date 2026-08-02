@@ -431,6 +431,14 @@ Founder refined the surface-don't-build principle further: *"surface understandi
 
 **Verification:** tsc/lint/153 tests (7 new)/build all pass; deploy confirmed live. Built two real fixtures against production — a conversation with a stored preference (confirmed the query + function together produced exactly *"Dave prefers a text over a call."*) and one without (confirmed it correctly resolved to `null`); both cleaned up.
 
+### Communication guidance on the Work Card detail page — Hidden Understanding initiative closed
+
+Fourth and final task under the "surface, don't build" seam opened by the product-intelligence review. This page has its own direct `tel:` call link with the exact blind spot the conversation view had before `buildCommunicationGuidance()` existed — its server page already joined `conversations`, just never selected `communication_preference`. The smallest of the four tasks: one query field added, the already-built, already-tested function called unchanged, the guidance rendered inside the existing Customer card next to the existing phone link. No new component, no new logic, no new page.
+
+**Verification:** tsc/lint/153 tests/build all pass (no new logic, so no new tests — pure reuse); deploy confirmed live. Built a real fixture against production (a work card and its conversation with a stored preference) and ran the exact query both files now run, confirming it correctly produced *"Priya only calls after 5pm, otherwise text."*; cleaned up.
+
+**Founder direction: this closes the Hidden Understanding initiative.** Three permanent product principles came out of it — Surface, don't build; Translate data into advice; Show only what changes behaviour — recorded in `replyflow_surface_dont_build_principle.md` and to be applied automatically in future reviews, but the initiative itself (actively hunting this specific codebase for more small instances of it) is finished. Future architecture reviews return to the Founder Handbook, Constitution, and this plan for the next *major* opportunity rather than continuing to polish this seam.
+
 ## Phase 5 — Growth
 
 *Deliberately last. Nothing here is a Constitution violation to leave unbuilt — these are capabilities, not gaps, and building them before Phase 4 would be exactly the kind of "feature before foundation" this whole consolidation exists to prevent.*

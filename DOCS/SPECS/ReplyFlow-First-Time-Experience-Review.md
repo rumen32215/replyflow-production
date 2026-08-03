@@ -12,6 +12,8 @@
 
 Every finding below is judged against this, and against one more, borrowed directly from this task's own brief: **does this screen create aspiration, or does it just explain a feature?** Apple's onboarding doesn't answer "what does this do" — it makes someone think "I want this" before they've thought to ask. That's the bar this review is using, not "is this screen functional" (nearly everything below already clears that bar).
 
+**Now a permanent law, not just this review's test:** `06-Experience-Architecture.md` has been amended with the sharpened form of this rule — *"every screen must answer one emotional question before it's allowed to ask the visitor for anything"* — with a worked example for each screen in this journey. Findings below are the evidence that produced that amendment.
+
 ---
 
 ## Method

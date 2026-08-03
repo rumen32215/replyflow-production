@@ -6,6 +6,12 @@
 
 Not "wrong eventually." Wrong today, regardless of how much real data is on it. A screen with twelve accurate facts and no clear answer has failed the same way a screen with one invented fact has failed — it has made the owner do the work ReplyFlow exists to do for them.
 
+**Sharpened (2026-08-03, Experience Polish phase):** for any screen before the owner has a real relationship with the product yet — the entire first-time journey `ReplyFlow-First-Time-Experience-Review.md` studies, landing page through Front Desk entry — that one question is never functional. It's emotional.
+
+> **Every screen must answer one emotional question before it's allowed to ask the visitor for anything.**
+
+A screen that asks for an email address, a trade, a WhatsApp connection, or simply attention, before it has honestly answered the feeling underneath that ask, is asking too early — regardless of how correct its functional content is. Examples, not an exhaustive list: Landing — *why should I care?* Login — *can I trust this company?* Create account — *is this worth trying?* Verification — *is this easy?* Trade selection — *does this understand my business?* Meet Your Receptionist — *does she genuinely understand me?* Front Desk — *is my business under control?* This doesn't replace the five-second rule above — it's the same law, applied to the screens where "the one question" was never going to be a factual one.
+
 ---
 
 ## 1. Front Desk — from dashboard to office — implemented (Owner Experience 01)

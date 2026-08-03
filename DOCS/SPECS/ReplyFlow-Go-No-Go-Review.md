@@ -57,8 +57,9 @@ Schema, gating, Checkout/Portal/webhook integration all built and verified worki
 4. Set `SUPPORT_EMAIL` to a real, monitored address (1.5) — no real customer should be able to reach a support channel that doesn't exist yet.
 5. Complete a qualified legal review of `ReplyFlow-Data-Practices-Audit.md` and publish a real privacy policy/ToS (1.6).
 6. (Not a Phase 0/1 blocker, but genuinely needed before `/admin` is usable at all) Set `ADMIN_EMAILS`.
+7. **Added 2026-08-03, Owner Attention Architecture V1** (`DOCS/CONSTITUTION/14-ReplyFlow-Owner-Attention-Architecture.md`): set `RESEND_API_KEY`, `ATTENTION_FROM_EMAIL`, `CRON_SECRET` — without them, `app/api/cron/attention` is fully built and inert, the same pattern as item 3. Separately: **upgrade to Vercel Pro (or equivalent infrastructure capable of a minute-level cron)** before the pilot begins if same-day urgency for an escalation-flagged reply genuinely matters — today's Hobby plan caps the cron to once daily, an operational deployment limitation, not a defect in doc 14's design (see its own status line).
 
-Everything on this list is a real decision or a real external action — a Stripe account, a Supabase plan, a webhook URL, an email address, a lawyer. None of it is more engineering work waiting to be scheduled.
+Everything on this list is a real decision or a real external action — a Stripe account, a Supabase plan, a webhook URL, an email address, a lawyer, a hosting tier. None of it is more engineering work waiting to be scheduled.
 
 ---
 

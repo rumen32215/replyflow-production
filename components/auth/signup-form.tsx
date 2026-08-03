@@ -54,8 +54,8 @@ export function SignupForm() {
 
   return (
     <AuthCard>
-      <h1 className="mb-1.5 text-[25px] font-extrabold tracking-tight">Create your account</h1>
-      <p className="mb-7 text-[14.5px] text-muted-foreground">Start your 7-day free trial. No credit card required.</p>
+      <h1 className="mb-1.5 text-[25px] font-extrabold tracking-tight">Let&apos;s meet your receptionist.</h1>
+      <p className="mb-7 text-[14.5px] text-muted-foreground">Takes about a minute — 7 days free, no card needed, no commitment.</p>
 
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
         <div className="space-y-1.5">
@@ -110,7 +110,7 @@ export function SignupForm() {
           </ul>
         </div>
 
-        <Button type="submit" variant="default" className="w-full" disabled={submitting}>
+        <Button type="submit" variant="primary" className="w-full" disabled={submitting}>
           {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
           Continue
         </Button>

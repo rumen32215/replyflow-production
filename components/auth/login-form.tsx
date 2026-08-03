@@ -122,7 +122,7 @@ export function LoginForm() {
           {errors.password && <p className="text-xs font-medium text-destructive">{errors.password.message}</p>}
         </div>
 
-        <Button type="submit" variant="default" className="w-full" disabled={submitting}>
+        <Button type="submit" variant="primary" className="w-full" disabled={submitting}>
           {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
           Log in
         </Button>

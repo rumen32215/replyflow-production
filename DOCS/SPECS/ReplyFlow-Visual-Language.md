@@ -1,8 +1,22 @@
 # ReplyFlow Visual Language
 
-**Design pass only — no implementation.** Behaviour, intelligence, trust, architecture, and emotion all have permanent documents. Visual feeling doesn't yet — this is that document, written before Hero (or any other Landing Experience section) is built, so eight sections built one at a time don't quietly drift into eight slightly different products. Not because of colour. Because of consistency — the same reason Apple, Stripe, and Linear each have exactly one visual language, not one per page.
+**Status: approved (2026-08-03).** Behaviour, intelligence, trust, architecture, and emotion all have permanent documents. Visual feeling didn't — this is that document, written before Hero (or any other Landing Experience section) was built, so eight sections built one at a time don't quietly drift into eight slightly different products. Not because of colour. Because of consistency — the same reason Apple, Stripe, and Linear each have exactly one visual language, not one per page.
 
 **This document does not invent a new design system.** ReplyFlow already has one — `app/globals.css`'s real token set, `tailwind.config.ts`, and the motion primitives in `components/shared/motion.tsx` are already disciplined, already consistently applied across the whole authenticated product, and already good. The landing page has to feel like the *same product* as Front Desk and Meet Your Receptionist, not a separate marketing site wearing ReplyFlow's logo. Every rule below either codifies what already exists or extends it explicitly, flagged as new where it is.
+
+---
+
+## 0.1 The permanent shipping law for this entire phase
+
+> **Nothing ships because it looks better. Everything ships because it improves understanding, trust, or confidence.**
+
+Every architectural decision behind the Brain Loop, the Trust Ladder, and Learning Memory has been about increasing trust, never about novelty for its own sake. The Experience Polish phase — the First-Time Experience Review, the Landing Experience Design, this document, and everything implemented from them — is held to the identical standard, applied to visual decisions instead of product ones. Before any element ships, ask which of the three it serves:
+
+- **Understanding** — does this make it clearer what ReplyFlow is or does?
+- **Trust** — does this make the product feel more credible, more honest, more like something a real business could rely on?
+- **Confidence** — does this make the visitor more sure that trying ReplyFlow, or continuing to use it, is the right call?
+
+If a visual choice is beautiful but can't name which of the three it serves, it doesn't ship — regardless of how good it looks in isolation. This is the same test §1's "motion has meaning" already applies to animation specifically, generalised to every visual decision on the page.
 
 ---
 
@@ -118,4 +132,4 @@ Named because this codebase (and this assistant) has real, working conventions t
 
 ## 9. How this document gets used
 
-Before any Landing Experience section is built, check it against this document the same way `02-Principles.md` asks every feature to be checked against the ten principles: does this use only the real tokens in §3–§4, does it respect §5's spacing rules, is its imagery real product (§6), does every animation on it name one of §7's four purposes? If a section can't answer yes to all four, it isn't ready to ship, regardless of how good it looks in isolation.
+Before any Landing Experience section is built, check it against this document the same way `02-Principles.md` asks every feature to be checked against the ten principles: does this use only the real tokens in §3–§4, does it respect §5's spacing rules, is its imagery real product (§6), does every animation on it name one of §7's four purposes, and does the section as a whole answer §0.1's law — understanding, trust, or confidence, not just "looks better"? If a section can't answer yes to all five, it isn't ready to ship, regardless of how good it looks in isolation.

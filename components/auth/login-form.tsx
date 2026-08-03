@@ -85,8 +85,8 @@ export function LoginForm() {
 
   return (
     <AuthCard>
-      <h1 className="mb-1.5 text-[25px] font-extrabold tracking-tight">Welcome back</h1>
-      <p className="mb-7 text-[14.5px] text-muted-foreground">Log in to your ReplyFlow account.</p>
+      <h1 className="mb-1.5 text-[25px] font-extrabold tracking-tight">Welcome back.</h1>
+      <p className="mb-7 text-[14.5px] text-muted-foreground">Let&apos;s see how things are going.</p>
 
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
         <div className="space-y-1.5">

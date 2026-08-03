@@ -20,7 +20,7 @@ export default async function SettingsPage() {
 
   const { data: business, error: businessError } = await supabase
     .from("businesses")
-    .select("id, business_name, subscription_status, trial_ends_at, stripe_customer_id")
+    .select("id, business_name, subscription_status, trial_ends_at, stripe_customer_id, notify_new_enquiry")
     .eq("owner_id", user.id)
     .maybeSingle();
   // A real query error is not "onboarding incomplete" — see the
@@ -31,6 +31,10 @@ export default async function SettingsPage() {
   }
 
   const supportEmail = process.env.SUPPORT_EMAIL || null;
+  // Owner Attention Architecture (doc 14) — the toggle only ever
+  // renders as live once a real channel actually exists, same
+  // discipline as the "Get help" section just above it.
+  const emailDeliveryConfigured = Boolean(process.env.RESEND_API_KEY && process.env.ATTENTION_FROM_EMAIL);
   const subscriptionGate = describeSubscriptionGate({
     status: business.subscription_status as SubscriptionStatus,
     trialEndsAt: business.trial_ends_at,
@@ -76,7 +80,11 @@ export default async function SettingsPage() {
           <h2 className="text-[15px] font-bold">Notifications</h2>
         </div>
         <p className="mb-2 text-[13px] text-muted-foreground">Choose what ReplyFlow keeps you posted on.</p>
-        <SettingsNotifications />
+        <SettingsNotifications
+          businessId={business.id}
+          initialNotifyNewEnquiry={business.notify_new_enquiry ?? true}
+          emailDeliveryConfigured={emailDeliveryConfigured}
+        />
       </SettleCard>
 
       <SettleCard delay={0.17} className="rounded-2xl border border-border bg-card p-6">

@@ -330,6 +330,50 @@ function outcomeStepMs(outcomeIndex: number): number {
 }
 const REST_MS = 6500;
 
+/** V18 founder review (2026-08-04): "the cards should feel like
+ * ReplyFlow is quietly becoming ready instead of individual cards
+ * simply appearing... the same confidence and smoothness" as the
+ * organisation panel further down the page. That panel's own reveal
+ * (`peace-of-mind.tsx`) is a plain Framer stagger — every tile mounts
+ * at once, timed entirely by `transition.delay`, no imperative loop,
+ * no jitter. Reproducing that technique here (instead of the old
+ * `setTimeout`-chained `visibleCount` state machine) is what actually
+ * produces the "one coordinated reveal" feel instead of a sequence of
+ * individual pops — jitter in particular reads as inconsistency
+ * between tiles rather than life, so this schedule is deterministic.
+ * The numbers below reproduce the previous pacing exactly (same
+ * 900ms lead-in, same `CHECKLIST_STEP_MS` gap between capability
+ * tiles, same `outcomeStepMs` acceleration for the outcome tiles) —
+ * only the mechanism changed, not the choreography. */
+const DASHBOARD_LEAD_IN_S = 0.9;
+const DASHBOARD_OUTCOME_PAUSE_S = 0.5;
+const DASHBOARD_TILE_DELAYS: readonly number[] = (() => {
+  const delays: number[] = [];
+  let t = DASHBOARD_LEAD_IN_S;
+  for (let i = 0; i < 4; i++) {
+    delays.push(t);
+    if (i < 3) t += CHECKLIST_STEP_MS / 1000;
+  }
+  t += DASHBOARD_OUTCOME_PAUSE_S;
+  for (let i = 0; i < 4; i++) {
+    t += outcomeStepMs(i) / 1000;
+    delays.push(t);
+  }
+  return delays;
+})();
+/** Matches the final tile's own breathing transition `duration` below. */
+const DASHBOARD_BREATH_S = 2.4;
+/** "Nothing waiting for you" gets its own brief arrival before the
+ * button appears — a beat of relief, not an instant cut. */
+const DASHBOARD_REST_BEFORE_BUTTON_S = 1.7;
+const DASHBOARD_BUTTON_READ_S = 1.2;
+/** Stable references (module scope, never recreated on re-render) for
+ * every tile's hidden/entrance/breathing `animate` targets. */
+const DASHBOARD_HIDDEN_ANIMATE = { opacity: 0, y: 10, scale: 0.92 };
+const DASHBOARD_ENTRANCE_ANIMATE = { opacity: 1, y: 0, scale: 1 };
+const DASHBOARD_BREATHING_ANIMATE = { opacity: 1, y: 0, scale: [1, 1, 1.009, 1, 1.009, 1] };
+const DASHBOARD_BREATHING_TRANSITION = { duration: DASHBOARD_BREATH_S, ease: EASE, times: [0, 0.15, 0.42, 0.63, 0.86, 1] };
+
 function estimateStoryMs(act: JourneyAct): number {
   if (act.kind === "conversation") {
     const photoMs = act.photo ? 700 + 1200 + estimateTypeMs(act.photo.reply) : 0;
@@ -338,8 +382,9 @@ function estimateStoryMs(act: JourneyAct): number {
   if (act.kind === "trust") {
     return 700 + act.facts.length * 550 + 600 + 900 + 1100 + act.trustChips.length * 400 + 500 + 1200;
   }
-  const outcomeMs = outcomeStepMs(0) + outcomeStepMs(1) + outcomeStepMs(2) + outcomeStepMs(3);
-  return 900 + 4 * CHECKLIST_STEP_MS + 500 + outcomeMs + 900 + 1600;
+  const lastTileDelayS = DASHBOARD_TILE_DELAYS[DASHBOARD_TILE_DELAYS.length - 1] ?? 0;
+  const finalSettleS = 0.5;
+  return (lastTileDelayS + finalSettleS + DASHBOARD_BREATH_S + DASHBOARD_REST_BEFORE_BUTTON_S + DASHBOARD_BUTTON_READ_S) * 1000;
 }
 
 // ---------------------------------------------------------------------------
@@ -616,7 +661,24 @@ function ReplyFlowAppShell({
  * (`OUTCOME_STEP_MS` < `CHECKLIST_STEP_MS`) — "the user already
  * understands what's happening, speed should increase." The final
  * tile triggers `onCelebrate` — a one-shot acknowledgement on the
- * phone itself, not the tile — before the button appears. */
+ * phone itself, not the tile — before the button appears.
+ *
+ * V18 founder review (2026-08-04): "the cards should feel like
+ * ReplyFlow is quietly becoming ready, not individual cards simply
+ * appearing." Reveal timing is now scheduled entirely up front (every
+ * tile's `setTimeout` is registered in one pass, off `DASHBOARD_TILE_
+ * DELAYS`) instead of the old sequential `await`-chain that added
+ * random jitter at every step — jitter reads as inconsistency between
+ * tiles rather than life, and small per-step drift compounds across a
+ * chain of eight awaits. This also fixes a concrete bug in the old
+ * code: it called `setVisibleCount` and `setFinalArrived(true)` back
+ * to back in the same tick for the final tile, so that tile could
+ * render already-breathing on its very first visible frame — skipping
+ * its spring entrance and popping in on the slower breathing curve
+ * instead, the "small mechanical glitch" the founder flagged.
+ * `finalArrived` now only flips inside `onAnimationComplete`, once the
+ * tile's own spring entrance has genuinely finished, so every tile —
+ * including the last — always plays the same entrance first. */
 function DashboardView({
   act,
   onCelebrate,
@@ -629,37 +691,18 @@ function DashboardView({
   const [visibleCount, setVisibleCount] = useState(0);
   const [finalArrived, setFinalArrived] = useState(false);
   const [showButton, setShowButton] = useState(false);
-  const startedRef = useRef(false);
+  const finalStageRef = useRef<0 | 1 | 2>(0);
+  const buttonTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const allTiles = useMemo(() => [...act.capabilityTiles, ...act.outcomeTiles], [act]);
 
   useEffect(() => {
-    if (startedRef.current) return;
-    startedRef.current = true;
-    const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
-    const jitter = (ms: number, spread: number) => ms + (Math.random() * spread * 2 - spread);
-
-    async function run() {
-      await wait(jitter(900, 150));
-      for (let i = 0; i < 4; i++) {
-        if (i > 0) await wait(jitter(CHECKLIST_STEP_MS, 120));
-        setVisibleCount(i + 1);
-      }
-      await wait(jitter(500, 100));
-      for (let i = 4; i < 8; i++) {
-        await wait(jitter(outcomeStepMs(i - 4), 45));
-        setVisibleCount(i + 1);
-        if (i === 7) {
-          onCelebrate();
-          setFinalArrived(true);
-        }
-      }
-      // "Nothing waiting for you" gets its own brief arrival before the
-      // button appears — a beat of relief, not an instant cut to the
-      // next thing. See the tile's own breathing/shimmer treatment below.
-      await wait(jitter(1700, 150));
-      setShowButton(true);
-    }
-    void run();
+    const timeouts = DASHBOARD_TILE_DELAYS.map((delaySec, i) =>
+      setTimeout(() => setVisibleCount(i + 1), delaySec * 1000)
+    );
+    return () => {
+      timeouts.forEach(clearTimeout);
+      if (buttonTimeoutRef.current) clearTimeout(buttonTimeoutRef.current);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -687,14 +730,36 @@ function DashboardView({
                       // V15's own version — a smaller breath, held a
                       // touch longer, reading as an exhale rather than
                       // anything with edges to it.
-                      { opacity: 1, y: 0, scale: [1, 1, 1.009, 1, 1.009, 1] }
-                    : { opacity: 1, y: 0, scale: 1 }
-                  : { opacity: 0, y: 10, scale: 0.92 }
+                      DASHBOARD_BREATHING_ANIMATE
+                    : DASHBOARD_ENTRANCE_ANIMATE
+                  : DASHBOARD_HIDDEN_ANIMATE
               }
               transition={
                 isFinal && finalArrived
-                  ? { duration: 2.4, ease: EASE, times: [0, 0.15, 0.42, 0.63, 0.86, 1] }
+                  ? DASHBOARD_BREATHING_TRANSITION
                   : { type: "spring", stiffness: 380, damping: 18 }
+              }
+              onAnimationComplete={
+                isFinal
+                  ? () => {
+                      // First completion is the normal spring entrance
+                      // settling — hand off to the breathing sequence.
+                      // Second completion is the breathing sequence
+                      // itself finishing — that's the real cue to bring
+                      // the button in.
+                      if (finalStageRef.current === 0 && visible) {
+                        finalStageRef.current = 1;
+                        onCelebrate();
+                        setFinalArrived(true);
+                      } else if (finalStageRef.current === 1) {
+                        finalStageRef.current = 2;
+                        buttonTimeoutRef.current = setTimeout(
+                          () => setShowButton(true),
+                          DASHBOARD_REST_BEFORE_BUTTON_S * 1000
+                        );
+                      }
+                    }
+                  : undefined
               }
             >
               {/* Every tile's brief "job done" bloom on arrival. The

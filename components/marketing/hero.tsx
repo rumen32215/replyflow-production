@@ -50,24 +50,32 @@ function TradeEyebrow({ activeTrade }: { activeTrade: Trade }) {
       transition={{ duration: 0.5, ease: EASE }}
       className="mb-5 text-[13px] font-bold uppercase tracking-widest"
     >
-      <span className="text-primary/60">For </span>
+      {/* V17 founder review (2026-08-04) — release-candidate audit:
+       * measured contrast of `text-primary` at the opacities this line
+       * previously used (`/55`–`/60`) against this page's light
+       * background comes out around 2.5–3.8:1 — well under WCAG AA's
+       * 4.5:1 minimum for 13px text, and primary blue needs ~95%+
+       * opacity on this background to clear 4.5:1 at all, which would
+       * have erased the hierarchy this eyebrow depends on. Fixed with
+       * a real colour swap instead of a faded one: inactive words (and
+       * "For") now use `text-foreground/70` (measured ~6.5:1, a clear
+       * AA pass with real margin) rather than a washed-out primary —
+       * the active word popping in full-saturation blue reads even
+       * more clearly against that quiet near-black than it did against
+       * a lighter tint of its own colour. */}
+      <span className="text-foreground/70">For </span>
       {EYEBROW_TRADES.map((trade, i) => (
         <span key={trade}>
           <span
             className={cn(
-              // V10 founder review (2026-08-04): "the transition still
-              // lingers slightly too long... 15-20% quicker, not
-              // faster overall." 700ms → 575ms is an 18% cut — enough
-              // to feel like a confident rotation rather than a wait,
-              // without turning it into a genuinely fast animation.
-              "inline-block transition-colors duration-[575ms] ease-out",
-              trade === activeTrade ? "font-extrabold text-primary" : "font-bold text-primary/55"
+              "inline-block",
+              trade === activeTrade ? "font-extrabold text-primary" : "font-bold text-foreground/70"
             )}
           >
             {trade}
           </span>
           {i < EYEBROW_TRADES.length - 1 && (
-            <span className="text-primary/55">{i === EYEBROW_TRADES.length - 2 ? " & " : ", "}</span>
+            <span className="text-foreground/70">{i === EYEBROW_TRADES.length - 2 ? " & " : ", "}</span>
           )}
         </span>
       ))}
@@ -246,7 +254,7 @@ export function Hero() {
             whileTap={isNavigating ? undefined : { scale: 0.985 }}
             animate={{ scale: isNavigating ? 1.06 : 1 }}
             transition={{ type: "spring", stiffness: 400, damping: 24 }}
-            className="group relative inline-flex items-center gap-2 overflow-hidden rounded-xl bg-primary px-7 py-3.5 text-[15px] font-semibold text-primary-foreground shadow-sm transition-shadow duration-300 hover:shadow-[0_10px_30px_-8px_rgba(37,99,235,0.55)]"
+            className="group relative inline-flex items-center gap-2 overflow-hidden rounded-xl bg-primary px-7 py-3.5 text-[15px] font-semibold text-primary-foreground shadow-sm transition-shadow duration-300 hover:shadow-[0_10px_30px_-8px_rgba(37,99,235,0.55)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-2"
           >
             <motion.span
               aria-hidden
@@ -257,7 +265,7 @@ export function Hero() {
             />
             <span className="relative z-10 flex items-center gap-2">
               Meet your receptionist
-              <ArrowRight className="h-4 w-4 transition-transform duration-300 ease-out group-hover:translate-x-1" />
+              <ArrowRight aria-hidden className="h-4 w-4 transition-transform duration-300 ease-out group-hover:translate-x-1" />
             </span>
           </motion.button>
 
@@ -274,7 +282,7 @@ export function Hero() {
                 transition={{ duration: 0.4, ease: EASE, delay: 0.85 + i * 0.1 }}
                 className="flex items-center gap-1 text-[11.5px] font-medium text-foreground/80 sm:gap-1.5 sm:text-[13.5px]"
               >
-                <span className="flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full bg-success/15 sm:h-4 sm:w-4">
+                <span className="flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full bg-success/15 sm:h-4 sm:w-4" aria-hidden>
                   <Check className="h-2 w-2 text-success sm:h-2.5 sm:w-2.5" strokeWidth={3.5} />
                 </span>
                 {point}

@@ -278,7 +278,7 @@ function ProductMomentCard({ moment }: { moment: ProductMoment }) {
         isUrgent ? "border-attention/30 bg-attention/[0.08] text-attention" : "border-border/60 bg-white/90 text-foreground"
       )}
     >
-      <span className={cn("flex h-6 w-6 shrink-0 items-center justify-center rounded-lg", badge)}>
+      <span className={cn("flex h-6 w-6 shrink-0 items-center justify-center rounded-lg", badge)} aria-hidden>
         <Icon className={cn("h-3.5 w-3.5", icon_)} strokeWidth={2.5} />
       </span>
       {moment.text}
@@ -585,14 +585,14 @@ function ReplyFlowAppShell({
   return (
     <div className="flex h-full w-full flex-col overflow-hidden bg-[#f4f2ef]">
       <div className="flex shrink-0 items-center gap-3 bg-gradient-to-r from-primary to-success px-4 pb-3 pt-[42px] text-white">
-        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/20">
+        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/20" aria-hidden>
           <svg viewBox="0 0 24 24" fill="none" className="h-4 w-4">
             <path d="M4 20l1.6-4.8A8 8 0 1112 20a7.96 7.96 0 01-3.9-1L4 20z" fill="white" />
           </svg>
         </span>
         <div className="min-w-0">
           <p className="truncate text-[13.5px] font-semibold leading-tight">ReplyFlow</p>
-          <p className="truncate text-[11px] leading-tight text-white/80">{subtitle}</p>
+          <p className="truncate text-[11px] leading-tight text-white/95">{subtitle}</p>
         </div>
       </div>
       <div
@@ -728,7 +728,7 @@ function DashboardView({
                   />
                 </motion.span>
               )}
-              <span className={cn("flex h-6 w-6 shrink-0 items-center justify-center rounded-lg sm:h-7 sm:w-7", badge)}>
+              <span className={cn("flex h-6 w-6 shrink-0 items-center justify-center rounded-lg sm:h-7 sm:w-7", badge)} aria-hidden>
                 <tile.icon className={cn("h-3.5 w-3.5", icon_)} strokeWidth={2.5} />
               </span>
               <span className={cn("text-[11.5px] font-semibold leading-tight lg:text-[12.5px]", isFinal ? "text-primary" : "text-foreground")}>
@@ -747,7 +747,7 @@ function DashboardView({
           whileHover={{ y: -1 }}
           whileTap={{ scale: 0.98 }}
           transition={{ type: "spring", stiffness: 400, damping: 26 }}
-          className="group relative mt-7 flex w-full items-center justify-center gap-1.5 overflow-hidden rounded-xl bg-primary py-2.5 text-[12.5px] font-semibold text-primary-foreground shadow-sm transition-shadow duration-300 hover:shadow-[0_8px_20px_-6px_rgba(37,99,235,0.5)] sm:mt-5"
+          className="group relative mt-7 flex w-full items-center justify-center gap-1.5 overflow-hidden rounded-xl bg-primary py-2.5 text-[12.5px] font-semibold text-primary-foreground shadow-sm transition-shadow duration-300 hover:shadow-[0_8px_20px_-6px_rgba(37,99,235,0.5)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-2 sm:mt-5"
         >
           {/* Same light-sweep language as the Hero's own "Meet your
            * receptionist" CTA — not identical styling (this one is
@@ -762,7 +762,7 @@ function DashboardView({
           />
           <span className="relative z-10 flex items-center gap-1.5">
             Watch it work
-            <svg viewBox="0 0 16 16" fill="none" className="h-3 w-3 transition-transform duration-300 ease-out group-hover:translate-x-0.5">
+            <svg aria-hidden viewBox="0 0 16 16" fill="none" className="h-3 w-3 transition-transform duration-300 ease-out group-hover:translate-x-0.5">
               <path d="M3 8h9.5M8.5 3.5L13 8l-4.5 4.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
           </span>
@@ -814,7 +814,7 @@ function BlurredPhotoBubble({ caption }: { caption: string }) {
           </div>
         </motion.div>
         <div className="bg-white px-3 py-2 text-[12px] leading-relaxed text-foreground">{caption}</div>
-        <div className="bg-white px-3 pb-1.5 text-[10px] text-muted-foreground/60">Customer photo — blurred for privacy</div>
+        <div className="bg-white px-3 pb-1.5 text-[10px] text-muted-foreground">Customer photo — blurred for privacy</div>
       </div>
     </motion.div>
   );
@@ -1018,7 +1018,7 @@ function TrustActView({ act }: { act: TrustAct }) {
                 transition={{ type: "spring", stiffness: 360, damping: 22, delay: i === factCount - 1 ? 0 : 0 }}
                 className={cn("flex items-center gap-2 rounded-lg border px-2.5 py-1.5 text-[11.5px] font-medium text-foreground/80", tone.border, tone.bg)}
               >
-                <span className={cn("flex h-4 w-4 shrink-0 items-center justify-center rounded-full", tone.badge)}>
+                <span className={cn("flex h-4 w-4 shrink-0 items-center justify-center rounded-full", tone.badge)} aria-hidden>
                   <Check className={cn("h-2.5 w-2.5", tone.icon_)} strokeWidth={3} />
                 </span>
                 {fact}
@@ -1065,7 +1065,7 @@ function TrustActView({ act }: { act: TrustAct }) {
                 chip.tone === "success" ? "border-success/25 bg-success/[0.08] text-success" : "border-attention/30 bg-attention/[0.1] text-attention"
               )}
             >
-              <chip.icon className="h-3 w-3" strokeWidth={2.5} />
+              <chip.icon aria-hidden className="h-3 w-3" strokeWidth={2.5} />
               {chip.text}
             </motion.div>
           ))}
@@ -1077,7 +1077,7 @@ function TrustActView({ act }: { act: TrustAct }) {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ duration: 0.5, ease: EASE }}
-          className="mt-3 text-center text-[10.5px] font-semibold uppercase tracking-wide text-muted-foreground/60"
+          className="mt-3 text-center text-[10.5px] font-semibold uppercase tracking-wide text-muted-foreground"
         >
           Grounded in what&apos;s actually been taught — never guessed.
         </motion.p>
@@ -1104,7 +1104,7 @@ function StoryDots({ active, count, onSelect }: { active: number; count: number;
           aria-label={`Show step ${i + 1}`}
           onClick={() => onSelect(i)}
           className={cn(
-            "h-1.5 rounded-full transition-all duration-300",
+            "h-1.5 rounded-full transition-all duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-2",
             i === active ? "w-5 bg-primary" : "w-1.5 bg-primary/25 hover:bg-primary/40"
           )}
         />
@@ -1305,7 +1305,7 @@ function AutoConversation({
 
       <StoryDots active={storyIndex} count={3} onSelect={onGoTo} />
 
-      <p className="mt-3 text-center text-[12px] text-muted-foreground/70">
+      <p className="mt-3 text-center text-[12px] text-muted-foreground">
         How ReplyFlow works — grounded in what&apos;s actually been taught, never guessed.
         <br />
         Illustrative examples, not real customer data.

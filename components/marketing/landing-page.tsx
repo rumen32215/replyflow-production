@@ -24,7 +24,7 @@ export function LandingPage() {
          * space), not the same weight as the primary CTA. */}
         <Link
           href="/login"
-          className="rounded-full border border-border px-4 py-1.5 text-[13.5px] font-semibold text-foreground/80 transition-colors hover:border-primary/30 hover:text-foreground"
+          className="rounded-full border border-border px-4 py-1.5 text-[13.5px] font-semibold text-foreground/80 transition-colors hover:border-primary/30 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-2"
         >
           Log in
         </Link>

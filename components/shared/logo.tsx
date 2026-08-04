@@ -16,8 +16,17 @@ import { GradientText } from "@/components/shared/gradient-text";
  */
 export function Logo({ className, showWordmark = true }: { className?: string; showWordmark?: boolean }) {
   return (
-    <div className={cn("flex items-center gap-2", className)}>
-      <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-primary to-success">
+    <div
+      className={cn("flex items-center gap-2", className)}
+      // V17 founder review (2026-08-04) — release-candidate audit: the
+      // mark's SVG had no `aria-hidden`, so it could read as an
+      // unlabelled image to assistive tech. The wordmark already
+      // conveys the brand name in text when shown; when it's hidden
+      // (icon-only usages) this container becomes the accessible name
+      // instead, so the mark is never announced twice or not at all.
+      {...(showWordmark ? {} : { role: "img", "aria-label": BRAND.name })}
+    >
+      <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-primary to-success" aria-hidden>
         <svg viewBox="0 0 24 24" fill="none" className="h-3.5 w-3.5">
           <path d="M4 20l1.6-4.8A8 8 0 1112 20a7.96 7.96 0 01-3.9-1L4 20z" fill="white" />
         </svg>

@@ -188,7 +188,7 @@ export function PeaceOfMind() {
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true, margin: "0px 0px -100px 0px" }}
           transition={{ duration: 0.5, ease: EASE }}
-          className="text-[13px] font-bold uppercase tracking-widest text-primary/60"
+          className="text-[13px] font-bold uppercase tracking-widest text-primary"
         >
           How your business stays organised
         </motion.p>
@@ -212,7 +212,7 @@ export function PeaceOfMind() {
           className="relative mt-12 overflow-hidden rounded-3xl border border-border/50 bg-background/80 text-left shadow-[0_1px_3px_rgba(15,23,42,0.04),0_24px_55px_-30px_rgba(15,23,42,0.2)] backdrop-blur-sm sm:mt-14"
         >
           <div className="flex items-center gap-3 bg-gradient-to-r from-primary to-success px-5 py-3.5 text-white">
-            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white/20">
+            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white/20" aria-hidden>
               <svg viewBox="0 0 24 24" fill="none" className="h-3.5 w-3.5">
                 <path d="M4 20l1.6-4.8A8 8 0 1112 20a7.96 7.96 0 01-3.9-1L4 20z" fill="white" />
               </svg>
@@ -223,8 +223,9 @@ export function PeaceOfMind() {
                  * infinite loop this section allows itself, the same
                  * register every "recording"/"live" dot anywhere
                  * already uses, and small enough to never read as
-                 * busy. */}
-                <span className="relative flex h-1.5 w-1.5 shrink-0">
+                 * busy. `aria-hidden` since the adjacent text already
+                 * says the same thing in words. */}
+                <span className="relative flex h-1.5 w-1.5 shrink-0" aria-hidden>
                   <span className="absolute inset-0 animate-ping rounded-full bg-white/70" />
                   <span className="relative h-1.5 w-1.5 rounded-full bg-white" />
                 </span>
@@ -238,7 +239,7 @@ export function PeaceOfMind() {
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -6 }}
                     transition={{ duration: 0.4, ease: EASE }}
-                    className="truncate text-[11.5px] leading-tight text-white/85"
+                    className="truncate text-[11.5px] leading-tight text-white"
                   >
                     {STATUS_TICKER[tickerIndex]}
                   </motion.p>
@@ -262,8 +263,8 @@ export function PeaceOfMind() {
                     settled ? "border-success/30 bg-success/[0.05]" : "border-border/50 bg-white/60"
                   )}
                 >
-                  <span className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-lg">
-                    <span className={cn("absolute inset-0 rounded-lg", styles.badge)} aria-hidden />
+                  <span className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-lg" aria-hidden>
+                    <span className={cn("absolute inset-0 rounded-lg", styles.badge)} />
                     <item.icon className={cn("relative h-4 w-4", styles.icon_)} strokeWidth={2.5} />
                     <MicroAction pulsing={pulseIndex === i} kind={item.micro.kind} icon={item.micro.icon} styles={styles} />
                   </span>
@@ -287,7 +288,7 @@ export function PeaceOfMind() {
               whileHover={isNavigating ? undefined : { y: -2 }}
               whileTap={isNavigating ? undefined : { scale: 0.97 }}
               transition={{ type: "spring", stiffness: 340, damping: 24, delay: STATUS_ITEMS.length * 0.07 }}
-              className="group relative flex flex-col items-start justify-center gap-1 overflow-hidden rounded-xl bg-gradient-to-br from-primary to-success p-3 text-left shadow-sm transition-shadow duration-300 hover:shadow-[0_10px_26px_-8px_rgba(37,99,235,0.5)]"
+              className="group relative flex flex-col items-start justify-center gap-1 overflow-hidden rounded-xl bg-gradient-to-br from-primary to-success p-3 text-left shadow-sm transition-shadow duration-300 hover:shadow-[0_10px_26px_-8px_rgba(37,99,235,0.5)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-2"
             >
               <motion.span
                 aria-hidden
@@ -296,7 +297,7 @@ export function PeaceOfMind() {
                 animate={{ x: "460%" }}
                 transition={{ duration: 1.4, ease: "easeInOut", repeat: Infinity, repeatDelay: 3 }}
               />
-              <span className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/20">
+              <span className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/20" aria-hidden>
                 <ArrowRight className="h-4 w-4 text-white transition-transform duration-300 ease-out group-hover:translate-x-0.5" strokeWidth={2.5} />
               </span>
               <span className="relative text-[13px] font-semibold leading-snug text-white">Meet your receptionist</span>

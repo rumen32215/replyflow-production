@@ -106,11 +106,20 @@ interface ConversationScene extends BaseAct {
  * owner would recognise as their own settings, never mechanism-talk
  * ("checking," "processing," "reasoning") — the goal is "this
  * understands my business," never "this is clever AI." */
+/** V15 founder review (2026-08-04): "it currently demonstrates only
+ * one type of trust... expand the story slightly so it feels like a
+ * trusted assistant rather than simply a database lookup." The
+ * fact-grounding exchange (question → facts → cited reply) stays the
+ * screen's main proof — still the clearest, most concrete example —
+ * but two short `trustChips` land after it, each naming a *different*
+ * dimension of trust the founder listed (schedule protection, urgent-
+ * work priority) rather than repeating the pricing one already shown. */
 interface TrustAct extends BaseAct {
   kind: "trust";
   question: string;
   facts: readonly [string, string, string];
   reply: string;
+  trustChips: readonly [{ icon: typeof AlertTriangle; text: string; tone: "success" | "attention" }, { icon: typeof AlertTriangle; text: string; tone: "success" | "attention" }];
 }
 
 type JourneyAct = DashboardAct | ConversationScene | TrustAct;
@@ -244,11 +253,11 @@ function ProductMomentCard({ moment }: { moment: ProductMoment }) {
   const isUrgent = moment.kind === "urgent";
   return (
     <motion.div
-      initial={{ opacity: 0, y: 8, scale: 0.97 }}
+      initial={{ opacity: 0, y: 10, scale: 0.94 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
       whileHover={{ scale: 1.025, y: -1 }}
       whileTap={{ scale: 0.965 }}
-      transition={{ duration: 0.5, ease: EASE }}
+      transition={{ type: "spring", stiffness: 340, damping: 22 }}
       className={cn(
         "mx-auto flex max-w-[88%] cursor-pointer items-center gap-2.5 rounded-xl border px-3 py-2 text-[12px] font-semibold shadow-sm backdrop-blur-sm transition-shadow duration-300 hover:shadow-md",
         isUrgent ? "border-attention/30 bg-attention/[0.08] text-attention" : "border-border/60 bg-white/90 text-foreground"
@@ -280,10 +289,19 @@ function estimateTypeMs(text: string): number {
 const PRODUCT_MOMENT_DELAY_MS = 900;
 const PRODUCT_MOMENT_STEP_MS = 1000;
 const CHECKLIST_STEP_MS = 650;
-/** Founder review (2026-08-04): "after the fourth tile, the remaining
- * tiles should begin appearing slightly faster — the user already
- * understands what's happening." */
-const OUTCOME_STEP_MS = 470;
+/** V15 founder review (2026-08-04): "the final outcome cards become
+ * slightly busy... think 'I understand,' then 'now finish.'" V14 had
+ * the outcome tiles land at one constant (faster) pace; this pass
+ * makes that pace itself accelerate tile-to-tile — the natural
+ * "speeding up into a finish" curve the V14/V15 research both named,
+ * rather than a second constant rhythm. `outcomeStepMs` below computes
+ * each gap from this starting point, floored so the last couple of
+ * tiles don't outrun what's readable. */
+const OUTCOME_STEP_START_MS = 420;
+const OUTCOME_STEP_MIN_MS = 260;
+function outcomeStepMs(outcomeIndex: number): number {
+  return Math.max(OUTCOME_STEP_MIN_MS, OUTCOME_STEP_START_MS - outcomeIndex * 55);
+}
 const REST_MS = 6500;
 
 function estimateStoryMs(act: JourneyAct): number {
@@ -292,9 +310,10 @@ function estimateStoryMs(act: JourneyAct): number {
     return 900 + estimateTypeMs(act.exchanges[0].reply) + 1300 + estimateTypeMs(act.exchanges[1].reply) + photoMs + PRODUCT_MOMENT_DELAY_MS + PRODUCT_MOMENT_STEP_MS;
   }
   if (act.kind === "trust") {
-    return 700 + act.facts.length * 550 + 600 + 900 + 1700 + 1200;
+    return 700 + act.facts.length * 550 + 600 + 900 + 1100 + act.trustChips.length * 400 + 500 + 1200;
   }
-  return 900 + 4 * CHECKLIST_STEP_MS + 500 + 4 * OUTCOME_STEP_MS + 900 + 1200;
+  const outcomeMs = outcomeStepMs(0) + outcomeStepMs(1) + outcomeStepMs(2) + outcomeStepMs(3);
+  return 900 + 4 * CHECKLIST_STEP_MS + 500 + outcomeMs + 900 + 1600;
 }
 
 // ---------------------------------------------------------------------------
@@ -440,6 +459,10 @@ const TRUST_ACT: TrustAct = {
   question: "Do you charge extra for evening call-outs?",
   facts: ["Evening call-out fee: £25 after 6pm", "Weekend jobs: yes, by arrangement", "Standard response time: same day"],
   reply: "Yeah, evenings are fine — it's a flat £25 call-out after 6pm, same as any other job.",
+  trustChips: [
+    { icon: CalendarCheck, text: "Protects your schedule", tone: "success" },
+    { icon: AlertTriangle, text: "Prioritises urgent work", tone: "attention" },
+  ],
 };
 
 export const HERO_PHONE_INITIAL_TRADE: Trade = DASHBOARD_ACT.trade;
@@ -519,6 +542,7 @@ function DashboardView({
   onWatchItWork: () => void;
 }) {
   const [visibleCount, setVisibleCount] = useState(0);
+  const [finalArrived, setFinalArrived] = useState(false);
   const [showButton, setShowButton] = useState(false);
   const startedRef = useRef(false);
   const allTiles = useMemo(() => [...act.capabilityTiles, ...act.outcomeTiles], [act]);
@@ -537,11 +561,17 @@ function DashboardView({
       }
       await wait(jitter(500, 100));
       for (let i = 4; i < 8; i++) {
-        await wait(jitter(OUTCOME_STEP_MS, 80));
+        await wait(jitter(outcomeStepMs(i - 4), 45));
         setVisibleCount(i + 1);
-        if (i === 7) onCelebrate();
+        if (i === 7) {
+          onCelebrate();
+          setFinalArrived(true);
+        }
       }
-      await wait(jitter(700, 150));
+      // "Nothing waiting for you" gets its own brief arrival before the
+      // button appears — a beat of relief, not an instant cut to the
+      // next thing. See the tile's own breathing/shimmer treatment below.
+      await wait(jitter(1700, 150));
       setShowButton(true);
     }
     void run();
@@ -550,7 +580,7 @@ function DashboardView({
 
   return (
     <ReplyFlowAppShell subtitle="What I quietly do">
-      <div className="grid grid-cols-2 gap-2">
+      <div className="grid grid-cols-2 gap-1.5 sm:gap-2">
         {allTiles.map((tile, i) => {
           const isFinal = i === allTiles.length - 1;
           const { badge, icon_, glow } = TILE_STYLES[tile.tone];
@@ -559,29 +589,60 @@ function DashboardView({
             <motion.div
               key={tile.text}
               className={cn(
-                "relative flex flex-col items-start gap-2 rounded-xl border p-2 shadow-sm sm:p-2.5",
+                "relative flex flex-col items-start gap-1.5 rounded-xl border p-1.5 shadow-sm sm:gap-2 sm:p-2.5",
                 isFinal ? "border-primary/25 bg-primary/[0.07]" : "border-border/60 bg-white/85"
               )}
               initial={{ opacity: 0, y: 10, scale: 0.92 }}
               animate={
                 visible
-                  ? { opacity: 1, y: 0, scale: 1 }
+                  ? isFinal && finalArrived
+                    ? // V15 founder review (2026-08-04): "it should
+                      // reassure, it should almost feel like relief...
+                      // gentle glow, successful pulse, subtle breathing."
+                      // Two slow breaths after the normal spring-settle,
+                      // not a bounce — reads as the tile exhaling, not
+                      // celebrating.
+                      { opacity: 1, y: 0, scale: [1, 1, 1.014, 1, 1.014, 1] }
+                    : { opacity: 1, y: 0, scale: 1 }
                   : { opacity: 0, y: 10, scale: 0.92 }
               }
-              transition={{ type: "spring", stiffness: 380, damping: 18 }}
+              transition={
+                isFinal && finalArrived
+                  ? { duration: 1.8, ease: EASE, times: [0, 0.15, 0.4, 0.62, 0.85, 1] }
+                  : { type: "spring", stiffness: 380, damping: 18 }
+              }
             >
-              {/* The tile's own brief "job done" bloom — settles and
-               * fades within ~600ms, never lingers, never repeats. */}
+              {/* Every tile's brief "job done" bloom on arrival. The
+               * final tile's fades to a low resting glow instead of
+               * fully off — a quiet, permanent presence rather than a
+               * flourish that's over the instant it lands. */}
               {visible && (
                 <motion.span
                   aria-hidden
                   className={cn("pointer-events-none absolute -inset-1.5 -z-10 rounded-2xl blur-md", glow)}
                   initial={{ opacity: 0.55, scale: 0.85 }}
-                  animate={{ opacity: 0, scale: 1.15 }}
-                  transition={{ duration: 0.6, ease: EASE }}
+                  animate={{ opacity: isFinal ? 0.16 : 0, scale: isFinal ? 1.05 : 1.15 }}
+                  transition={{ duration: isFinal ? 1.4 : 0.6, ease: EASE }}
                 />
               )}
-              <span className={cn("flex h-7 w-7 shrink-0 items-center justify-center rounded-lg", badge)}>
+              {/* A single, one-time shimmer across the card once it's
+               * settled — "tiny shimmer," not a loop; it plays once and
+               * is gone, the same restraint every other flourish on
+               * this page already uses. */}
+              {isFinal && finalArrived && (
+                <motion.span
+                  aria-hidden
+                  className="pointer-events-none absolute inset-0 -z-10 overflow-hidden rounded-xl"
+                >
+                  <motion.span
+                    className="absolute inset-y-0 left-0 w-1/3 -skew-x-[20deg] bg-gradient-to-r from-transparent via-white/50 to-transparent"
+                    initial={{ x: "-160%" }}
+                    animate={{ x: "460%" }}
+                    transition={{ duration: 0.9, ease: "easeInOut", delay: 0.9 }}
+                  />
+                </motion.span>
+              )}
+              <span className={cn("flex h-6 w-6 shrink-0 items-center justify-center rounded-lg sm:h-7 sm:w-7", badge)}>
                 <tile.icon className={cn("h-3.5 w-3.5", icon_)} strokeWidth={2.5} />
               </span>
               <span className={cn("text-[11.5px] font-semibold leading-tight lg:text-[12.5px]", isFinal ? "text-primary" : "text-foreground")}>
@@ -595,12 +656,30 @@ function DashboardView({
         <motion.button
           type="button"
           onClick={onWatchItWork}
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, ease: EASE }}
-          className="mt-6 w-full rounded-xl border border-primary/25 bg-primary/[0.06] py-2.5 text-center text-[12.5px] font-semibold text-primary transition-colors hover:bg-primary/[0.1] sm:mt-4"
+          initial={{ opacity: 0, y: 10, scale: 0.97 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          whileHover={{ y: -1 }}
+          whileTap={{ scale: 0.98 }}
+          transition={{ type: "spring", stiffness: 400, damping: 26 }}
+          className="group relative mt-7 flex w-full items-center justify-center gap-1.5 overflow-hidden rounded-xl bg-primary py-2.5 text-[12.5px] font-semibold text-primary-foreground shadow-sm transition-shadow duration-300 hover:shadow-[0_8px_20px_-6px_rgba(37,99,235,0.5)] sm:mt-5"
         >
-          Watch it work →
+          {/* Same light-sweep language as the Hero's own "Meet your
+           * receptionist" CTA — not identical styling (this one is
+           * sized for the phone, not the page), the same feeling: this
+           * is the beginning of the next chapter, not a text link. */}
+          <motion.span
+            aria-hidden
+            className="pointer-events-none absolute inset-y-0 left-0 w-1/4 -skew-x-[20deg] bg-gradient-to-r from-transparent via-white/25 to-transparent"
+            initial={{ x: "-140%" }}
+            animate={{ x: "440%" }}
+            transition={{ duration: 1.3, ease: "easeInOut", repeat: Infinity, repeatDelay: 2.6 }}
+          />
+          <span className="relative z-10 flex items-center gap-1.5">
+            Watch it work
+            <svg viewBox="0 0 16 16" fill="none" className="h-3 w-3 transition-transform duration-300 ease-out group-hover:translate-x-0.5">
+              <path d="M3 8h9.5M8.5 3.5L13 8l-4.5 4.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </span>
         </motion.button>
       )}
     </ReplyFlowAppShell>
@@ -612,7 +691,12 @@ function DashboardView({
  * a pure-CSS abstraction that's honest about being illustrative. */
 function BlurredPhotoBubble({ caption }: { caption: string }) {
   return (
-    <div className="flex justify-start">
+    <motion.div
+      className="flex justify-start"
+      initial={{ opacity: 0, y: 10, scale: 0.96 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      transition={{ type: "spring", stiffness: 320, damping: 24 }}
+    >
       <div className="max-w-[72%] overflow-hidden rounded-2xl rounded-bl-md border border-black/5 shadow-sm">
         <div
           className="relative h-28 w-full overflow-hidden"
@@ -636,7 +720,7 @@ function BlurredPhotoBubble({ caption }: { caption: string }) {
         <div className="bg-white px-3 py-2 text-[12px] leading-relaxed text-foreground">{caption}</div>
         <div className="bg-white px-3 pb-1.5 text-[10px] text-muted-foreground/60">Customer photo — blurred for privacy</div>
       </div>
-    </div>
+    </motion.div>
   );
 }
 
@@ -686,29 +770,57 @@ function ConversationSlideView({ scene }: { scene: ConversationScene }) {
   }, [visibleCount, showPhoto, showPhotoReply, outcomeCount]);
 
   return (
-    <PhoneFrame
-      businessName={scene.businessName}
-      scrollable
-      bodyRef={bodyRef}
-      headerInsetTop
-      className="h-full w-full rounded-none border-0 shadow-none"
-    >
-      {scene.exchanges.slice(0, visibleCount).map((exchange, i) => (
-        <div key={i}>
-          <Bubble from="customer" className="lg:text-[14px]">{exchange.customer}</Bubble>
-          <TypedReply text={exchange.reply} />
-        </div>
-      ))}
-      {showPhoto && scene.photo && <BlurredPhotoBubble caption={scene.photo.customerCaption} />}
-      {showPhotoReply && scene.photo && <TypedReply text={scene.photo.reply} />}
-      {outcomeCount > 0 && (
-        <div className="space-y-1.5 pt-2">
-          {scene.outcomes.slice(0, outcomeCount).map((moment, i) => (
-            <ProductMomentCard key={i} moment={moment} />
-          ))}
-        </div>
-      )}
-    </PhoneFrame>
+    <div className="relative h-full w-full overflow-hidden">
+      {/* V15 founder review (2026-08-04): "Slide One's header feels
+       * premium. Slide Two feels flatter... colours should continue
+       * evolving naturally while preserving the WhatsApp identity. Do
+       * not copy Slide One. Continue it." `PhoneFrame`'s WhatsApp
+       * header (`#075E54`) is real, load-bearing UI elsewhere in the
+       * product, so it stays untouched — this is a thin, translucent
+       * sheen layered on top of it here only, drifting slowly within
+       * WhatsApp's own green family (never a different hue), the same
+       * "light moving across a surface" idea Slide One's gradient
+       * header carries, continued rather than copied. */}
+      <div className="pointer-events-none absolute inset-x-0 top-0 z-20 h-[86px] overflow-hidden" aria-hidden>
+        <motion.div
+          className="absolute inset-y-0 left-0 h-full w-[160%]"
+          style={{
+            background: "linear-gradient(100deg, transparent 0%, rgba(37,183,148,0.35) 45%, rgba(18,140,118,0.22) 58%, transparent 100%)",
+          }}
+          animate={{ x: ["-35%", "0%", "-35%"] }}
+          transition={{ duration: 7, repeat: Infinity, ease: "easeInOut" }}
+        />
+      </div>
+      <PhoneFrame
+        businessName={scene.businessName}
+        scrollable
+        bodyRef={bodyRef}
+        headerInsetTop
+        className="h-full w-full rounded-none border-0 shadow-none"
+      >
+        {scene.exchanges.slice(0, visibleCount).map((exchange, i) => (
+          <div key={i}>
+            <motion.div
+              initial={{ opacity: 0, y: 8, scale: 0.97 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              transition={{ type: "spring", stiffness: 340, damping: 26 }}
+            >
+              <Bubble from="customer" className="lg:text-[14px]">{exchange.customer}</Bubble>
+            </motion.div>
+            <TypedReply text={exchange.reply} />
+          </div>
+        ))}
+        {showPhoto && scene.photo && <BlurredPhotoBubble caption={scene.photo.customerCaption} />}
+        {showPhotoReply && scene.photo && <TypedReply text={scene.photo.reply} />}
+        {outcomeCount > 0 && (
+          <div className="space-y-1.5 pt-2">
+            {scene.outcomes.slice(0, outcomeCount).map((moment, i) => (
+              <ProductMomentCard key={i} moment={moment} />
+            ))}
+          </div>
+        )}
+      </PhoneFrame>
+    </div>
   );
 }
 
@@ -723,6 +835,8 @@ function TrustActView({ act }: { act: TrustAct }) {
   const [factCount, setFactCount] = useState(0);
   const [showThinking, setShowThinking] = useState(false);
   const [showReply, setShowReply] = useState(false);
+  const [chipCount, setChipCount] = useState(0);
+  const [showGrounding, setShowGrounding] = useState(false);
   const startedRef = useRef(false);
   const bodyRef = useRef<HTMLDivElement>(null);
 
@@ -745,6 +859,18 @@ function TrustActView({ act }: { act: TrustAct }) {
       await wait(jitter(900, 150));
       setShowThinking(false);
       setShowReply(true);
+      // V15 founder review (2026-08-04): "it currently demonstrates
+      // only one type of trust... expand the story slightly so it
+      // feels like a trusted assistant, not simply a database
+      // lookup." Two more, different, dimensions of trust — a pause
+      // long enough that the reply above has clearly landed first.
+      await wait(jitter(1100, 150));
+      for (let i = 0; i < act.trustChips.length; i++) {
+        if (i > 0) await wait(jitter(400, 80));
+        setChipCount(i + 1);
+      }
+      await wait(jitter(500, 100));
+      setShowGrounding(true);
     }
     void run();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -752,7 +878,7 @@ function TrustActView({ act }: { act: TrustAct }) {
 
   useEffect(() => {
     bodyRef.current?.scrollTo({ top: bodyRef.current.scrollHeight, behavior: "smooth" });
-  }, [showQuestion, factCount, showThinking, showReply]);
+  }, [showQuestion, factCount, showThinking, showReply, chipCount, showGrounding]);
 
   return (
     <ReplyFlowAppShell subtitle="Why you can trust what it says" bodyRef={bodyRef}>
@@ -761,7 +887,7 @@ function TrustActView({ act }: { act: TrustAct }) {
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4, ease: EASE }}
-          className="rounded-xl border border-border/60 bg-white/85 px-3 py-2.5 text-[12px] leading-relaxed text-foreground/80 shadow-sm"
+          className="rounded-xl border border-border/60 bg-white/90 px-3 py-2.5 text-[12.5px] leading-relaxed text-foreground shadow-sm"
         >
           <span className="font-semibold text-foreground">Customer asked: </span>
           &ldquo;{act.question}&rdquo;
@@ -800,17 +926,42 @@ function TrustActView({ act }: { act: TrustAct }) {
           initial={{ opacity: 0, y: 8, scale: 0.98 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
           transition={{ duration: 0.45, ease: EASE }}
-          className="mt-2.5 rounded-xl border border-primary/25 bg-primary/[0.06] px-3 py-2.5 text-[12.5px] font-medium leading-relaxed text-foreground shadow-sm"
+          className="mt-2.5 rounded-xl border border-primary/25 bg-primary/[0.07] px-3 py-2.5 text-[13px] font-semibold leading-relaxed text-foreground shadow-sm"
         >
           {act.reply}
         </motion.div>
       )}
 
-      {showReply && (
+      {/* The broader story: two further, different dimensions of
+       * trust — success/attention accents, deliberately distinct from
+       * the facts' learning-purple and the reply's primary-blue, so
+       * the screen reads as one confident hierarchy (question →
+       * evidence → answer → breadth) rather than four similar boxes. */}
+      {chipCount > 0 && (
+        <div className="mt-2.5 flex flex-wrap gap-1.5">
+          {act.trustChips.slice(0, chipCount).map((chip) => (
+            <motion.div
+              key={chip.text}
+              initial={{ opacity: 0, y: 6, scale: 0.94 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              transition={{ type: "spring", stiffness: 360, damping: 22 }}
+              className={cn(
+                "flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold",
+                chip.tone === "success" ? "border-success/25 bg-success/[0.08] text-success" : "border-attention/30 bg-attention/[0.1] text-attention"
+              )}
+            >
+              <chip.icon className="h-3 w-3" strokeWidth={2.5} />
+              {chip.text}
+            </motion.div>
+          ))}
+        </div>
+      )}
+
+      {showGrounding && (
         <motion.p
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
-          transition={{ duration: 0.5, ease: EASE, delay: 0.3 }}
+          transition={{ duration: 0.5, ease: EASE }}
           className="mt-3 text-center text-[10.5px] font-semibold uppercase tracking-wide text-muted-foreground/60"
         >
           Grounded in what&apos;s actually been taught — never guessed.

@@ -113,11 +113,26 @@ interface ConversationScene extends BaseAct {
  * screen's main proof — still the clearest, most concrete example —
  * but two short `trustChips` land after it, each naming a *different*
  * dimension of trust the founder listed (schedule protection, urgent-
- * work priority) rather than repeating the pricing one already shown. */
+ * work priority) rather than repeating the pricing one already shown.
+ *
+ * V16 founder review (2026-08-04): "every visitor sees essentially the
+ * same demonstration... the examples should rotate naturally just
+ * like Slide Two." A single `TrustAct` became a `TRUST_POOL` (below),
+ * mirroring `CONVERSATION_POOL`'s own rotation exactly — same shuffle-
+ * then-advance mechanism, same "rarely the same one twice" outcome.
+ * `factTone` is new: each scene's fact pills use a colour matching
+ * *what kind* of trust it demonstrates (pricing memory stays the
+ * original learning-purple; customer history reads as primary-blue;
+ * schedule protection and urgent priority read as attention-amber;
+ * promises kept reads as learning-purple again but never two adjacent
+ * pool entries share a tone) — "richer colour balance... reduce
+ * repetition of identical purple cards," solved by the pool itself
+ * varying, not by inventing a fourth colour. */
 interface TrustAct extends BaseAct {
   kind: "trust";
   question: string;
   facts: readonly [string, string, string];
+  factTone: "learning" | "primary" | "attention";
   reply: string;
   trustChips: readonly [{ icon: typeof AlertTriangle; text: string; tone: "success" | "attention" }, { icon: typeof AlertTriangle; text: string; tone: "success" | "attention" }];
 }
@@ -279,6 +294,17 @@ const TILE_STYLES: Record<AppTile["tone"], { badge: string; icon_: string; glow:
   success: { badge: "bg-success/15", icon_: "text-success", glow: "bg-success/50" },
   attention: { badge: "bg-attention/20", icon_: "text-attention", glow: "bg-attention/50" },
   learning: { badge: "bg-learning/15", icon_: "text-learning", glow: "bg-learning/50" },
+};
+
+/** V16 founder review (2026-08-04): "richer colour balance... reduce
+ * repetition of identical purple cards." Each `TRUST_POOL` scene picks
+ * its own `factTone` — the pool rotating is what actually fixes the
+ * repetition; this just lets the fact pills honestly match whichever
+ * scene is showing instead of defaulting to one fixed colour. */
+const FACT_TONE_STYLES: Record<TrustAct["factTone"], { border: string; bg: string; badge: string; icon_: string }> = {
+  learning: { border: "border-learning/20", bg: "bg-learning/[0.06]", badge: "bg-learning/20", icon_: "text-learning" },
+  primary: { border: "border-primary/20", bg: "bg-primary/[0.06]", badge: "bg-primary/20", icon_: "text-primary" },
+  attention: { border: "border-attention/25", bg: "bg-attention/[0.07]", badge: "bg-attention/20", icon_: "text-attention" },
 };
 
 /** Mirrors `preparing-receptionist.tsx`'s own pacing formula. */
@@ -448,22 +474,81 @@ const CONVERSATION_POOL: readonly ConversationScene[] = [
   },
 ] as const;
 
-/** Act 3. Same business as the Dashboard act — bookends the journey
- * as one business's whole system, not a fourth unrelated demo. Plain,
- * concrete facts an owner would recognise as their own settings —
- * "understands my business," never "clever AI." */
-const TRUST_ACT: TrustAct = {
-  kind: "trust",
-  businessName: "Whitmore Building Co",
-  trade: "builders",
-  question: "Do you charge extra for evening call-outs?",
-  facts: ["Evening call-out fee: £25 after 6pm", "Weekend jobs: yes, by arrangement", "Standard response time: same day"],
-  reply: "Yeah, evenings are fine — it's a flat £25 call-out after 6pm, same as any other job.",
-  trustChips: [
-    { icon: CalendarCheck, text: "Protects your schedule", tone: "success" },
-    { icon: AlertTriangle, text: "Prioritises urgent work", tone: "attention" },
-  ],
-};
+/** Act 3, five scenes, one rotating pool. First kept from V15/V13
+ * (pricing memory, Whitmore Building Co, bookending the Dashboard
+ * act's own business). The other four are new, each demonstrating a
+ * genuinely different kind of business intelligence from the
+ * founder's own list — customer history, schedule/booking protection,
+ * urgent-work priority, and keeping a promise — deliberately spread
+ * across all five eyebrow trades (see `Trade` above) exactly once
+ * each, the same discipline `CONVERSATION_POOL` already follows. */
+const TRUST_POOL: readonly TrustAct[] = [
+  {
+    kind: "trust",
+    businessName: "Whitmore Building Co",
+    trade: "builders",
+    question: "Do you charge extra for evening call-outs?",
+    facts: ["Evening call-out fee: £25 after 6pm", "Weekend jobs: yes, by arrangement", "Standard response time: same day"],
+    factTone: "learning",
+    reply: "Yeah, evenings are fine — it's a flat £25 call-out after 6pm, same as any other job.",
+    trustChips: [
+      { icon: CalendarCheck, text: "Protects your schedule", tone: "success" },
+      { icon: Clock, text: "Never forgets a promise", tone: "attention" },
+    ],
+  },
+  {
+    kind: "trust",
+    businessName: "Dean's Plumbing",
+    trade: "plumbers",
+    question: "Hi, it's the Millers again — you did our boiler last year?",
+    facts: ["Customer: the Millers — boiler service, June", "No outstanding balance", "Preferred contact: WhatsApp"],
+    factTone: "primary",
+    reply: "Good to hear from you again — happy to take a look, same address as last time?",
+    trustChips: [
+      { icon: ClipboardCheck, text: "Remembers every past job", tone: "success" },
+      { icon: UserPlus, text: "Never asks twice", tone: "attention" },
+    ],
+  },
+  {
+    kind: "trust",
+    businessName: "Ridgeline Roofing",
+    trade: "roofers",
+    question: "Can you squeeze us in tomorrow morning as well as the 2pm?",
+    facts: ["Tomorrow 9am–1pm: fully booked", "2pm slot: confirmed and protected", "Next real opening: Thursday"],
+    factTone: "attention",
+    reply: "Tomorrow morning's fully booked I'm afraid — I can lock in Thursday morning instead, want me to hold it?",
+    trustChips: [
+      { icon: CalendarCheck, text: "Never double-books", tone: "success" },
+      { icon: AlertTriangle, text: "Keeps urgent jobs moving", tone: "attention" },
+    ],
+  },
+  {
+    kind: "trust",
+    businessName: "Harris Electrical",
+    trade: "electricians",
+    question: "Is this urgent enough to jump the queue? Smell of burning near the fuse box.",
+    facts: ["Smell of burning: treated as urgent", "Today's queue: reordered automatically", "Team: notified immediately"],
+    factTone: "attention",
+    reply: "Yes — that jumps straight to the top, I've already flagged it and someone's on their way.",
+    trustChips: [
+      { icon: Bell, text: "Reorders the queue instantly", tone: "success" },
+      { icon: AlertTriangle, text: "Knows what's genuinely urgent", tone: "attention" },
+    ],
+  },
+  {
+    kind: "trust",
+    businessName: "Bright Coat Painters",
+    trade: "painters",
+    question: "You said you'd confirm the start date by Friday — any news?",
+    facts: ["Promised: confirm by Friday", "Today: Friday", "Start date: ready to confirm"],
+    factTone: "learning",
+    reply: "Right on time — Monday morning works, I'll get that confirmed for you now.",
+    trustChips: [
+      { icon: Clock, text: "Tracks every promise made", tone: "success" },
+      { icon: BookOpen, text: "Nothing slips through", tone: "attention" },
+    ],
+  },
+] as const;
 
 export const HERO_PHONE_INITIAL_TRADE: Trade = DASHBOARD_ACT.trade;
 
@@ -596,19 +681,19 @@ function DashboardView({
               animate={
                 visible
                   ? isFinal && finalArrived
-                    ? // V15 founder review (2026-08-04): "it should
-                      // reassure, it should almost feel like relief...
-                      // gentle glow, successful pulse, subtle breathing."
-                      // Two slow breaths after the normal spring-settle,
-                      // not a bounce — reads as the tile exhaling, not
-                      // celebrating.
-                      { opacity: 1, y: 0, scale: [1, 1, 1.014, 1, 1.014, 1] }
+                    ? // V16 founder review (2026-08-04): "continue making
+                      // it feel reassuring rather than simply visible...
+                      // quiet relief, never flashy." Softer still than
+                      // V15's own version — a smaller breath, held a
+                      // touch longer, reading as an exhale rather than
+                      // anything with edges to it.
+                      { opacity: 1, y: 0, scale: [1, 1, 1.009, 1, 1.009, 1] }
                     : { opacity: 1, y: 0, scale: 1 }
                   : { opacity: 0, y: 10, scale: 0.92 }
               }
               transition={
                 isFinal && finalArrived
-                  ? { duration: 1.8, ease: EASE, times: [0, 0.15, 0.4, 0.62, 0.85, 1] }
+                  ? { duration: 2.4, ease: EASE, times: [0, 0.15, 0.42, 0.63, 0.86, 1] }
                   : { type: "spring", stiffness: 380, damping: 18 }
               }
             >
@@ -621,24 +706,25 @@ function DashboardView({
                   aria-hidden
                   className={cn("pointer-events-none absolute -inset-1.5 -z-10 rounded-2xl blur-md", glow)}
                   initial={{ opacity: 0.55, scale: 0.85 }}
-                  animate={{ opacity: isFinal ? 0.16 : 0, scale: isFinal ? 1.05 : 1.15 }}
-                  transition={{ duration: isFinal ? 1.4 : 0.6, ease: EASE }}
+                  animate={{ opacity: isFinal ? 0.13 : 0, scale: isFinal ? 1.05 : 1.15 }}
+                  transition={{ duration: isFinal ? 1.6 : 0.6, ease: EASE }}
                 />
               )}
               {/* A single, one-time shimmer across the card once it's
                * settled — "tiny shimmer," not a loop; it plays once and
                * is gone, the same restraint every other flourish on
-               * this page already uses. */}
+               * this page already uses. Softened from V15's own pass —
+               * a trace of light, not a highlight. */}
               {isFinal && finalArrived && (
                 <motion.span
                   aria-hidden
                   className="pointer-events-none absolute inset-0 -z-10 overflow-hidden rounded-xl"
                 >
                   <motion.span
-                    className="absolute inset-y-0 left-0 w-1/3 -skew-x-[20deg] bg-gradient-to-r from-transparent via-white/50 to-transparent"
+                    className="absolute inset-y-0 left-0 w-1/3 -skew-x-[20deg] bg-gradient-to-r from-transparent via-white/30 to-transparent"
                     initial={{ x: "-160%" }}
                     animate={{ x: "460%" }}
-                    transition={{ duration: 0.9, ease: "easeInOut", delay: 0.9 }}
+                    transition={{ duration: 1.1, ease: "easeInOut", delay: 1.1 }}
                   />
                 </motion.span>
               )}
@@ -698,9 +784,19 @@ function BlurredPhotoBubble({ caption }: { caption: string }) {
       transition={{ type: "spring", stiffness: 320, damping: 24 }}
     >
       <div className="max-w-[72%] overflow-hidden rounded-2xl rounded-bl-md border border-black/5 shadow-sm">
-        <div
+        {/* V16 founder review (2026-08-04): "photo arrival" named
+         * explicitly as one of the micro-interactions worth its own
+         * pass. A brief settle-into-focus on top of the constant
+         * privacy blur below (never removed — this is about the
+         * photo *arriving*, the privacy treatment itself never
+         * changes) — the same "this took a moment to load in" read a
+         * real image attachment has, not an instant paste. */}
+        <motion.div
           className="relative h-28 w-full overflow-hidden"
           style={{ background: "linear-gradient(135deg, #b7c6d9 0%, #8fa3ba 45%, #a9b8c9 100%)" }}
+          initial={{ filter: "blur(9px) brightness(0.88)", scale: 1.07 }}
+          animate={{ filter: "blur(0px) brightness(1)", scale: 1 }}
+          transition={{ duration: 0.65, ease: EASE, delay: 0.1 }}
         >
           <div className="absolute -left-4 -top-6 h-20 w-20 rounded-full bg-white/25 blur-xl" aria-hidden />
           <div className="absolute -bottom-8 -right-2 h-24 w-24 rounded-full bg-black/10 blur-2xl" aria-hidden />
@@ -716,7 +812,7 @@ function BlurredPhotoBubble({ caption }: { caption: string }) {
               <circle cx="12" cy="12.5" r="3.2" stroke="currentColor" strokeWidth="1.6" />
             </svg>
           </div>
-        </div>
+        </motion.div>
         <div className="bg-white px-3 py-2 text-[12px] leading-relaxed text-foreground">{caption}</div>
         <div className="bg-white px-3 pb-1.5 text-[10px] text-muted-foreground/60">Customer photo — blurred for privacy</div>
       </div>
@@ -780,7 +876,15 @@ function ConversationSlideView({ scene }: { scene: ConversationScene }) {
        * sheen layered on top of it here only, drifting slowly within
        * WhatsApp's own green family (never a different hue), the same
        * "light moving across a surface" idea Slide One's gradient
-       * header carries, continued rather than copied. */}
+       * header carries, continued rather than copied.
+       *
+       * V16 founder review (2026-08-04): "it should evolve naturally
+       * rather than resetting." A second, slower, counter-moving
+       * highlight added — the same "two-point studio setup, not one
+       * flat wash" convention `device-frame.tsx`'s own chassis
+       * lighting already established, continued here rather than
+       * reinvented, so the header reads as one considered light
+       * source with real depth instead of a single sweep on a loop. */}
       <div className="pointer-events-none absolute inset-x-0 top-0 z-20 h-[86px] overflow-hidden" aria-hidden>
         <motion.div
           className="absolute inset-y-0 left-0 h-full w-[160%]"
@@ -789,6 +893,14 @@ function ConversationSlideView({ scene }: { scene: ConversationScene }) {
           }}
           animate={{ x: ["-35%", "0%", "-35%"] }}
           transition={{ duration: 7, repeat: Infinity, ease: "easeInOut" }}
+        />
+        <motion.div
+          className="absolute inset-y-0 right-0 h-full w-[140%]"
+          style={{
+            background: "linear-gradient(260deg, transparent 0%, rgba(255,255,255,0.10) 50%, transparent 100%)",
+          }}
+          animate={{ x: ["10%", "-25%", "10%"] }}
+          transition={{ duration: 11, repeat: Infinity, ease: "easeInOut", delay: 1.5 }}
         />
       </div>
       <PhoneFrame
@@ -896,20 +1008,23 @@ function TrustActView({ act }: { act: TrustAct }) {
 
       {factCount > 0 && (
         <div className="mt-2.5 space-y-1.5">
-          {act.facts.slice(0, factCount).map((fact, i) => (
-            <motion.div
-              key={fact}
-              initial={{ opacity: 0, x: -6, scale: 0.96 }}
-              animate={{ opacity: 1, x: 0, scale: 1 }}
-              transition={{ type: "spring", stiffness: 360, damping: 22, delay: i === factCount - 1 ? 0 : 0 }}
-              className="flex items-center gap-2 rounded-lg border border-learning/20 bg-learning/[0.06] px-2.5 py-1.5 text-[11.5px] font-medium text-foreground/80"
-            >
-              <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-learning/20">
-                <Check className="h-2.5 w-2.5 text-learning" strokeWidth={3} />
-              </span>
-              {fact}
-            </motion.div>
-          ))}
+          {act.facts.slice(0, factCount).map((fact, i) => {
+            const tone = FACT_TONE_STYLES[act.factTone];
+            return (
+              <motion.div
+                key={fact}
+                initial={{ opacity: 0, x: -6, scale: 0.96 }}
+                animate={{ opacity: 1, x: 0, scale: 1 }}
+                transition={{ type: "spring", stiffness: 360, damping: 22, delay: i === factCount - 1 ? 0 : 0 }}
+                className={cn("flex items-center gap-2 rounded-lg border px-2.5 py-1.5 text-[11.5px] font-medium text-foreground/80", tone.border, tone.bg)}
+              >
+                <span className={cn("flex h-4 w-4 shrink-0 items-center justify-center rounded-full", tone.badge)}>
+                  <Check className={cn("h-2.5 w-2.5", tone.icon_)} strokeWidth={3} />
+                </span>
+                {fact}
+              </motion.div>
+            );
+          })}
         </div>
       )}
 
@@ -1002,64 +1117,91 @@ function StoryDots({ active, count, onSelect }: { active: number; count: number;
 // Journey controller
 // ---------------------------------------------------------------------------
 
+/** A small shuffle-then-advance rotation, shared by the conversation
+ * pool and (new in V16) the trust pool — deterministic index 0 on the
+ * server and first client paint, a real shuffle taking over client-
+ * side, advancing exactly once each time its act is entered. */
+function usePoolRotation<T>(pool: readonly T[]) {
+  const [current, setCurrent] = useState<T>(pool[0]!);
+  const currentRef = useRef<T>(pool[0]!);
+  const orderRef = useRef<number[]>(pool.map((_, i) => i));
+  const ptrRef = useRef(0);
+
+  const shuffle = useCallback(() => {
+    const arr = pool.map((_, i) => i);
+    for (let i = arr.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [arr[i], arr[j]] = [arr[j]!, arr[i]!];
+    }
+    orderRef.current = arr;
+    ptrRef.current = 0;
+    currentRef.current = pool[arr[0]!]!;
+    setCurrent(currentRef.current);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const advance = useCallback(() => {
+    ptrRef.current = (ptrRef.current + 1) % orderRef.current.length;
+    currentRef.current = pool[orderRef.current[ptrRef.current]!]!;
+    setCurrent(currentRef.current);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  return { current, currentRef, shuffle, advance };
+}
+
 /**
- * Owns the three-act index, the conversation-pool rotation, and the
- * auto-advance clock. `journeyAt`/`sceneRef` (a ref, read
- * synchronously inside `setTimeout`/`goTo`) avoid a circular
+ * Owns the three-act index, both pool rotations (conversation, trust),
+ * and the auto-advance clock. `journeyAt` reads each pool's `currentRef`
+ * synchronously (inside `setTimeout`/`goTo`), avoiding a circular
  * dependency that a naive split into "an index hook" + "a rotation
  * hook watching that index" would create.
  */
 function useHeroJourney() {
   const [storyIndex, setStoryIndex] = useState(0);
-  const [conversationScene, setConversationScene] = useState<ConversationScene>(CONVERSATION_POOL[0]!);
+  const conversation = usePoolRotation(CONVERSATION_POOL);
+  const trust = usePoolRotation(TRUST_POOL);
   const indexRef = useRef(0);
-  const sceneRef = useRef<ConversationScene>(CONVERSATION_POOL[0]!);
-  const poolOrderRef = useRef<number[]>([0, 1, 2, 3, 4]);
-  const poolPtrRef = useRef(0);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const journeyAt = useCallback((i: number): JourneyAct => {
-    if (i === 0) return DASHBOARD_ACT;
-    if (i === 1) return sceneRef.current;
-    return TRUST_ACT;
-  }, []);
+  const journeyAt = useCallback(
+    (i: number): JourneyAct => {
+      if (i === 0) return DASHBOARD_ACT;
+      if (i === 1) return conversation.currentRef.current;
+      return trust.currentRef.current;
+    },
+    [conversation.currentRef, trust.currentRef]
+  );
 
-  const maybeAdvanceConversation = useCallback((newIndex: number, oldIndex: number) => {
-    if (newIndex === 1 && oldIndex !== 1) {
-      poolPtrRef.current = (poolPtrRef.current + 1) % poolOrderRef.current.length;
-      const nextScene = CONVERSATION_POOL[poolOrderRef.current[poolPtrRef.current]!]!;
-      sceneRef.current = nextScene;
-      setConversationScene(nextScene);
-    }
-  }, []);
+  const maybeAdvancePools = useCallback(
+    (newIndex: number, oldIndex: number) => {
+      if (newIndex === 1 && oldIndex !== 1) conversation.advance();
+      if (newIndex === 2 && oldIndex !== 2) trust.advance();
+    },
+    [conversation, trust]
+  );
 
   const scheduleNext = useCallback(
     (fromIndex: number) => {
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
       timeoutRef.current = setTimeout(() => {
         const upcoming = (indexRef.current + 1) % 3;
-        maybeAdvanceConversation(upcoming, indexRef.current);
+        maybeAdvancePools(upcoming, indexRef.current);
         indexRef.current = upcoming;
         setStoryIndex(upcoming);
         scheduleNext(upcoming);
       }, estimateStoryMs(journeyAt(fromIndex)) + REST_MS);
     },
-    [journeyAt, maybeAdvanceConversation]
+    [journeyAt, maybeAdvancePools]
   );
 
   useEffect(() => {
-    // Shuffle the pool order client-side only — deterministic on the
-    // server and the first client paint (always `CONVERSATION_POOL[0]`,
-    // Dean's Plumbing), then a real shuffle takes over.
-    const arr = [0, 1, 2, 3, 4];
-    for (let i = arr.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [arr[i], arr[j]] = [arr[j]!, arr[i]!];
-    }
-    poolOrderRef.current = arr;
-    poolPtrRef.current = 0;
-    sceneRef.current = CONVERSATION_POOL[arr[0]!]!;
-    setConversationScene(sceneRef.current);
+    // Safe to randomise which example plays *first* in both pools here
+    // (not just subsequent loops): acts 1 and 2 aren't visible until
+    // the dashboard's own duration has elapsed, long after this effect
+    // has resolved — no hydration risk.
+    conversation.shuffle();
+    trust.shuffle();
 
     indexRef.current = 0;
     setStoryIndex(0);
@@ -1073,17 +1215,17 @@ function useHeroJourney() {
   const goTo = useCallback(
     (i: number) => {
       const clamped = ((i % 3) + 3) % 3;
-      maybeAdvanceConversation(clamped, indexRef.current);
+      maybeAdvancePools(clamped, indexRef.current);
       indexRef.current = clamped;
       setStoryIndex(clamped);
       scheduleNext(clamped);
     },
-    [scheduleNext, maybeAdvanceConversation]
+    [scheduleNext, maybeAdvancePools]
   );
   const next = useCallback(() => goTo(indexRef.current + 1), [goTo]);
   const prev = useCallback(() => goTo(indexRef.current - 1), [goTo]);
 
-  return { storyIndex, act: journeyAt(storyIndex), conversationScene, goTo, next, prev };
+  return { storyIndex, act: journeyAt(storyIndex), goTo, next, prev };
 }
 
 function AutoConversation({

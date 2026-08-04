@@ -26,18 +26,21 @@ import { EASE } from "@/components/shared/motion";
  * from anything the phone shows — one real conversation vs. a whole
  * day — so telling it never repeats the phone's own proof.
  *
- * The brief was explicit about the form that proof should take: "no
- * dashboard, no analytics, no animated cards... a calm, premium story
- * ... think Apple rather than SaaS... question whether every element
- * deserves to exist." So there is no panel, no chrome, no window
- * controls, no icons, no colour-coded badges — nothing here reads as
- * a UI at all. It's five short, time-stamped sentences and a single
- * quiet line connecting them, read once as the section scrolls into
- * view and then still — a settled record of a day already finished,
- * deliberately the opposite temporal register from the phone above it
- * (which is always live, always mid-conversation). That contrast is
- * the point: the phone shows it happening; this shows it already
- * happened, routinely, the way a normal Tuesday would.
+ * Second founder review (2026-08-04): the first version of this
+ * section over-corrected — "keep the simplicity, but it now feels
+ * like documentation, not evidence... find the middle ground." Three
+ * things came back, all deliberately short of a dashboard: (1) the
+ * timeline sits inside one soft, elevated surface (`rounded-3xl`,
+ * subtle shadow) instead of floating on plain background — presence,
+ * without a single piece of window chrome; (2) a very quiet
+ * morning-to-evening ambient wash behind the whole section, the same
+ * "atmosphere carries meaning" principle the phone's own mood glow
+ * uses, applied here to *time* instead of *scenario*; (3) the payoff
+ * line gets one soft glow bloom the moment it settles — the section's
+ * only real flourish, spent entirely on the one line that's the whole
+ * point of it. Still no cards, no icons beyond the same two dot sizes
+ * already here, no per-item colour-coding — still evidence, not a
+ * dashboard, just no longer bare.
  */
 
 interface Moment {
@@ -60,8 +63,21 @@ const MOMENTS: readonly Moment[] = [
 
 export function DayInTheLife() {
   return (
-    <section className="bg-card">
-      <div className="mx-auto max-w-xl px-6 py-24 text-center sm:py-32 lg:py-36">
+    <section className="relative overflow-hidden bg-card">
+      {/* Morning-to-evening wash — the same "atmosphere tells the
+       * story" idea as the phone's own mood glow, applied to the
+       * passage of a day instead of a scenario. Kept extremely quiet
+       * (low-opacity, no hard edges) — a visitor should feel a day
+       * passing without ever consciously clocking a gradient. */}
+      <div
+        className="pointer-events-none absolute inset-0"
+        aria-hidden
+        style={{
+          background: "linear-gradient(180deg, rgba(37,99,235,0.05) 0%, transparent 35%, transparent 65%, rgba(245,158,11,0.06) 100%)",
+        }}
+      />
+
+      <div className="relative mx-auto max-w-xl px-6 py-24 text-center sm:py-32 lg:py-36">
         <motion.p
           initial={{ opacity: 0, y: 12 }}
           whileInView={{ opacity: 1, y: 0 }}
@@ -72,12 +88,18 @@ export function DayInTheLife() {
           You didn&apos;t have to think about any of this today.
         </motion.p>
 
-        <div className="relative mx-auto mt-16 max-w-sm text-left sm:mt-20">
+        <motion.div
+          initial={{ opacity: 0, y: 16 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, margin: "0px 0px -100px 0px" }}
+          transition={{ duration: 0.6, ease: EASE, delay: 0.15 }}
+          className="relative mx-auto mt-14 max-w-sm rounded-3xl border border-border/50 bg-background/80 p-7 text-left shadow-[0_1px_3px_rgba(15,23,42,0.04),0_20px_45px_-28px_rgba(15,23,42,0.16)] backdrop-blur-sm sm:mt-16 sm:p-9"
+        >
           {/* The one structural device this section allows itself — a
            * thin line marking "these are one continuous day," not a
            * decoration. Deliberately quiet: 1px, low-opacity border
            * colour, nothing that competes with the words next to it. */}
-          <div className="absolute bottom-2 left-[3px] top-2 w-px bg-border" aria-hidden />
+          <div className="absolute bottom-9 left-[31px] top-9 w-px bg-border sm:left-[39px]" aria-hidden />
 
           <ul className="flex flex-col gap-9 sm:gap-10">
             {MOMENTS.map((moment, i) => {
@@ -93,7 +115,20 @@ export function DayInTheLife() {
                 >
                   {/* Every dot is the same shape; only the last one
                    * gets any real weight — size and colour alone
-                   * mark "this is the point," not a fourth icon. */}
+                   * mark "this is the point," not a fourth icon. A
+                   * soft glow blooms once behind it as it settles —
+                   * this section's one flourish, spent on its one
+                   * line that matters. */}
+                  {isLast && (
+                    <motion.span
+                      aria-hidden
+                      className="absolute -left-3 top-1 h-8 w-8 rounded-full bg-success/25 blur-md"
+                      initial={{ opacity: 0, scale: 0.6 }}
+                      whileInView={{ opacity: [0, 1, 0.5], scale: [0.6, 1.3, 1] }}
+                      viewport={{ once: true, margin: "0px 0px -80px 0px" }}
+                      transition={{ duration: 1.1, ease: EASE, delay: i * 0.12 + 0.15 }}
+                    />
+                  )}
                   <span
                     aria-hidden
                     className={
@@ -118,14 +153,14 @@ export function DayInTheLife() {
               );
             })}
           </ul>
-        </div>
+        </motion.div>
 
         <motion.p
           initial={{ opacity: 0 }}
           whileInView={{ opacity: 1 }}
           viewport={{ once: true, margin: "0px 0px -80px 0px" }}
-          transition={{ duration: 0.5, ease: EASE, delay: MOMENTS.length * 0.12 + 0.15 }}
-          className="mt-14 text-[12px] text-muted-foreground/60 sm:mt-16"
+          transition={{ duration: 0.5, ease: EASE, delay: MOMENTS.length * 0.12 + 0.3 }}
+          className="mt-6 text-[12px] text-muted-foreground/60"
         >
           An example day — not real data.
         </motion.p>

@@ -1,3 +1,6 @@
+"use client";
+
+import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 
 /**
@@ -92,6 +95,15 @@ function StatusBar({ battery }: { battery: number }) {
  * (never touching this component's default) so the conversation text
  * itself grows with the chassis instead of floating in newly-roomier
  * padding.
+ *
+ * Founder review (2026-08-04): "the phone itself is still too tall,
+ * especially on desktop — reduce its overall height slightly while
+ * keeping readability." Width stays exactly as it was (that's what
+ * fixed readability last pass); `aspect-[9/18]` (was `9/19.5`) trims
+ * height alone by keeping the same real-device convention — plenty of
+ * actual phones sit closer to 18:9 than the tallest 19.5:9 iPhones —
+ * so it's still an honest phone proportion, just a slightly less
+ * elongated one.
  */
 export function DeviceFrame({
   children,
@@ -103,7 +115,7 @@ export function DeviceFrame({
   battery?: number;
 }) {
   return (
-    <div className={cn("relative mx-auto aspect-[9/19.5] w-[260px] sm:w-[280px] lg:w-[340px]", className)}>
+    <div className={cn("relative mx-auto aspect-[9/18] w-[260px] sm:w-[280px] lg:w-[340px]", className)}>
       <div className="relative h-full w-full rounded-[46px] bg-gradient-to-br from-[#4c4c54] via-[#1c1c20] via-45% to-[#050505] p-[3px] shadow-[0_2px_10px_-2px_rgba(0,0,0,0.35),0_60px_120px_-24px_rgba(15,23,42,0.55),0_30px_60px_-28px_rgba(15,23,42,0.45)]">
         {/* Edge highlight — a real object catching light, not decoration. */}
         <div className="pointer-events-none absolute inset-0 rounded-[46px] ring-1 ring-inset ring-white/10" aria-hidden />
@@ -149,9 +161,19 @@ export function DeviceFrame({
             aria-hidden
           />
           {/* A specular streak in the top-left corner — curved glass
-           * catching light at one point, not an even wash across it. */}
-          <div
+           * catching light at one point, not an even wash across it.
+           * Founder review (2026-08-04): "tiny lighting shifts...
+           * believable depth... the phone should feel like a real
+           * device someone is holding." A held object is never
+           * perfectly still under a light source — this breathes very
+           * slightly (a few percent of opacity, ~6s) rather than
+           * sitting static, the smallest possible version of "the
+           * light is catching a surface that's alive," not an
+           * animation drawing attention to itself. */}
+          <motion.div
             className="pointer-events-none absolute -left-10 -top-10 z-20 h-28 w-28 rotate-45 rounded-full bg-gradient-to-br from-white/[0.14] to-transparent blur-xl"
+            animate={{ opacity: [0.85, 1, 0.85] }}
+            transition={{ duration: 6, repeat: Infinity, ease: "easeInOut" }}
             aria-hidden
           />
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence, useAnimationControls } from "framer-motion";
 import {
   AlertTriangle,
   CalendarCheck,
@@ -14,6 +14,7 @@ import {
   ClipboardCheck,
   Clock,
   Bell,
+  Check,
 } from "lucide-react";
 import { EASE } from "@/components/shared/motion";
 import { PhoneFrame, Bubble } from "@/components/shared/phone-preview";
@@ -22,23 +23,28 @@ import { DeviceFrame } from "@/components/marketing/device-frame";
 import { cn } from "@/lib/utils";
 
 /**
- * V13 founder review (2026-08-04), verbatim: "This is no longer a UI
- * polish task. This is an experience architecture task... We're no
- * longer designing slides. We're designing one continuous product
- * experience. The phone should feel like one living object." Extracted
- * out of `hero.tsx` (which was already 1080 lines before this pass)
- * specifically because this is now a real second concern — the "living
- * phone" product-demo engine — not a few extra lines inside the
- * marketing-copy component.
+ * V13 founder review (2026-08-04): the phone's four independent slides
+ * became one three-act journey. V14 founder review (2026-08-04) —
+ * after researching why Linear/Stripe/Apple/Vercel/Arc convert (full
+ * writeup shared separately): Apple's own stated discipline is that
+ * *content motion* (what's being said) and *graphical motion* (the
+ * atmosphere) run on separate clocks. V13's glow was still event-
+ * driven — a `MIX` snapshot swapped in on every tile/message — which
+ * is exactly a graphical effect wearing content motion's clothes.
+ * Rebuilt as one continuous, time-driven blend (`useJourneyGlow`
+ * below) instead. Same research also drove: dashboard tiles need
+ * pacing (pacing *is* emotion, not just reveal order), a real WhatsApp
+ * thread has no separate "photo mode" so conversation and photos
+ * merge into one act, and a third act that's "another conversation"
+ * repeats proof instead of adding a new, specific one (Linear's own
+ * lesson: distinctness, not just correctness).
  *
- * Four independent, randomly-rotating slides become one three-act
- * journey, always in the same order (this is a story now, not a
- * shuffle): Dashboard (opens instantly, then keeps filling itself in)
- * → Conversation (a rotating pool of five examples, rarely the same
- * one twice) → Photos (a new capability). Manual exploration (drag,
- * dot-click) still jumps anywhere; only the passive auto-advance timer
- * and the in-screen "Watch it work" button move strictly forward,
- * matching "opening an app," not "flipping through screenshots."
+ * Three acts, always in the same order — Dashboard → Conversation →
+ * Trust — answering three different customer questions ("what is
+ * this," "how does it talk," "why should I believe it"), never a
+ * shuffle. Manual exploration (drag, dot-click) still jumps anywhere;
+ * only the passive auto-advance timer and the in-screen "Watch it
+ * work" button move strictly forward.
  */
 
 interface Exchange {
@@ -52,10 +58,9 @@ interface ProductMoment {
 }
 
 /** Matches one of the exact five words in `hero.tsx`'s eyebrow line —
- * every act below (dashboard, all five conversation-pool examples, the
- * photo act) deliberately uses only these five trades, never a sixth,
- * so the eyebrow's word-highlight mechanism always has something real
- * to point at. */
+ * every act below deliberately uses only these five trades, never a
+ * sixth, so the eyebrow's word-highlight mechanism always has
+ * something real to point at. */
 export type Trade = "plumbers" | "electricians" | "builders" | "roofers" | "painters";
 
 interface AppTile {
@@ -75,69 +80,129 @@ interface DashboardAct extends BaseAct {
   outcomeTiles: readonly [AppTile, AppTile, AppTile, AppTile];
 }
 
+/** Founder review (2026-08-04): "a customer doesn't think 'I'm now
+ * entering the photo feature' — they simply continue chatting."
+ * `photo` is optional and deliberately only present on two of the
+ * five pool examples below — real conversations don't always involve
+ * a photo either, and making it universal would just trade one
+ * repetitive shape for another. When present, it renders as a third
+ * beat inside the same thread, after the two exchanges and before the
+ * outcomes — never a separate screen. */
 interface ConversationScene extends BaseAct {
   kind: "conversation";
   exchanges: readonly [Exchange, Exchange];
+  photo?: { customerCaption: string; reply: string };
   outcomes: readonly [ProductMoment, ProductMoment];
-  mix: GlowMix;
 }
 
-interface PhotoAct extends BaseAct {
-  kind: "photo";
-  customerCaption: string;
+/** Act 3. Founder review (2026-08-04): "ask yourself — what would make
+ * someone trust ReplyFlow even more? We've already proven
+ * conversations. Now prove something else." Not a new capability —
+ * this project's own existing, already-tested fact-grounding
+ * discipline (`lib/reply-engine`'s own test suite: "a payment question
+ * that correctly cites the taught fact passes," "never claims a fact
+ * was used" unless it genuinely was) made visible for the first time,
+ * rather than a new claim. Deliberately plain-language facts a real
+ * owner would recognise as their own settings, never mechanism-talk
+ * ("checking," "processing," "reasoning") — the goal is "this
+ * understands my business," never "this is clever AI." */
+interface TrustAct extends BaseAct {
+  kind: "trust";
+  question: string;
+  facts: readonly [string, string, string];
   reply: string;
-  outcomes: readonly [ProductMoment, ProductMoment];
 }
 
-type JourneyAct = DashboardAct | ConversationScene | PhotoAct;
+type JourneyAct = DashboardAct | ConversationScene | TrustAct;
 
 /**
- * The ambient light behind the phone — a founder-named product
- * identity now, not decoration. "Never remove the ambient glow...
- * instead evolve it... it should feel like the phone is radiating
- * intelligence." Four always-mounted colour layers (never all at
- * zero — green anchors every recipe below) instead of one gradient
- * swapped per slide; a scene's mood is a small mix of how much of
- * each layer shows, so two states can genuinely blend (green+blue,
- * green+blue+purple) instead of cutting between flat colours.
+ * The ambient light behind the phone — founder-named product identity,
+ * not decoration. V14 founder review (2026-08-04): "the glow should
+ * become part of ReplyFlow's identity... it must never disappear
+ * completely... Blue → Blue+Green → Green → Green+Warm Red → Warm
+ * Red... almost impossible to notice. No flashing. No disappearing.
+ * No hard cuts." `useJourneyGlow` below samples this exact sequence
+ * continuously (see its own doc comment) rather than switching
+ * between named snapshots the way V13 did.
  *
- * Colours reuse the exact design tokens already defined in
- * `app/globals.css` rather than inventing a parallel palette:
- * `--success` (green), `--primary` (blue), `--learning` (purple,
- * already commented there as "learning, growth, brain activity" —
- * exactly what "Knowledge" needed), `--attention` (amber, commented
- * "needs awareness, not urgent"). Red is dropped entirely: the
- * existing `urgent` `ProductMoment` styling below already uses
- * `attention` (amber), never `destructive` (red), for its badge and
- * border — the glow following suit isn't a new decision, it's
- * catching up to a colour language the rest of the UI already
- * settled on. Same off-centre focal point (`at 38% 30%`) as every
- * prior pass, matching `device-frame.tsx`'s own physical key-light
- * direction — one coherent light source, still.
+ * Three layers now, not four — purple (V13's "Knowledge" spike)
+ * dropped entirely. Purple was a *reactive* flicker tied to one tile
+ * appearing, which is precisely the event-driven pattern this pass
+ * removes; the tile itself keeps its own purple icon; the ambient
+ * light no longer chases individual tiles. "Warm Red" reuses the
+ * existing `--attention` amber token, not `--destructive` — already
+ * established elsewhere in this file as "needs awareness, not
+ * urgent," and the founder was explicit: "never aggressive, never
+ * danger." Same off-centre focal point (`at 38% 30%`) as every prior
+ * pass, matching `device-frame.tsx`'s own physical key-light
+ * direction.
  */
-type GlowLayer = "green" | "blue" | "purple" | "amber";
+type GlowLayer = "blue" | "green" | "amber";
 type GlowMix = Partial<Record<GlowLayer, number>>;
 
 const GLOW_GRADIENTS: Record<GlowLayer, string> = {
   green: "radial-gradient(ellipse 75% 65% at 38% 30%, rgba(34,197,94,0.34), rgba(34,197,94,0.13) 55%, transparent 78%)",
   blue: "radial-gradient(ellipse 75% 65% at 38% 30%, rgba(37,99,235,0.34), rgba(37,99,235,0.13) 55%, transparent 78%)",
-  purple: "radial-gradient(ellipse 75% 65% at 38% 30%, rgba(168,85,247,0.32), rgba(168,85,247,0.12) 55%, transparent 78%)",
   amber: "radial-gradient(ellipse 75% 65% at 38% 30%, rgba(245,158,11,0.36), rgba(245,158,11,0.14) 55%, transparent 78%)",
 };
 
-/** Named recipes for every state this pass defines — green never
- * omitted, matching "never disappear." */
-const MIX = {
-  dashboardCapability: { green: 0.55, blue: 0.8, purple: 0.55 } satisfies GlowMix,
-  dashboardKnowledge: { green: 0.5, blue: 0.6, purple: 0.95 } satisfies GlowMix,
-  dashboardOutcome: { green: 0.85, blue: 0.35, purple: 0.15 } satisfies GlowMix,
-  dashboardUrgent: { green: 0.65, amber: 0.9 } satisfies GlowMix,
-  dashboardFinished: { green: 0.9, blue: 0.35 } satisfies GlowMix,
-  conversationRoutine: { green: 0.85 } satisfies GlowMix,
-  conversationUrgent: { green: 0.6, amber: 0.85 } satisfies GlowMix,
-  photoAnalysing: { green: 0.5, blue: 0.85 } satisfies GlowMix,
-  photoFinished: { green: 0.9, blue: 0.3 } satisfies GlowMix,
-} as const;
+/** Shortest distance between two points on a circle of the given
+ * period — what makes the arc loop seamlessly (amber fading back into
+ * blue as the journey restarts) instead of snapping. */
+function circularDistance(a: number, b: number, period: number): number {
+  const d = Math.abs(a - b) % period;
+  return Math.min(d, period - d);
+}
+
+/** A smooth (cosine) falloff from 1 at `center` to 0 at `width` away —
+ * three of these, one per colour, overlapping just enough that
+ * adjacent acts blend rather than cut (see `useJourneyGlow`). */
+function windowWeight(t: number, center: number, width: number, period: number): number {
+  const d = circularDistance(t, center, period);
+  if (d >= width) return 0;
+  return (Math.cos((d / width) * Math.PI) + 1) / 2;
+}
+
+const GLOW_WINDOW_WIDTH = 1.4;
+
+/** `globalT` runs 0→3, one unit per act, wrapping — blue peaks mid-
+ * Dashboard (0.5), green mid-Conversation (1.5), amber mid-Trust
+ * (2.5). At every act boundary the two neighbouring windows overlap
+ * (~0.7 combined weight each), which *is* "Blue+Green" / "Green+Warm
+ * Red" — not a separate state, just where this continuous curve
+ * happens to sit. */
+function computeGlowMix(globalT: number): GlowMix {
+  return {
+    blue: windowWeight(globalT, 0.5, GLOW_WINDOW_WIDTH, 3),
+    green: windowWeight(globalT, 1.5, GLOW_WINDOW_WIDTH, 3),
+    amber: windowWeight(globalT, 2.5, GLOW_WINDOW_WIDTH, 3),
+  };
+}
+
+/** Ticks every 200ms while mounted, computing how far through the
+ * *current* act we are from real elapsed time (reusing `estimateStoryMs`
+ * — no second timing source to keep in sync with the auto-advance
+ * clock). `useJourneyGlow` never depends on what's happening *inside*
+ * an act (which tile, which exchange) — only on `storyIndex` and time,
+ * exactly the "separate clock" Apple's own product pages run on. */
+function useJourneyGlow(storyIndex: number, actDurationMs: number): GlowMix {
+  const [, forceTick] = useState(0);
+  const startRef = useRef<number>(Date.now());
+
+  useEffect(() => {
+    startRef.current = Date.now();
+  }, [storyIndex]);
+
+  useEffect(() => {
+    const id = setInterval(() => forceTick((n) => n + 1), 200);
+    return () => clearInterval(id);
+  }, []);
+
+  const elapsed = Date.now() - startRef.current;
+  const localProgress = Math.min(1, Math.max(0, elapsed / Math.max(1, actDurationMs)));
+  const globalT = storyIndex + localProgress;
+  return computeGlowMix(globalT);
+}
 
 function PhoneGlow({ mix }: { mix: GlowMix }) {
   return (
@@ -151,7 +216,7 @@ function PhoneGlow({ mix }: { mix: GlowMix }) {
           className="absolute inset-0 rounded-full"
           animate={{ opacity: mix[layer] ?? 0, scale: [1, 1.05, 1] }}
           transition={{
-            opacity: { duration: 0.8, ease: EASE },
+            opacity: { duration: 1, ease: "linear" },
             scale: { duration: 4.2, repeat: Infinity, ease: "easeInOut" },
           }}
           style={{ background: GLOW_GRADIENTS[layer] }}
@@ -163,8 +228,7 @@ function PhoneGlow({ mix }: { mix: GlowMix }) {
 
 /** Icon + accent per moment `kind` — real hierarchy (Linear/Stripe/
  * Apple notification language), never one repeated green box.
- * `urgent` uses `attention` (amber), not `destructive` — see the glow
- * doc comment above for why that's the established, not new, choice. */
+ * `urgent` uses `attention` (amber), not `destructive`. */
 const MOMENT_STYLES: Record<ProductMoment["kind"], { icon: typeof ClipboardCheck; badge: string; icon_: string }> = {
   job: { icon: ClipboardCheck, badge: "bg-success/15", icon_: "text-success" },
   booking: { icon: CalendarCheck, badge: "bg-primary/15", icon_: "text-primary" },
@@ -198,17 +262,14 @@ function ProductMomentCard({ moment }: { moment: ProductMoment }) {
   );
 }
 
-/** Icon + accent per tile `tone` — same lookup-table discipline as
- * `MOMENT_STYLES`. `whatsapp` stays the one literal (non-token)
- * colour on the page — WhatsApp's real green, not the app's internal
- * `success` token — so "WhatsApp connected" reads as an accurate
- * brand fact. */
-const TILE_STYLES: Record<AppTile["tone"], { badge: string; icon_: string }> = {
-  whatsapp: { badge: "bg-[#25D366]/15", icon_: "text-[#128C4A]" },
-  primary: { badge: "bg-primary/15", icon_: "text-primary" },
-  success: { badge: "bg-success/15", icon_: "text-success" },
-  attention: { badge: "bg-attention/20", icon_: "text-attention" },
-  learning: { badge: "bg-learning/15", icon_: "text-learning" },
+/** Icon + accent per tile `tone`. `whatsapp` stays the one literal
+ * (non-token) colour on the page — WhatsApp's real green. */
+const TILE_STYLES: Record<AppTile["tone"], { badge: string; icon_: string; glow: string }> = {
+  whatsapp: { badge: "bg-[#25D366]/15", icon_: "text-[#128C4A]", glow: "bg-[#25D366]/50" },
+  primary: { badge: "bg-primary/15", icon_: "text-primary", glow: "bg-primary/50" },
+  success: { badge: "bg-success/15", icon_: "text-success", glow: "bg-success/50" },
+  attention: { badge: "bg-attention/20", icon_: "text-attention", glow: "bg-attention/50" },
+  learning: { badge: "bg-learning/15", icon_: "text-learning", glow: "bg-learning/50" },
 };
 
 /** Mirrors `preparing-receptionist.tsx`'s own pacing formula. */
@@ -219,16 +280,21 @@ function estimateTypeMs(text: string): number {
 const PRODUCT_MOMENT_DELAY_MS = 900;
 const PRODUCT_MOMENT_STEP_MS = 1000;
 const CHECKLIST_STEP_MS = 650;
+/** Founder review (2026-08-04): "after the fourth tile, the remaining
+ * tiles should begin appearing slightly faster — the user already
+ * understands what's happening." */
+const OUTCOME_STEP_MS = 470;
 const REST_MS = 6500;
 
 function estimateStoryMs(act: JourneyAct): number {
   if (act.kind === "conversation") {
-    return 900 + estimateTypeMs(act.exchanges[0].reply) + 1300 + estimateTypeMs(act.exchanges[1].reply) + PRODUCT_MOMENT_DELAY_MS + PRODUCT_MOMENT_STEP_MS;
+    const photoMs = act.photo ? 700 + 1200 + estimateTypeMs(act.photo.reply) : 0;
+    return 900 + estimateTypeMs(act.exchanges[0].reply) + 1300 + estimateTypeMs(act.exchanges[1].reply) + photoMs + PRODUCT_MOMENT_DELAY_MS + PRODUCT_MOMENT_STEP_MS;
   }
-  if (act.kind === "photo") {
-    return 700 + 1400 + estimateTypeMs(act.reply) + PRODUCT_MOMENT_DELAY_MS + PRODUCT_MOMENT_STEP_MS;
+  if (act.kind === "trust") {
+    return 700 + act.facts.length * 550 + 600 + 900 + 1700 + 1200;
   }
-  return 900 + 4 * CHECKLIST_STEP_MS + 500 + 4 * CHECKLIST_STEP_MS + 700 + 1200;
+  return 900 + 4 * CHECKLIST_STEP_MS + 500 + 4 * OUTCOME_STEP_MS + 900 + 1200;
 }
 
 // ---------------------------------------------------------------------------
@@ -253,17 +319,15 @@ const DASHBOARD_ACT: DashboardAct = {
   ],
 };
 
-/** Five examples, one rotating pool — "the visitor should almost
- * never see the same example twice." Plumber and roofer are the two
- * examples this page has already earned trust with (kept verbatim);
- * the other three are new. Deliberately only the five eyebrow trades
- * (see `Trade` above) — no sixth trade the eyebrow can't highlight. */
+/** Five examples, one rotating pool. Two (electrician, builder) grow a
+ * natural third beat where the customer sends a photo mid-thread —
+ * see `ConversationScene.photo`'s own doc comment for why only two,
+ * not all five. */
 const CONVERSATION_POOL: readonly ConversationScene[] = [
   {
     kind: "conversation",
     businessName: "Dean's Plumbing",
     trade: "plumbers",
-    mix: MIX.conversationRoutine,
     exchanges: [
       {
         customer: "Hi, my kitchen tap's been dripping non-stop since this morning — any chance someone can look today?",
@@ -283,7 +347,6 @@ const CONVERSATION_POOL: readonly ConversationScene[] = [
     kind: "conversation",
     businessName: "Harris Electrical",
     trade: "electricians",
-    mix: MIX.conversationRoutine,
     exchanges: [
       {
         customer: "Do you do rewires for the whole house, or just partial jobs?",
@@ -291,19 +354,22 @@ const CONVERSATION_POOL: readonly ConversationScene[] = [
       },
       {
         customer: "Perfect, I'll send some over.",
-        reply: "Sounds good — I'll take a look and come back to you today.",
+        reply: "Sounds good — send them over whenever's easy.",
       },
     ],
+    photo: {
+      customerCaption: "Here's the fusebox and the upstairs sockets.",
+      reply: "Thanks — that's really helpful, I can see exactly what needs doing. I'll get you a proper price by this evening.",
+    },
     outcomes: [
-      { text: "Enquiry logged", kind: "customer" },
-      { text: "Quote follow-up scheduled", kind: "scheduled" },
+      { text: "Quote based on the photos", kind: "quote" },
+      { text: "Sent by this evening", kind: "scheduled" },
     ],
   },
   {
     kind: "conversation",
     businessName: "Ridgeline Roofing",
     trade: "roofers",
-    mix: MIX.conversationUrgent,
     exchanges: [
       {
         customer: "A few tiles came off in last night's wind — there's water coming into the loft now.",
@@ -323,7 +389,6 @@ const CONVERSATION_POOL: readonly ConversationScene[] = [
     kind: "conversation",
     businessName: "Bright Coat Painters",
     trade: "painters",
-    mix: MIX.conversationRoutine,
     exchanges: [
       {
         customer: "How much would it be to repaint a 3-bed semi, inside only?",
@@ -343,41 +408,38 @@ const CONVERSATION_POOL: readonly ConversationScene[] = [
     kind: "conversation",
     businessName: "Marsh & Co Builders",
     trade: "builders",
-    mix: MIX.conversationRoutine,
     exchanges: [
       {
         customer: "Hi, just checking in on the extension quote from last week?",
-        reply: "Good timing, I was just finishing it — I'll have it over to you by this evening.",
+        reply: "Good timing, I was just finishing it — quick one, could you send a photo of the boundary wall? Wasn't sure from the measurements.",
       },
       {
-        customer: "Brilliant, thank you!",
-        reply: "No problem — I'll flag it so it doesn't slip through the cracks.",
+        customer: "Sure, one sec.",
+        reply: "Perfect, take your time.",
       },
     ],
+    photo: {
+      customerCaption: "Here you go — that's the wall in question.",
+      reply: "Got it, that confirms it — I'll have the full quote over to you by this evening.",
+    },
     outcomes: [
-      { text: "Follow-up handled", kind: "customer" },
-      { text: "Quote reprioritised", kind: "job" },
+      { text: "Quote confirmed from photo", kind: "quote" },
+      { text: "Sent by this evening", kind: "scheduled" },
     ],
   },
 ] as const;
 
-/** New capability, replacing what used to be a second emergency
- * slide. No real customer photo exists to show, and none should be
- * fabricated — `BlurredPhotoBubble` below is a pure-CSS abstraction,
- * honestly illustrative rather than pretending to be a real kitchen.
- * Same business as the roofer example above (continuity — this reads
- * as one more thing that business's receptionist handles, not an
- * unrelated fourth demo). */
-const PHOTO_ACT: PhotoAct = {
-  kind: "photo",
-  businessName: "Ridgeline Roofing",
-  trade: "roofers",
-  customerCaption: "Here's what it looks like — think a tile's come loose.",
-  reply: "Thanks — from the photo it looks like it's just the ridge tile, that's a quick fix. I can get someone out Thursday morning.",
-  outcomes: [
-    { text: "Booked in for Thursday", kind: "job" },
-    { text: "Photo saved to the job", kind: "customer" },
-  ],
+/** Act 3. Same business as the Dashboard act — bookends the journey
+ * as one business's whole system, not a fourth unrelated demo. Plain,
+ * concrete facts an owner would recognise as their own settings —
+ * "understands my business," never "clever AI." */
+const TRUST_ACT: TrustAct = {
+  kind: "trust",
+  businessName: "Whitmore Building Co",
+  trade: "builders",
+  question: "Do you charge extra for evening call-outs?",
+  facts: ["Evening call-out fee: £25 after 6pm", "Weekend jobs: yes, by arrangement", "Standard response time: same day"],
+  reply: "Yeah, evenings are fine — it's a flat £25 call-out after 6pm, same as any other job.",
 };
 
 export const HERO_PHONE_INITIAL_TRADE: Trade = DASHBOARD_ACT.trade;
@@ -397,7 +459,7 @@ function TypedReply({ text }: { text: string }) {
   );
 }
 
-/** The two "inside ReplyFlow" acts (dashboard) get a distinct
+/** The "inside ReplyFlow" acts (Dashboard, Trust) get a distinct
  * ReplyFlow-branded header in place of WhatsApp's — the visitor
  * consciously registers "this is a different screen" before reading a
  * word. Deliberately local to this file rather than changing
@@ -436,20 +498,24 @@ function ReplyFlowAppShell({
   );
 }
 
-/** Act 1. Merges what used to be two separate slides (teaching,
- * payoff) into one screen that never resets: four capability tiles
- * reveal, then — without switching screens — four outcome tiles
- * reveal beneath them in the same grid. "The dashboard evolves. Not
- * replaces itself." Once it settles, an in-screen button offers to
- * jump straight into the conversation act; auto-advance eventually
- * does the same if it's never clicked. */
+/** Act 1. Founder review (2026-08-04): "when each tile appears it
+ * should feel like ReplyFlow has just completed another job... very
+ * tiny scale, very soft glow, tiny bounce, tiny pulse, then settle
+ * forever." Each tile gets its own brief local bloom (`TILE_STYLES`'s
+ * `glow`) as it settles, independent of the ambient phone glow — a
+ * small "job done" acknowledgement, not the same thing as the
+ * environment. Pace shortens once the outcome tiles start
+ * (`OUTCOME_STEP_MS` < `CHECKLIST_STEP_MS`) — "the user already
+ * understands what's happening, speed should increase." The final
+ * tile triggers `onCelebrate` — a one-shot acknowledgement on the
+ * phone itself, not the tile — before the button appears. */
 function DashboardView({
   act,
-  onMoodChange,
+  onCelebrate,
   onWatchItWork,
 }: {
   act: DashboardAct;
-  onMoodChange: (mix: GlowMix) => void;
+  onCelebrate: () => void;
   onWatchItWork: () => void;
 }) {
   const [visibleCount, setVisibleCount] = useState(0);
@@ -464,20 +530,16 @@ function DashboardView({
     const jitter = (ms: number, spread: number) => ms + (Math.random() * spread * 2 - spread);
 
     async function run() {
-      onMoodChange(MIX.dashboardCapability);
       await wait(jitter(900, 150));
       for (let i = 0; i < 4; i++) {
         if (i > 0) await wait(jitter(CHECKLIST_STEP_MS, 120));
         setVisibleCount(i + 1);
-        if (i === 2) onMoodChange(MIX.dashboardKnowledge);
       }
       await wait(jitter(500, 100));
-      onMoodChange(MIX.dashboardOutcome);
       for (let i = 4; i < 8; i++) {
-        await wait(jitter(CHECKLIST_STEP_MS, 120));
+        await wait(jitter(OUTCOME_STEP_MS, 80));
         setVisibleCount(i + 1);
-        if (i === 6) onMoodChange(MIX.dashboardUrgent);
-        if (i === 7) onMoodChange(MIX.dashboardFinished);
+        if (i === 7) onCelebrate();
       }
       await wait(jitter(700, 150));
       setShowButton(true);
@@ -491,19 +553,34 @@ function DashboardView({
       <div className="grid grid-cols-2 gap-2">
         {allTiles.map((tile, i) => {
           const isFinal = i === allTiles.length - 1;
-          const { badge, icon_ } = TILE_STYLES[tile.tone];
+          const { badge, icon_, glow } = TILE_STYLES[tile.tone];
           const visible = i < visibleCount;
           return (
             <motion.div
               key={tile.text}
-              initial={{ opacity: 0, y: 10, scale: 0.94 }}
-              animate={visible ? { opacity: 1, y: 0, scale: 1 } : { opacity: 0, y: 10, scale: 0.94 }}
-              transition={{ type: "spring", stiffness: 320, damping: 24 }}
               className={cn(
-                "flex flex-col items-start gap-2 rounded-xl border p-2.5 shadow-sm",
+                "relative flex flex-col items-start gap-2 rounded-xl border p-2 shadow-sm sm:p-2.5",
                 isFinal ? "border-primary/25 bg-primary/[0.07]" : "border-border/60 bg-white/85"
               )}
+              initial={{ opacity: 0, y: 10, scale: 0.92 }}
+              animate={
+                visible
+                  ? { opacity: 1, y: 0, scale: 1 }
+                  : { opacity: 0, y: 10, scale: 0.92 }
+              }
+              transition={{ type: "spring", stiffness: 380, damping: 18 }}
             >
+              {/* The tile's own brief "job done" bloom — settles and
+               * fades within ~600ms, never lingers, never repeats. */}
+              {visible && (
+                <motion.span
+                  aria-hidden
+                  className={cn("pointer-events-none absolute -inset-1.5 -z-10 rounded-2xl blur-md", glow)}
+                  initial={{ opacity: 0.55, scale: 0.85 }}
+                  animate={{ opacity: 0, scale: 1.15 }}
+                  transition={{ duration: 0.6, ease: EASE }}
+                />
+              )}
               <span className={cn("flex h-7 w-7 shrink-0 items-center justify-center rounded-lg", badge)}>
                 <tile.icon className={cn("h-3.5 w-3.5", icon_)} strokeWidth={2.5} />
               </span>
@@ -521,74 +598,12 @@ function DashboardView({
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, ease: EASE }}
-          className="mt-4 w-full rounded-xl border border-primary/25 bg-primary/[0.06] py-2.5 text-center text-[12.5px] font-semibold text-primary transition-colors hover:bg-primary/[0.1]"
+          className="mt-6 w-full rounded-xl border border-primary/25 bg-primary/[0.06] py-2.5 text-center text-[12.5px] font-semibold text-primary transition-colors hover:bg-primary/[0.1] sm:mt-4"
         >
           Watch it work →
         </motion.button>
       )}
     </ReplyFlowAppShell>
-  );
-}
-
-/** Act 2. One WhatsApp conversation, fed by whichever `ConversationScene`
- * the rotation pool currently has active — the mechanism itself
- * (typed exchanges, two-step outcome) is unchanged from what already
- * worked well. */
-function ConversationSlideView({ scene, onMoodChange }: { scene: ConversationScene; onMoodChange: (mix: GlowMix) => void }) {
-  const [visibleCount, setVisibleCount] = useState(0);
-  const [outcomeCount, setOutcomeCount] = useState(0);
-  const startedRef = useRef(false);
-  const bodyRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (startedRef.current) return;
-    startedRef.current = true;
-    onMoodChange(scene.mix);
-    const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
-    const jitter = (ms: number, spread: number) => ms + (Math.random() * spread * 2 - spread);
-
-    async function run() {
-      await wait(jitter(900, 150));
-      for (let i = 0; i < scene.exchanges.length; i++) {
-        if (i > 0) await wait(jitter(1300, 250));
-        setVisibleCount(i + 1);
-        await wait(estimateTypeMs(scene.exchanges[i]!.reply));
-      }
-      await wait(jitter(PRODUCT_MOMENT_DELAY_MS, 150));
-      setOutcomeCount(1);
-      await wait(jitter(PRODUCT_MOMENT_STEP_MS, 200));
-      setOutcomeCount(2);
-    }
-    void run();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [scene]);
-
-  useEffect(() => {
-    bodyRef.current?.scrollTo({ top: bodyRef.current.scrollHeight, behavior: "smooth" });
-  }, [visibleCount, outcomeCount]);
-
-  return (
-    <PhoneFrame
-      businessName={scene.businessName}
-      scrollable
-      bodyRef={bodyRef}
-      headerInsetTop
-      className="h-full w-full rounded-none border-0 shadow-none"
-    >
-      {scene.exchanges.slice(0, visibleCount).map((exchange, i) => (
-        <div key={i}>
-          <Bubble from="customer" className="lg:text-[14px]">{exchange.customer}</Bubble>
-          <TypedReply text={exchange.reply} />
-        </div>
-      ))}
-      {outcomeCount > 0 && (
-        <div className="space-y-1.5 pt-2">
-          {scene.outcomes.slice(0, outcomeCount).map((moment, i) => (
-            <ProductMomentCard key={i} moment={moment} />
-          ))}
-        </div>
-      )}
-    </PhoneFrame>
   );
 }
 
@@ -625,12 +640,14 @@ function BlurredPhotoBubble({ caption }: { caption: string }) {
   );
 }
 
-/** Act 3. Customer sends a (blurred) photo; ReplyFlow reads it,
- * replies naturally, books the job — a capability the page hasn't
- * demonstrated any other way. */
-function PhotoActView({ act, onMoodChange }: { act: PhotoAct; onMoodChange: (mix: GlowMix) => void }) {
+/** Act 2. One WhatsApp conversation, fed by whichever `ConversationScene`
+ * the rotation pool currently has active. When the scene has a
+ * `photo`, it plays as a third beat inside the same thread — the
+ * customer simply keeps talking, they never "switch features." */
+function ConversationSlideView({ scene }: { scene: ConversationScene }) {
+  const [visibleCount, setVisibleCount] = useState(0);
   const [showPhoto, setShowPhoto] = useState(false);
-  const [showReply, setShowReply] = useState(false);
+  const [showPhotoReply, setShowPhotoReply] = useState(false);
   const [outcomeCount, setOutcomeCount] = useState(0);
   const startedRef = useRef(false);
   const bodyRef = useRef<HTMLDivElement>(null);
@@ -638,43 +655,55 @@ function PhotoActView({ act, onMoodChange }: { act: PhotoAct; onMoodChange: (mix
   useEffect(() => {
     if (startedRef.current) return;
     startedRef.current = true;
-    onMoodChange(MIX.photoAnalysing);
     const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
     const jitter = (ms: number, spread: number) => ms + (Math.random() * spread * 2 - spread);
 
     async function run() {
-      await wait(jitter(700, 150));
-      setShowPhoto(true);
-      await wait(jitter(1400, 200));
-      setShowReply(true);
-      await wait(estimateTypeMs(act.reply));
+      await wait(jitter(900, 150));
+      for (let i = 0; i < scene.exchanges.length; i++) {
+        if (i > 0) await wait(jitter(1300, 250));
+        setVisibleCount(i + 1);
+        await wait(estimateTypeMs(scene.exchanges[i]!.reply));
+      }
+      if (scene.photo) {
+        await wait(jitter(900, 150));
+        setShowPhoto(true);
+        await wait(jitter(1200, 200));
+        setShowPhotoReply(true);
+        await wait(estimateTypeMs(scene.photo.reply));
+      }
       await wait(jitter(PRODUCT_MOMENT_DELAY_MS, 150));
-      onMoodChange(MIX.photoFinished);
       setOutcomeCount(1);
       await wait(jitter(PRODUCT_MOMENT_STEP_MS, 200));
       setOutcomeCount(2);
     }
     void run();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [scene]);
 
   useEffect(() => {
     bodyRef.current?.scrollTo({ top: bodyRef.current.scrollHeight, behavior: "smooth" });
-  }, [showPhoto, showReply, outcomeCount]);
+  }, [visibleCount, showPhoto, showPhotoReply, outcomeCount]);
 
   return (
     <PhoneFrame
-      businessName={act.businessName}
+      businessName={scene.businessName}
       scrollable
       bodyRef={bodyRef}
       headerInsetTop
       className="h-full w-full rounded-none border-0 shadow-none"
     >
-      {showPhoto && <BlurredPhotoBubble caption={act.customerCaption} />}
-      {showReply && <TypedReply text={act.reply} />}
+      {scene.exchanges.slice(0, visibleCount).map((exchange, i) => (
+        <div key={i}>
+          <Bubble from="customer" className="lg:text-[14px]">{exchange.customer}</Bubble>
+          <TypedReply text={exchange.reply} />
+        </div>
+      ))}
+      {showPhoto && scene.photo && <BlurredPhotoBubble caption={scene.photo.customerCaption} />}
+      {showPhotoReply && scene.photo && <TypedReply text={scene.photo.reply} />}
       {outcomeCount > 0 && (
         <div className="space-y-1.5 pt-2">
-          {act.outcomes.slice(0, outcomeCount).map((moment, i) => (
+          {scene.outcomes.slice(0, outcomeCount).map((moment, i) => (
             <ProductMomentCard key={i} moment={moment} />
           ))}
         </div>
@@ -683,10 +712,118 @@ function PhotoActView({ act, onMoodChange }: { act: PhotoAct; onMoodChange: (mix
   );
 }
 
-function ActView({ act, onMoodChange, onNext }: { act: JourneyAct; onMoodChange: (mix: GlowMix) => void; onNext: () => void }) {
-  if (act.kind === "dashboard") return <DashboardView act={act} onMoodChange={onMoodChange} onWatchItWork={onNext} />;
-  if (act.kind === "conversation") return <ConversationSlideView scene={act} onMoodChange={onMoodChange} />;
-  return <PhotoActView act={act} onMoodChange={onMoodChange} />;
+/** Act 3 — "Grounded, not guessed." A third visual grammar (after the
+ * tile grid and chat bubbles): a customer question, the plain business
+ * facts it's already been taught settling one at a time, then a reply
+ * that visibly stands on top of them. No mechanism-talk in the copy —
+ * "checking," "processing," "reasoning" would read as "clever AI";
+ * this reads as "this understands my business" instead. */
+function TrustActView({ act }: { act: TrustAct }) {
+  const [showQuestion, setShowQuestion] = useState(false);
+  const [factCount, setFactCount] = useState(0);
+  const [showThinking, setShowThinking] = useState(false);
+  const [showReply, setShowReply] = useState(false);
+  const startedRef = useRef(false);
+  const bodyRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (startedRef.current) return;
+    startedRef.current = true;
+    const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+    const jitter = (ms: number, spread: number) => ms + (Math.random() * spread * 2 - spread);
+
+    async function run() {
+      await wait(jitter(500, 100));
+      setShowQuestion(true);
+      await wait(jitter(700, 120));
+      for (let i = 0; i < act.facts.length; i++) {
+        if (i > 0) await wait(jitter(550, 100));
+        setFactCount(i + 1);
+      }
+      await wait(jitter(500, 100));
+      setShowThinking(true);
+      await wait(jitter(900, 150));
+      setShowThinking(false);
+      setShowReply(true);
+    }
+    void run();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    bodyRef.current?.scrollTo({ top: bodyRef.current.scrollHeight, behavior: "smooth" });
+  }, [showQuestion, factCount, showThinking, showReply]);
+
+  return (
+    <ReplyFlowAppShell subtitle="Why you can trust what it says" bodyRef={bodyRef}>
+      {showQuestion && (
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, ease: EASE }}
+          className="rounded-xl border border-border/60 bg-white/85 px-3 py-2.5 text-[12px] leading-relaxed text-foreground/80 shadow-sm"
+        >
+          <span className="font-semibold text-foreground">Customer asked: </span>
+          &ldquo;{act.question}&rdquo;
+        </motion.div>
+      )}
+
+      {factCount > 0 && (
+        <div className="mt-2.5 space-y-1.5">
+          {act.facts.slice(0, factCount).map((fact, i) => (
+            <motion.div
+              key={fact}
+              initial={{ opacity: 0, x: -6, scale: 0.96 }}
+              animate={{ opacity: 1, x: 0, scale: 1 }}
+              transition={{ type: "spring", stiffness: 360, damping: 22, delay: i === factCount - 1 ? 0 : 0 }}
+              className="flex items-center gap-2 rounded-lg border border-learning/20 bg-learning/[0.06] px-2.5 py-1.5 text-[11.5px] font-medium text-foreground/80"
+            >
+              <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-learning/20">
+                <Check className="h-2.5 w-2.5 text-learning" strokeWidth={3} />
+              </span>
+              {fact}
+            </motion.div>
+          ))}
+        </div>
+      )}
+
+      {showThinking && (
+        <div className="mt-2.5 flex justify-start">
+          <div className="rounded-2xl rounded-bl-md bg-white px-3.5 py-2 shadow-sm">
+            <TypingDots className="px-1 py-1" />
+          </div>
+        </div>
+      )}
+
+      {showReply && (
+        <motion.div
+          initial={{ opacity: 0, y: 8, scale: 0.98 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          transition={{ duration: 0.45, ease: EASE }}
+          className="mt-2.5 rounded-xl border border-primary/25 bg-primary/[0.06] px-3 py-2.5 text-[12.5px] font-medium leading-relaxed text-foreground shadow-sm"
+        >
+          {act.reply}
+        </motion.div>
+      )}
+
+      {showReply && (
+        <motion.p
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.5, ease: EASE, delay: 0.3 }}
+          className="mt-3 text-center text-[10.5px] font-semibold uppercase tracking-wide text-muted-foreground/60"
+        >
+          Grounded in what&apos;s actually been taught — never guessed.
+        </motion.p>
+      )}
+    </ReplyFlowAppShell>
+  );
+}
+
+function ActView({ act, onNext, onCelebrate }: { act: JourneyAct; onNext: () => void; onCelebrate: () => void }) {
+  if (act.kind === "dashboard") return <DashboardView act={act} onCelebrate={onCelebrate} onWatchItWork={onNext} />;
+  if (act.kind === "conversation") return <ConversationSlideView scene={act} />;
+  return <TrustActView act={act} />;
 }
 
 function StoryDots({ active, count, onSelect }: { active: number; count: number; onSelect: (i: number) => void }) {
@@ -719,9 +856,7 @@ function StoryDots({ active, count, onSelect }: { active: number; count: number;
  * auto-advance clock. `journeyAt`/`sceneRef` (a ref, read
  * synchronously inside `setTimeout`/`goTo`) avoid a circular
  * dependency that a naive split into "an index hook" + "a rotation
- * hook watching that index" would create — the pool only needs to
- * advance at the exact moment the index transitions *into* 1, which
- * this hook can do directly since it already owns that transition.
+ * hook watching that index" would create.
  */
 function useHeroJourney() {
   const [storyIndex, setStoryIndex] = useState(0);
@@ -735,7 +870,7 @@ function useHeroJourney() {
   const journeyAt = useCallback((i: number): JourneyAct => {
     if (i === 0) return DASHBOARD_ACT;
     if (i === 1) return sceneRef.current;
-    return PHOTO_ACT;
+    return TRUST_ACT;
   }, []);
 
   const maybeAdvanceConversation = useCallback((newIndex: number, oldIndex: number) => {
@@ -764,10 +899,7 @@ function useHeroJourney() {
   useEffect(() => {
     // Shuffle the pool order client-side only — deterministic on the
     // server and the first client paint (always `CONVERSATION_POOL[0]`,
-    // Dean's Plumbing), then a real shuffle takes over. Safe to also
-    // randomise which example plays *first* here (not just subsequent
-    // loops): act index 1 isn't visible until the dashboard's full
-    // duration has elapsed, long after this effect has resolved.
+    // Dean's Plumbing), then a real shuffle takes over.
     const arr = [0, 1, 2, 3, 4];
     for (let i = arr.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
@@ -806,20 +938,32 @@ function useHeroJourney() {
 function AutoConversation({
   act,
   storyIndex,
-  glowMix,
-  onMoodChange,
   onNext,
   onPrev,
   onGoTo,
 }: {
   act: JourneyAct;
   storyIndex: number;
-  glowMix: GlowMix;
-  onMoodChange: (mix: GlowMix) => void;
   onNext: () => void;
   onPrev: () => void;
   onGoTo: (i: number) => void;
 }) {
+  const glowMix = useJourneyGlow(storyIndex, estimateStoryMs(act));
+
+  /** Founder review (2026-08-04): "when the final tile appears, the
+   * phone itself should give a tiny celebratory acknowledgement — not
+   * a cartoon bounce, something premium. A tiny vibration. Tiny lift.
+   * Tiny pulse." A separate inner `motion.div`, purely so this one-
+   * shot sequence composes with (rather than fights) the outer float/
+   * drag loop below, which never stops. */
+  const celebrateControls = useAnimationControls();
+  const celebrate = useCallback(() => {
+    void celebrateControls.start(
+      { scale: [1, 1.025, 1], y: [0, -8, -3, 0], rotate: [0, -1, 0.6, 0] },
+      { duration: 0.7, ease: EASE }
+    );
+  }, [celebrateControls]);
+
   return (
     <div>
       <div className="relative mx-auto max-w-[340px] lg:max-w-[400px]">
@@ -847,20 +991,22 @@ function AutoConversation({
           style={{ transformPerspective: 1300 }}
           className="cursor-grab touch-pan-y active:cursor-grabbing"
         >
-          <DeviceFrame battery={BATTERY_BY_STORY[storyIndex] ?? 90}>
-            <AnimatePresence initial={false}>
-              <motion.div
-                key={storyIndex}
-                initial={{ opacity: 0, scale: 0.98 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.98 }}
-                transition={{ duration: 0.5, ease: EASE }}
-                className="absolute inset-0 h-full w-full"
-              >
-                <ActView act={act} onMoodChange={onMoodChange} onNext={onNext} />
-              </motion.div>
-            </AnimatePresence>
-          </DeviceFrame>
+          <motion.div animate={celebrateControls}>
+            <DeviceFrame battery={BATTERY_BY_STORY[storyIndex] ?? 90}>
+              <AnimatePresence initial={false}>
+                <motion.div
+                  key={storyIndex}
+                  initial={{ opacity: 0, scale: 0.98 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.98 }}
+                  transition={{ duration: 0.5, ease: EASE }}
+                  className="absolute inset-0 h-full w-full"
+                >
+                  <ActView act={act} onNext={onNext} onCelebrate={celebrate} />
+                </motion.div>
+              </AnimatePresence>
+            </DeviceFrame>
+          </motion.div>
         </motion.div>
       </div>
 
@@ -877,21 +1023,10 @@ function AutoConversation({
 
 export function HeroPhone({ onActiveTradeChange }: { onActiveTradeChange?: (trade: Trade) => void }) {
   const { storyIndex, act, goTo, next, prev } = useHeroJourney();
-  const [glowMix, setGlowMix] = useState<GlowMix>(MIX.dashboardCapability);
 
   useEffect(() => {
     onActiveTradeChange?.(act.trade);
   }, [act.trade, onActiveTradeChange]);
 
-  return (
-    <AutoConversation
-      act={act}
-      storyIndex={storyIndex}
-      glowMix={glowMix}
-      onMoodChange={setGlowMix}
-      onNext={next}
-      onPrev={prev}
-      onGoTo={goTo}
-    />
-  );
+  return <AutoConversation act={act} storyIndex={storyIndex} onNext={next} onPrev={prev} onGoTo={goTo} />;
 }

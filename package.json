@@ -10,7 +10,8 @@
     "type-check": "tsc --noEmit",
     "test": "tsx --test lib/**/*.test.ts",
     "dev:reset-test-account": "tsx scripts/dev/reset-test-account.mjs",
-    "dev:reset-onboarding": "tsx scripts/dev/reset-onboarding-progress.mjs"
+    "dev:reset-onboarding": "tsx scripts/dev/reset-onboarding-progress.mjs",
+    "dev:reset-me": "tsx scripts/dev/reset-onboarding-progress.mjs rmsavov1@gmail.com"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.0",

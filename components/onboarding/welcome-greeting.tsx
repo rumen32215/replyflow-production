@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { OnboardingCTA } from "@/components/onboarding/onboarding-cta";
+import { OnboardingProgress, ONBOARDING_TOTAL_STEPS } from "@/components/onboarding/onboarding-progress";
 import { EASE } from "@/components/shared/motion";
 import { GradientText } from "@/components/shared/gradient-text";
 import { useOnboardingStore } from "@/hooks/use-onboarding-store";
@@ -40,6 +41,14 @@ export function WelcomeGreeting() {
 
   return (
     <div className="w-full max-w-[440px]">
+      {/* Always step 1 — `reset()` above runs on every mount, so
+       * welcome is by construction always the start of a fresh run.
+       * Lives outside the card, same "chrome, not content" placement
+       * `OnboardingLayout` uses for steps 2-5 — this screen's own
+       * documented principle is "nothing else" beyond logo, greeting,
+       * one sentence, one CTA, so the progress track sits above it
+       * rather than competing inside the card. */}
+      <OnboardingProgress step={1} total={ONBOARDING_TOTAL_STEPS} caption="About a minute" />
       <motion.div
         initial={{ opacity: 0, y: 14 }}
         animate={{ opacity: 1, y: 0 }}

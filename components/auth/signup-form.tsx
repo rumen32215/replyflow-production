@@ -41,6 +41,7 @@ const REASSURANCE_LINES = [
   "Never miss another customer message",
   "Works on the WhatsApp number you already use",
   "Learns how you run things — hours, pricing, the lot",
+  "Takes about a minute to set up",
   "Ready to start catching messages today",
 ] as const;
 

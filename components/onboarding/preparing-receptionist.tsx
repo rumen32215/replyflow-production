@@ -46,6 +46,16 @@ import type { ConversationState } from "@/lib/reply-engine/understanding/state";
 
 const BETWEEN_EXCHANGE_PAUSE_MS = 750;
 const FACT_GROUP_DWELL_MS = 2100;
+/** Matches `demoMessages.length` inside `runProofConversation` below —
+ * kept as a named constant since the progress bar's percentage needs
+ * it before that array exists (render time, not just inside the async
+ * function). */
+const PROOF_EXCHANGE_COUNT = 4;
+/** How soon the skip link can appear if the demo is unusually slow to
+ * produce even its first reply — the other, usually-earlier gate is
+ * "at least one full exchange has already happened" (see `canSkip`
+ * below), so this is a ceiling, not the normal path. */
+const SKIP_FALLBACK_MS = 4000;
 
 function estimateTypeMs(text: string): number {
   const pause = 150;
@@ -164,6 +174,24 @@ function LearnedFact({ label, value, delay }: { label: string; value: string; de
   );
 }
 
+const PREPARING_STAGE_LABEL: Record<"working" | "proof" | "ready" | "failed", string> = {
+  working: "Setting up your receptionist",
+  proof: "Learning your business",
+  ready: "Receptionist ready",
+  failed: "",
+};
+
+/** `working` holds at a small, deliberately non-zero sliver (paired
+ * with the pulsing opacity in the bar itself) since there's no real
+ * fraction-complete to report yet — genuinely indeterminate, not a
+ * guess dressed up as one. `proof` is real: it tracks settled turns
+ * against the fixed exchange count. */
+function preparingProgressPct(stage: "working" | "proof" | "ready" | "failed", settledCount: number): number {
+  if (stage === "working") return 12;
+  if (stage === "proof") return 12 + Math.min(1, settledCount / (PROOF_EXCHANGE_COUNT * 2)) * 78;
+  return 100;
+}
+
 const PARTICLES = [
   { x: "18%", y: "22%", duration: 4.2, delay: 0 },
   { x: "78%", y: "30%", duration: 5, delay: 1.1 },
@@ -187,7 +215,14 @@ export function PreparingReceptionist() {
     null
   );
   const [factGroupIndex, setFactGroupIndex] = useState(0);
+  const [canSkip, setCanSkip] = useState(false);
   const startedRef = useRef(false);
+  // V18: the skip link (below) can send someone to the dashboard while
+  // `runProofConversation`'s loop is still mid-`await` — this stops
+  // that in-flight loop from calling setState on a component that's
+  // about to navigate away, without needing an AbortController for
+  // what's otherwise a fire-and-forget demo call.
+  const cancelledRef = useRef(false);
 
   const tradeLabel = ONBOARDING_TRADE_LABELS[trade as (typeof ONBOARDING_TRADES)[number]] ?? trade;
 
@@ -204,12 +239,26 @@ export function PreparingReceptionist() {
   // five simultaneously — assembling knowledge, not a checklist.
   // Settles on the final group and stops, it doesn't loop.
   useEffect(() => {
-    if (stage !== "proof" && stage !== "ready") return;
     if (factGroupIndex >= factGroups.length - 1) return;
     const t = setTimeout(() => setFactGroupIndex((i) => i + 1), FACT_GROUP_DWELL_MS);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stage, factGroupIndex]);
+  }, [factGroupIndex]);
+
+  // V18: "at least one full exchange has demonstrated real memory, so
+  // the feature still gets to make its point before offering the
+  // exit" — the primary gate is a completed exchange (2 settled
+  // turns); `SKIP_FALLBACK_MS` is only a ceiling for the unlikely case
+  // where even the first reply is slow to arrive.
+  useEffect(() => {
+    if (stage !== "proof") return;
+    if (settledTurns.length >= 2) {
+      setCanSkip(true);
+      return;
+    }
+    const t = setTimeout(() => setCanSkip(true), SKIP_FALLBACK_MS);
+    return () => clearTimeout(t);
+  }, [stage, settledTurns.length]);
 
   async function runProofConversation() {
     const issue = TRADE_ISSUE[trade as (typeof ONBOARDING_TRADES)[number]] ?? "I need some work done";
@@ -225,12 +274,14 @@ export function PreparingReceptionist() {
     const settled: PreviewTurn[] = [];
 
     for (let i = 0; i < demoMessages.length; i++) {
+      if (cancelledRef.current) return;
       const message = demoMessages[i];
       if (!message) continue;
 
       setActiveExchange({ customerText: message, replyText: null });
 
       const result = await fetchDemoReply(message, priorState, history);
+      if (cancelledRef.current) return;
       if (!result) {
         setActiveExchange(null);
         break; // a real hiccup — never let a nice-to-have block reaching Meet
@@ -238,6 +289,7 @@ export function PreparingReceptionist() {
 
       setActiveExchange({ customerText: message, replyText: result.replyText });
       await new Promise((resolve) => setTimeout(resolve, estimateTypeMs(result.replyText)));
+      if (cancelledRef.current) return;
 
       settled.push({ from: "customer", text: message }, { from: "receptionist", text: result.replyText });
       setSettledTurns([...settled]);
@@ -251,6 +303,7 @@ export function PreparingReceptionist() {
       ];
 
       await new Promise((resolve) => setTimeout(resolve, BETWEEN_EXCHANGE_PAUSE_MS));
+      if (cancelledRef.current) return;
     }
     setStage("ready");
   }
@@ -299,6 +352,7 @@ export function PreparingReceptionist() {
   }, []);
 
   function enterReceptionist() {
+    cancelledRef.current = true; // stop any in-flight proof-conversation loop from setState-ing after this
     resetStore(); // onboarding is over — clear the persisted draft
     router.replace("/dashboard/receptionist/meet");
   }
@@ -310,16 +364,61 @@ export function PreparingReceptionist() {
       transition={{ duration: 0.5, ease: EASE }}
       className="rounded-3xl border border-border bg-card p-9 shadow-elevated sm:p-10"
     >
+      {/* V18: one continuous narrative spanning "working" and "proof"
+       * instead of two disconnected loading states — the bar and the
+       * facts panel both live outside the stage-switch below, so they
+       * persist (rather than remount and re-animate) across the
+       * working -> proof -> ready transition. Facts start revealing
+       * during "working" too: the five values already sit in the
+       * store with zero network dependency, so idle spinner time
+       * becomes real content instead of nothing. */}
+      {stage !== "failed" && (
+        <>
+          <div className="mb-6">
+            <GentleSwap swapKey={stage} className="mb-2 text-[12px] font-semibold text-muted-foreground/80">
+              {PREPARING_STAGE_LABEL[stage]}
+            </GentleSwap>
+            <div className="h-1.5 w-full overflow-hidden rounded-full bg-border/60">
+              <motion.div
+                className="h-full rounded-full bg-gradient-to-r from-primary to-success"
+                animate={{
+                  width: `${preparingProgressPct(stage, settledTurns.length)}%`,
+                  opacity: stage === "working" ? [0.55, 1, 0.55] : 1,
+                }}
+                transition={{
+                  width: { duration: 0.6, ease: EASE },
+                  opacity:
+                    stage === "working"
+                      ? { duration: 1.6, repeat: Infinity, ease: "easeInOut" }
+                      : { duration: 0.3 },
+                }}
+              />
+            </div>
+          </div>
+
+          <h1 className="mb-5 text-[16px] font-bold tracking-tight text-foreground/85">
+            What I&apos;ve already learned
+          </h1>
+          <GentleSwap swapKey={factGroupIndex} className="mb-6 min-h-[54px] space-y-2.5">
+            {(factGroups[factGroupIndex] ?? []).map((fact, i) => (
+              <LearnedFact key={fact.label} label={fact.label} value={fact.value} delay={0.15 + i * 0.55} />
+            ))}
+          </GentleSwap>
+        </>
+      )}
+
       <AnimatePresence mode="wait">
         {stage === "working" && (
           <motion.div
             key="working"
             exit={{ opacity: 0, scale: 0.97 }}
             transition={{ duration: 0.4, ease: EASE }}
-            className="relative flex min-h-[300px] flex-col items-center justify-center overflow-hidden text-center"
+            className="relative flex min-h-[120px] flex-col items-center justify-center overflow-hidden text-center"
           >
             {/* Ambient environment: a very slow light sweep and a few
-                tiny drifting particles — anticipation, not a loader. */}
+                tiny drifting particles — anticipation, not a loader.
+                No text of its own now — the label above already says
+                "Setting up your receptionist"; this is pure atmosphere. */}
             <motion.div
               aria-hidden
               className="pointer-events-none absolute -inset-y-10 left-0 w-1/3 -skew-x-12"
@@ -341,7 +440,7 @@ export function PreparingReceptionist() {
               />
             ))}
 
-            <div className="relative mb-7 h-14 w-14">
+            <div className="relative h-14 w-14">
               <motion.div
                 animate={{ y: [0, -4, 0], scale: [1, 1.035, 1] }}
                 transition={{ duration: 2.2, repeat: Infinity, ease: "easeInOut" }}
@@ -360,9 +459,6 @@ export function PreparingReceptionist() {
                 </div>
               </motion.div>
             </div>
-            <p className="relative text-[16.5px] font-semibold tracking-tight text-foreground">
-              Setting up your receptionist
-            </p>
           </motion.div>
         )}
 
@@ -373,16 +469,6 @@ export function PreparingReceptionist() {
             animate={{ opacity: 1 }}
             transition={{ duration: 0.4, ease: EASE }}
           >
-            <h1 className="mb-5 text-[16px] font-bold tracking-tight text-foreground/85">
-              What I&apos;ve already learned
-            </h1>
-
-            <GentleSwap swapKey={factGroupIndex} className="mb-6 min-h-[54px] space-y-2.5">
-              {(factGroups[factGroupIndex] ?? []).map((fact, i) => (
-                <LearnedFact key={fact.label} label={fact.label} value={fact.value} delay={0.15 + i * 0.55} />
-              ))}
-            </GentleSwap>
-
             <PhoneFrame businessName={businessName || "Your business"}>
               {settledTurns.map((turn, i) => (
                 <motion.div
@@ -407,6 +493,25 @@ export function PreparingReceptionist() {
                 </>
               )}
             </PhoneFrame>
+
+            {/* Only offered once at least one full exchange has already
+             * demonstrated real memory (or, rarely, after a fallback
+             * delay if even the first reply is slow) — the demo gets to
+             * make its point before anyone's offered the exit. Safe to
+             * leave any time after: `onboarding_completed` is already
+             * true by the time this stage is reached. */}
+            {stage === "proof" && canSkip && (
+              <motion.button
+                type="button"
+                onClick={enterReceptionist}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ duration: 0.3, ease: EASE }}
+                className="mt-4 text-[12.5px] font-medium text-muted-foreground hover:text-foreground"
+              >
+                Skip ahead to my receptionist
+              </motion.button>
+            )}
 
             <AnimatePresence>
               {stage === "ready" && (

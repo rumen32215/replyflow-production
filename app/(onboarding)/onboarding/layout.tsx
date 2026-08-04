@@ -6,6 +6,7 @@ import Link from "next/link";
 import { X } from "lucide-react";
 import { Logo } from "@/components/shared/logo";
 import { EASE } from "@/components/shared/motion";
+import { OnboardingProgress, ONBOARDING_STEP_MAP, ONBOARDING_TOTAL_STEPS } from "@/components/onboarding/onboarding-progress";
 
 /**
  * Shared chrome for every onboarding step: topbar, gradient stage, and
@@ -22,6 +23,7 @@ import { EASE } from "@/components/shared/motion";
  */
 export default function OnboardingLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const step = ONBOARDING_STEP_MAP[pathname];
 
   return (
     <div
@@ -43,6 +45,12 @@ export default function OnboardingLayout({ children }: { children: React.ReactNo
 
       <div className="flex items-start justify-center px-5 pb-20 pt-4">
         <div className="w-full max-w-[460px]">
+          {/* Lives outside the per-step AnimatePresence below — the
+           * track itself is persistent across steps (only its fill
+           * width animates), which is what makes it read as "how far
+           * through one flow" rather than resetting/transitioning like
+           * the step content does. */}
+          {step !== undefined && <OnboardingProgress step={step} total={ONBOARDING_TOTAL_STEPS} />}
           <AnimatePresence mode="wait" initial={false}>
             <motion.div
               key={pathname}

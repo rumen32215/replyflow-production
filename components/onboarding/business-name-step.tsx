@@ -9,7 +9,7 @@ import { EASE } from "@/components/shared/motion";
 import { GradientText } from "@/components/shared/gradient-text";
 
 /**
- * Screen 3 — one question, nothing else. The title reacts to typing:
+ * Screen 2 — one question, nothing else. The title reacts to typing:
  * the moment a name exists it becomes "Nice to meet you, {name}." so
  * the screen feels like a conversation, not a form field.
  *

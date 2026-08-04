@@ -12,7 +12,7 @@ import { GradientText } from "@/components/shared/gradient-text";
 import { TypingDots } from "@/components/shared/typed-message";
 
 /**
- * Screen 2 — "What kind of work do you do?" V1 First-Run decision:
+ * Screen 3 — "What kind of work do you do?" V1 First-Run decision:
  * five trades, not eight, and no "Other" — the best receptionist for
  * five trades beats an average one for fifty (DOCS/SPECS/ReplyFlow-V1-
  * First-Run-Proposal.md). Existing businesses on a trade outside this

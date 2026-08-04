@@ -3,7 +3,16 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { ArrowRight, Check, CheckCircle2, AlertTriangle } from "lucide-react";
+import {
+  ArrowRight,
+  Check,
+  AlertTriangle,
+  ClipboardCheck,
+  CalendarCheck,
+  Clock,
+  UserPlus,
+  Bell,
+} from "lucide-react";
 import { EASE } from "@/components/shared/motion";
 import { GradientText } from "@/components/shared/gradient-text";
 import { PhoneFrame, Bubble } from "@/components/shared/phone-preview";
@@ -40,10 +49,16 @@ interface Exchange {
  * that space to show the product actually working, not sit blank. One
  * per story, each a real, accurate downstream outcome of that exact
  * conversation (a Work Card, an escalation flag, a diary booking) —
- * never an invented capability. */
+ * never an invented capability.
+ *
+ * Seventh founder review (2026-08-04): these all looked "almost
+ * identical" — a real product surfaces different kinds of outcomes
+ * with real visual hierarchy (Linear/Stripe/Apple notification
+ * language), not one generic green success box repeated. `kind` picks
+ * both the icon and the accent colour from `MOMENT_STYLES` below. */
 interface ProductMoment {
   text: string;
-  tone: "success" | "attention";
+  kind: "job" | "booking" | "scheduled" | "customer" | "urgent" | "team";
 }
 
 /** Matches one of the exact words in the eyebrow line below — the
@@ -76,8 +91,8 @@ const STORIES: readonly ConversationStory[] = [
       },
     ],
     productMoments: [
-      { text: "Job card created — kitchen tap, 4:00pm", tone: "success" },
-      { text: "Added to today's schedule", tone: "success" },
+      { text: "Job card created — kitchen tap, 4:00pm", kind: "job" },
+      { text: "Added to today's schedule", kind: "scheduled" },
     ],
   },
   {
@@ -94,8 +109,8 @@ const STORIES: readonly ConversationStory[] = [
       },
     ],
     productMoments: [
-      { text: "Callback reminder set for this afternoon", tone: "success" },
-      { text: "Customer added to follow-ups", tone: "success" },
+      { text: "Callback reminder set for this afternoon", kind: "scheduled" },
+      { text: "Customer added to follow-ups", kind: "customer" },
     ],
   },
   {
@@ -112,8 +127,8 @@ const STORIES: readonly ConversationStory[] = [
       },
     ],
     productMoments: [
-      { text: "Flagged for you — urgent, water ingress", tone: "attention" },
-      { text: "Team notified immediately", tone: "success" },
+      { text: "Flagged for you — urgent, water ingress", kind: "urgent" },
+      { text: "Team notified immediately", kind: "team" },
     ],
   },
   {
@@ -130,8 +145,8 @@ const STORIES: readonly ConversationStory[] = [
       },
     ],
     productMoments: [
-      { text: "Booking added — Thursday", tone: "success" },
-      { text: "Schedule updated", tone: "success" },
+      { text: "Booking added — Thursday", kind: "booking" },
+      { text: "Schedule updated", kind: "scheduled" },
     ],
   },
 ] as const;
@@ -217,21 +232,44 @@ function TypedReply({ text }: { text: string }) {
   );
 }
 
+/** Icon + accent per moment `kind` — real hierarchy instead of one
+ * repeated green box (seventh founder review, 2026-08-04, "think
+ * Linear, Stripe, Apple — not generic green success boxes"). Tailwind
+ * needs statically-written class names to find them at build time, so
+ * this is a lookup table, never a template-string colour name. */
+const MOMENT_STYLES: Record<
+  ProductMoment["kind"],
+  { icon: typeof ClipboardCheck; badge: string; icon_: string }
+> = {
+  job: { icon: ClipboardCheck, badge: "bg-success/15", icon_: "text-success" },
+  booking: { icon: CalendarCheck, badge: "bg-primary/15", icon_: "text-primary" },
+  scheduled: { icon: Clock, badge: "bg-learning/15", icon_: "text-learning" },
+  customer: { icon: UserPlus, badge: "bg-success/15", icon_: "text-success" },
+  urgent: { icon: AlertTriangle, badge: "bg-attention/20", icon_: "text-attention" },
+  team: { icon: Bell, badge: "bg-primary/15", icon_: "text-primary" },
+};
+
 /** The settled-conversation reveal — a system moment, not another
- * chat bubble, so it never reads as something either party "said." */
+ * chat bubble, so it never reads as something either party "said."
+ * `urgent` gets a visibly heavier treatment (tinted card, coloured
+ * border) than the routine confirmations — "some should feel more
+ * important than others," not every outcome carrying equal weight. */
 function ProductMomentCard({ moment }: { moment: ProductMoment }) {
-  const Icon = moment.tone === "attention" ? AlertTriangle : CheckCircle2;
+  const { icon: Icon, badge, icon_ } = MOMENT_STYLES[moment.kind];
+  const isUrgent = moment.kind === "urgent";
   return (
     <motion.div
-      initial={{ opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
+      initial={{ opacity: 0, y: 8, scale: 0.97 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
       transition={{ duration: 0.5, ease: EASE }}
-      className="mx-auto flex max-w-[88%] items-center gap-2 rounded-xl border border-border/60 bg-white/90 px-3 py-2 text-[12px] font-semibold text-foreground shadow-sm backdrop-blur-sm"
+      className={cn(
+        "mx-auto flex max-w-[88%] items-center gap-2.5 rounded-xl border px-3 py-2 text-[12px] font-semibold shadow-sm backdrop-blur-sm",
+        isUrgent ? "border-attention/30 bg-attention/[0.08] text-attention" : "border-border/60 bg-white/90 text-foreground"
+      )}
     >
-      <Icon
-        className={cn("h-4 w-4 shrink-0", moment.tone === "attention" ? "text-attention" : "text-success")}
-        strokeWidth={2.5}
-      />
+      <span className={cn("flex h-6 w-6 shrink-0 items-center justify-center rounded-lg", badge)}>
+        <Icon className={cn("h-3.5 w-3.5", icon_)} strokeWidth={2.5} />
+      </span>
       {moment.text}
     </motion.div>
   );
@@ -319,26 +357,47 @@ function AutoConversation({ story, storyIndex }: { story: ConversationStory; sto
     <div>
       <div className="relative mx-auto max-w-[340px]">
         {/* The one focal glow — a single soft light source behind the
-         * phone, static rather than animated (the phone's own slow
-         * float below is already the one thing that moves here). Sized
-         * to the phone's own new, correct proportions rather than the
-         * old, too-wide footprint. */}
-        <div
+         * phone. Eighth founder review (2026-08-04): "subtle screen
+         * glow" / "tiny shadow movement," Apple-subtle — tied to the
+         * exact same float timing as the phone below so it reads as
+         * one connected, alive object rather than a second, unrelated
+         * animation. Sized to the phone's own correct proportions
+         * rather than the old, too-wide footprint. */}
+        <motion.div
           aria-hidden
           className="pointer-events-none absolute inset-0 -z-10 rounded-full blur-3xl"
           style={{ background: "radial-gradient(circle, rgba(37,99,235,0.18), rgba(34,197,94,0.11) 55%, transparent 75%)" }}
+          animate={{ opacity: [0.85, 1, 0.85], scale: [1, 1.05, 1] }}
+          transition={{ duration: 4.2, repeat: Infinity, ease: "easeInOut" }}
         />
         {/* A held-at-an-angle presentation, not dead-on — the single
          * biggest thing separating a photographed product shot from a
          * screenshot-in-a-frame (fifth founder review, 2026-08-04, a
          * real Apple Wallet promo card as the reference point). The
-         * tilt itself is static (same value in `initial` and
-         * `animate`, so nothing rotates); only `y` actually animates,
-         * floating within that fixed 3D plane rather than flat. */}
+         * tilt is static at rest (`rotateY`/`rotateX` never change);
+         * `y` floats continuously, and `rotateZ` mostly holds its
+         * resting tilt too, except for a barely-there "idle vibration"
+         * once every ~12s (eighth founder review — "almost impossible
+         * to notice consciously, but enough that the page feels
+         * alive") — most of each cycle sits flat, per `times`, with
+         * only a brief jitter near the end. */}
         <motion.div
           initial={{ y: 0, rotateY: -9, rotateX: 3, rotateZ: -1 }}
-          animate={{ y: [0, -6, 0], rotateY: -9, rotateX: 3, rotateZ: -1 }}
-          transition={{ duration: 4.2, repeat: Infinity, ease: "easeInOut" }}
+          animate={{
+            y: [0, -6, 0],
+            rotateY: -9,
+            rotateX: 3,
+            rotateZ: [-1, -1, -1.6, -0.5, -1, -1],
+          }}
+          transition={{
+            y: { duration: 4.2, repeat: Infinity, ease: "easeInOut" },
+            rotateZ: {
+              duration: 12,
+              repeat: Infinity,
+              ease: "easeInOut",
+              times: [0, 0.65, 0.7, 0.76, 0.82, 1],
+            },
+          }}
           style={{ transformPerspective: 1300 }}
         >
           <DeviceFrame>
@@ -430,12 +489,26 @@ const HEADLINE_INTERVAL_MS = 5200;
  * genuinely long-lived effect (see `useRotatingStoryIndex` above). */
 function useRotatingHeadlineIndex(): number {
   const [index, setIndex] = useState(0);
+  const indexRef = useRef(0);
+
   useEffect(() => {
+    // Eighth founder review (2026-08-04): "every single refresh" opened
+    // on the same headline, which "immediately makes the rotation feel
+    // fake." Same deterministic-first-render, random-in-effect pattern
+    // as `useRotatingStoryIndex` above — index 0 is what the server (and
+    // the client, for one paint) renders, then this effect immediately
+    // picks a real random starting point before the interval takes over.
+    const initial = Math.floor(Math.random() * HEADLINES.length);
+    indexRef.current = initial;
+    setIndex(initial);
+
     const id = setInterval(() => {
-      setIndex((i) => (i + 1) % HEADLINES.length);
+      indexRef.current = (indexRef.current + 1) % HEADLINES.length;
+      setIndex(indexRef.current);
     }, HEADLINE_INTERVAL_MS);
     return () => clearInterval(id);
   }, []);
+
   return index;
 }
 
@@ -465,15 +538,66 @@ function HeadlineText({ headline }: { headline: Headline }) {
   );
 }
 
+/** How long the celebration plays before the actual navigation fires
+ * — inside the founder's stated 400–700ms window. */
+const CTA_TRANSITION_MS = 600;
+
+/** Eighth founder review (2026-08-04): pressing "Meet your
+ * receptionist" shouldn't just instantly swap to the sign-up page —
+ * "a beautiful micro-celebration... like opening a premium Apple
+ * application." A brand-gradient circle expands from the button's own
+ * corner of the screen, a checkmark confirms, then the real
+ * navigation fires underneath it — so whatever brief work Next does
+ * to mount `/signup` is masked by an already-opaque, intentional
+ * moment instead of being a blank flash. */
+function CtaTransitionOverlay() {
+  return (
+    <motion.div
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-gradient-to-br from-primary to-success"
+      initial={{ clipPath: "circle(0% at 50% 100%)" }}
+      animate={{ clipPath: "circle(150% at 50% 100%)" }}
+      exit={{ opacity: 0, transition: { duration: 0.25 } }}
+      transition={{ duration: 0.55, ease: EASE }}
+    >
+      <motion.div
+        initial={{ scale: 0.4, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        transition={{ delay: 0.22, duration: 0.3, ease: EASE }}
+        className="flex h-16 w-16 items-center justify-center rounded-full bg-white/15 ring-1 ring-white/30"
+      >
+        <Check className="h-8 w-8 text-white" strokeWidth={3} />
+      </motion.div>
+    </motion.div>
+  );
+}
+
 export function Hero() {
   const router = useRouter();
   const storyIndex = useRotatingStoryIndex();
   const story = STORIES[storyIndex]!;
   const headlineIndex = useRotatingHeadlineIndex();
   const headline = HEADLINES[headlineIndex]!;
+  const [isTransitioning, setIsTransitioning] = useState(false);
+
+  // Prefetched as soon as the Hero mounts, not on click — a
+  // `router.push` from a plain button (unlike `<Link>`) never
+  // prefetches on its own. Confirmed live: without this, the eventual
+  // `/signup` mount could lag noticeably behind the overlay's own
+  // timing, undermining the whole point of masking the swap.
+  useEffect(() => {
+    router.prefetch("/signup");
+  }, [router]);
+
+  function handleMeetReceptionist() {
+    if (isTransitioning) return;
+    setIsTransitioning(true);
+    setTimeout(() => router.push("/signup"), CTA_TRANSITION_MS);
+  }
 
   return (
     <section className="relative overflow-hidden">
+      <AnimatePresence>{isTransitioning && <CtaTransitionOverlay />}</AnimatePresence>
+
       {/* Ambient atmosphere only — the one motion purpose that doesn't
        * carry information (Visual Language §7 category 4). Identical
        * primitive already used on Front Desk's own arrival moment. */}
@@ -522,7 +646,7 @@ export function Hero() {
            * Hero rather than a full-width onboarding card. */}
           <motion.button
             type="button"
-            onClick={() => router.push("/signup")}
+            onClick={handleMeetReceptionist}
             whileHover={{ y: -2 }}
             whileTap={{ scale: 0.985 }}
             transition={{ type: "spring", stiffness: 400, damping: 24 }}

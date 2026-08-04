@@ -3,77 +3,101 @@
 import { useEffect, useState } from "react";
 import {
   MessageCircle,
+  Sparkles,
   CalendarCheck,
   AlertTriangle,
-  UserPlus,
   CheckCircle2,
   Clock,
   FileText,
   Bell,
   BookOpen,
+  Inbox,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { EASE, ScrollReveal, GentleSwap } from "@/components/shared/motion";
 
 /**
  * Landing Experience, Section 2 — was "The Invisible Weight" (worry
- * questions), then a dashboard-stat teaser, then a labelled sign-up
- * checklist preview (ninth founder review).
+ * questions), then a dashboard-stat teaser, then a signup checklist,
+ * then (V7) an independent live-event feed.
  *
- * V7 "Prove it, don't explain it" (2026-08-04): "now the weakest
- * section" again, for a different reason than before — the phone
- * above already *proves* the product works; this section immediately
- * reverted to explaining it ("what happens the moment you sign up?"),
- * a signup-checklist framing that doesn't belong right after a live
- * demo. The brief: replace the story entirely, and answer "what is
- * ReplyFlow actually doing behind the scenes?" — while the owner is
- * out working, not while they're filling in a signup form.
+ * V8 "Emotion, Journey & Product Feel" (2026-08-04): the V7 feed was
+ * alive but each card was independent — a fixed 8-item list cycling
+ * on a fixed interval, which the founder correctly named as "an
+ * obvious loop" with "predictable timing" the moment you watched it
+ * for more than a few seconds. The brief: make the events tell a
+ * story, one action leading naturally into the next, and never let
+ * the rhythm become guessable.
  *
- * Two things needed to be true for the preview to read as "she's
- * genuinely working right now" rather than a static screenshot:
- * events had to keep happening on their own (the live feed below,
- * `useLiveFeed`) and the thing everyone claims — "it learns your
- * business" — had to be shown as concrete examples, not asserted
- * (`LEARNED`, point 4 of the brief, literally: show what it learns
- * rather than say it learns).
+ * The fix is structural, not cosmetic. `CHAINS` below are causal
+ * sequences (customer message → reply → knowledge check → booking →
+ * diary → confirmation → inbox cleared — the founder's own example,
+ * verbatim, as `CHAINS[0]`), not an unordered pool. `useNarrativeFeed`
+ * plays one chain to completion with randomised per-step delays, then
+ * picks a *different* chain at random and plays that one — so the
+ * page never repeats the same beat-for-beat rhythm twice in a row, and
+ * the timing is never metronomic. The "just learned" line (still
+ * proving the learning claim with a concrete example, per the
+ * previous pass) is no longer on its own independent clock — it now
+ * updates exactly when a chain's own knowledge-check step fires,
+ * tying the two halves of this panel into one story instead of two
+ * unrelated animations sharing a box.
  */
 
-interface ActivityEvent {
+interface FeedStep {
   icon: typeof MessageCircle;
   tone: "primary" | "success" | "attention" | "learning";
   text: string;
+  /** Fires the "Just learned" reveal at exactly this point in the
+   * story, rather than that line rotating on its own schedule. */
+  learned?: string;
 }
 
-/** Present-perfect, one completed action each — read as things that
- * *just happened*, not status labels. A WhatsApp mention survives
- * here specifically so the "connects to your existing number" claim
- * (a named priority in the previous review) stays visible without
- * this section reverting to a checklist to say it. */
-const ACTIVITY: readonly ActivityEvent[] = [
-  { icon: MessageCircle, tone: "primary", text: "Answered a WhatsApp message about tomorrow" },
-  { icon: CalendarCheck, tone: "success", text: "Booked Thursday afternoon into the diary" },
-  { icon: AlertTriangle, tone: "attention", text: "Spotted an urgent job and alerted the team" },
-  { icon: UserPlus, tone: "primary", text: "Saved a new customer's details automatically" },
-  { icon: CheckCircle2, tone: "success", text: "Cleared the inbox — every message answered" },
-  { icon: Clock, tone: "learning", text: "Set a reminder to call back this afternoon" },
-  { icon: FileText, tone: "primary", text: "Sent a quote while still finishing the last job" },
-  { icon: Bell, tone: "learning", text: "Notified the team the moment it mattered" },
+interface FeedChain {
+  steps: readonly FeedStep[];
+}
+
+/** Three different shifts, not one loop wearing different clothes.
+ * Each ends on "Inbox cleared" deliberately — the one repeated beat
+ * is the resolution itself, the same way every real work session
+ * ends the same way regardless of how it got there. */
+const CHAINS: readonly FeedChain[] = [
+  {
+    steps: [
+      { icon: MessageCircle, tone: "primary", text: "A customer messages in" },
+      { icon: Sparkles, tone: "primary", text: "A reply is drafted instantly" },
+      { icon: BookOpen, tone: "learning", text: "Checked against what she's been taught", learned: "how you price call-outs" },
+      { icon: CalendarCheck, tone: "success", text: "Thursday afternoon booked in" },
+      { icon: Clock, tone: "learning", text: "Diary updated" },
+      { icon: CheckCircle2, tone: "success", text: "Customer confirms the time" },
+      { icon: Inbox, tone: "success", text: "Inbox cleared" },
+    ],
+  },
+  {
+    steps: [
+      { icon: MessageCircle, tone: "primary", text: "An urgent message comes in" },
+      { icon: AlertTriangle, tone: "attention", text: "Recognised as urgent, not routine" },
+      { icon: Bell, tone: "learning", text: "Team alerted immediately" },
+      { icon: Sparkles, tone: "primary", text: "Customer reassured help is on its way" },
+      { icon: Clock, tone: "learning", text: "Follow-up reminder set", learned: "what counts as an emergency" },
+      { icon: CheckCircle2, tone: "success", text: "Added to today's schedule" },
+      { icon: Inbox, tone: "success", text: "Inbox cleared" },
+    ],
+  },
+  {
+    steps: [
+      { icon: MessageCircle, tone: "primary", text: "A customer asks for a price" },
+      { icon: BookOpen, tone: "learning", text: "Checked your most-asked questions", learned: "your most-asked questions" },
+      { icon: FileText, tone: "primary", text: "Quote sent before the last job even finished" },
+      { icon: CheckCircle2, tone: "success", text: "Customer comes back with a yes" },
+      { icon: CalendarCheck, tone: "success", text: "Booking added to the diary" },
+      { icon: Clock, tone: "learning", text: "Reminder set for the day before" },
+      { icon: Inbox, tone: "success", text: "Inbox cleared" },
+    ],
+  },
 ] as const;
 
-/** What "she learns your business" concretely means — shown, not
- * claimed. Cycles the same way the sign-up page's own reassurance
- * line does (`signup-form.tsx`'s `REASSURANCE_LINES`), reusing the
- * project's established "quiet rotating proof line" pattern. */
-const LEARNED: readonly string[] = [
-  "your opening hours",
-  "which areas you cover",
-  "how you price call-outs",
-  "what counts as an emergency",
-  "your most-asked questions",
-  "how you like bookings confirmed",
-] as const;
-
-const TONE_CLASSES: Record<ActivityEvent["tone"], string> = {
+const TONE_CLASSES: Record<FeedStep["tone"], string> = {
   primary: "bg-primary/10 text-primary",
   success: "bg-success/10 text-success",
   attention: "bg-attention/15 text-attention",
@@ -81,39 +105,68 @@ const TONE_CLASSES: Record<ActivityEvent["tone"], string> = {
 };
 
 const FEED_VISIBLE = 3;
-const FEED_INTERVAL_MS = 3400;
-const LEARNED_INTERVAL_MS = 2600;
+const DEFAULT_LEARNED = "your opening hours";
 
-function useRotatingIndex(length: number, intervalMs: number): number {
-  const [index, setIndex] = useState(0);
-  useEffect(() => {
-    const id = setInterval(() => setIndex((i) => (i + 1) % length), intervalMs);
-    return () => clearInterval(id);
-  }, [length, intervalMs]);
-  return index;
+function randomBetween(min: number, max: number): number {
+  return min + Math.random() * (max - min);
 }
 
-/** A live log, not a static list — a new event slides in from the top
- * on its own timer, the oldest visible one slides out, and every card
- * still on screen shifts down via `layout` rather than jumping. */
-function useLiveFeed(intervalMs: number): number {
-  const [head, setHead] = useState(0);
+/** Plays `CHAINS` end to end, one at a time, each step arriving after
+ * a randomised pause rather than a fixed tick — "asynchronous," not
+ * refreshing. Random per-mount (never in a `useState` initializer, so
+ * there's nothing for server and client to disagree about — the same
+ * hydration-safety pattern used throughout this page). */
+function useNarrativeFeed(maxVisible: number): { visible: { key: number; step: FeedStep }[]; learned: string } {
+  const [visible, setVisible] = useState<{ key: number; step: FeedStep }[]>([]);
+  const [learned, setLearned] = useState(DEFAULT_LEARNED);
+
   useEffect(() => {
-    const id = setInterval(() => setHead((h) => h + 1), intervalMs);
-    return () => clearInterval(id);
-  }, [intervalMs]);
-  return head;
+    let cancelled = false;
+    let keyCounter = 0;
+    const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+    // Seeded with the tail of the first chain so the panel never sits
+    // empty for the ~1.5s before the first live step arrives — reads
+    // as walking in mid-shift, not as the feature booting up.
+    const seed = CHAINS[0]!.steps.slice(-2);
+    setVisible(seed.map((step, i) => ({ key: -seed.length + i, step })));
+
+    async function playChain(chain: FeedChain) {
+      for (const step of chain.steps) {
+        if (cancelled) return;
+        await wait(randomBetween(1300, 2500));
+        if (cancelled) return;
+        keyCounter += 1;
+        const key = keyCounter;
+        setVisible((v) => [{ key, step }, ...v].slice(0, maxVisible));
+        if (step.learned) setLearned(step.learned);
+      }
+    }
+
+    async function loop() {
+      let lastChain = 0;
+      while (!cancelled) {
+        let idx = Math.floor(Math.random() * CHAINS.length);
+        if (CHAINS.length > 1) {
+          while (idx === lastChain) idx = Math.floor(Math.random() * CHAINS.length);
+        }
+        lastChain = idx;
+        await playChain(CHAINS[idx]!);
+        if (cancelled) return;
+        await wait(randomBetween(3800, 5200));
+      }
+    }
+    void loop();
+    return () => {
+      cancelled = true;
+    };
+  }, [maxVisible]);
+
+  return { visible, learned };
 }
 
 export function DashboardPreview() {
-  const head = useLiveFeed(FEED_INTERVAL_MS);
-  const learnedIndex = useRotatingIndex(LEARNED.length, LEARNED_INTERVAL_MS);
-
-  const visible = Array.from({ length: FEED_VISIBLE }, (_, k) => {
-    const pos = head - k;
-    const eventIndex = ((pos % ACTIVITY.length) + ACTIVITY.length) % ACTIVITY.length;
-    return { key: pos, event: ACTIVITY[eventIndex]! };
-  });
+  const { visible, learned } = useNarrativeFeed(FEED_VISIBLE);
 
   return (
     <section className="bg-card">
@@ -161,7 +214,7 @@ export function DashboardPreview() {
           <div className="p-4 sm:p-5">
             <div className="flex flex-col gap-2">
               <AnimatePresence initial={false}>
-                {visible.map(({ key, event }) => (
+                {visible.map(({ key, step }) => (
                   <motion.div
                     key={key}
                     layout
@@ -171,10 +224,10 @@ export function DashboardPreview() {
                     transition={{ duration: 0.5, ease: EASE }}
                     className="flex items-center gap-2.5 rounded-xl border border-border/60 bg-card px-3 py-2.5"
                   >
-                    <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${TONE_CLASSES[event.tone]}`}>
-                      <event.icon className="h-3.5 w-3.5" strokeWidth={2.5} />
+                    <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${TONE_CLASSES[step.tone]}`}>
+                      <step.icon className="h-3.5 w-3.5" strokeWidth={2.5} />
                     </span>
-                    <span className="text-[13px] font-medium text-foreground">{event.text}</span>
+                    <span className="text-[13px] font-medium text-foreground">{step.text}</span>
                   </motion.div>
                 ))}
               </AnimatePresence>
@@ -183,8 +236,8 @@ export function DashboardPreview() {
             <div className="mt-3 flex flex-wrap items-center gap-x-1.5 gap-y-1 border-t border-border/60 pt-3 text-[12.5px] font-semibold text-learning">
               <BookOpen className="h-3.5 w-3.5 shrink-0" strokeWidth={2.5} />
               <span>Just learned:</span>
-              <GentleSwap swapKey={learnedIndex} className="font-medium text-foreground/80">
-                {LEARNED[learnedIndex]}
+              <GentleSwap swapKey={learned} className="font-medium text-foreground/80">
+                {learned}
               </GentleSwap>
             </div>
           </div>

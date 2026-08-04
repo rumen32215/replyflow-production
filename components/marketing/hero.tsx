@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -174,52 +174,77 @@ function pickNextIndex(current: number): number {
   return next;
 }
 
+interface StoryController {
+  index: number;
+  goTo: (i: number) => void;
+  next: () => void;
+  prev: () => void;
+}
+
 /**
- * Rotates through `STORIES` for as long as the visitor is on the page.
+ * V8 founder review (2026-08-04): "the phone should no longer behave
+ * like a looping animation... a tiny version of ReplyFlow users can
+ * explore." Auto-rotation alone reads as a slideshow; this hook keeps
+ * the same natural cadence (watch one story, wait, move to the next)
+ * but exposes `goTo`/`next`/`prev` so a swipe or a tapped dot can jump
+ * immediately — and, deliberately, whatever the visitor jumps to
+ * becomes the new anchor the auto-advance clock counts on next,
+ * rather than fighting them or resetting to some fixed point. Explore
+ * it and it keeps exploring with you; leave it alone and it keeps
+ * playing on its own.
+ *
  * Deterministic on the first render on purpose — `Math.random()`
  * inside a `useState` initializer runs once on the server and again
  * on the client during hydration and the two will always disagree,
  * which React correctly reports as a real content mismatch (caught
- * the hard way, via a real hydration error, in the previous pass).
- * The actual random pick happens in the effect below, client-only,
- * after hydration is already done.
+ * the hard way, via a real hydration error, in an earlier pass). The
+ * actual random pick happens in the effect below, client-only, after
+ * hydration is already done.
  *
- * Uses real `cancelled`-on-cleanup, deliberately the opposite
- * convention from each individual conversation's own one-shot
- * sequence below — the correct idiom for a genuinely long-lived
- * effect, which self-heals correctly under React Strict Mode's
- * dev-only double-invoke (the throwaway first instance is cancelled
- * before its first await resolves; the second runs forward normally).
+ * Real `clearTimeout`-on-cleanup, the correct idiom for a genuinely
+ * long-lived effect — self-heals correctly under React Strict Mode's
+ * dev-only double-invoke (the throwaway first instance's pending
+ * timeout is cleared before it can fire; the second schedules its own
+ * and runs forward normally).
  */
-function useRotatingStoryIndex(): number {
+function useInteractiveStoryIndex(): StoryController {
   const [index, setIndex] = useState(0);
   const indexRef = useRef(0);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
-    const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
-
-    async function loop() {
-      const initial = Math.floor(Math.random() * STORIES.length);
-      indexRef.current = initial;
-      setIndex(initial);
-
-      while (!cancelled) {
-        await wait(estimateStoryMs(STORIES[indexRef.current]!) + REST_MS);
-        if (cancelled) return;
-        const next = pickNextIndex(indexRef.current);
-        indexRef.current = next;
-        setIndex(next);
-      }
-    }
-    void loop();
-    return () => {
-      cancelled = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  const scheduleNext = useCallback((fromIndex: number) => {
+    if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    timeoutRef.current = setTimeout(() => {
+      const upcoming = pickNextIndex(indexRef.current);
+      indexRef.current = upcoming;
+      setIndex(upcoming);
+      scheduleNext(upcoming);
+    }, estimateStoryMs(STORIES[fromIndex]!) + REST_MS);
   }, []);
 
-  return index;
+  useEffect(() => {
+    const initial = Math.floor(Math.random() * STORIES.length);
+    indexRef.current = initial;
+    setIndex(initial);
+    scheduleNext(initial);
+    return () => {
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    };
+  }, [scheduleNext]);
+
+  const goTo = useCallback(
+    (i: number) => {
+      const clamped = ((i % STORIES.length) + STORIES.length) % STORIES.length;
+      indexRef.current = clamped;
+      setIndex(clamped);
+      scheduleNext(clamped);
+    },
+    [scheduleNext]
+  );
+  const next = useCallback(() => goTo(indexRef.current + 1), [goTo]);
+  const prev = useCallback(() => goTo(indexRef.current - 1), [goTo]);
+
+  return { index, goTo, next, prev };
 }
 
 /** Fresh mount per exchange — identical convention to `preparing-
@@ -254,7 +279,13 @@ const MOMENT_STYLES: Record<
  * chat bubble, so it never reads as something either party "said."
  * `urgent` gets a visibly heavier treatment (tinted card, coloured
  * border) than the routine confirmations — "some should feel more
- * important than others," not every outcome carrying equal weight. */
+ * important than others," not every outcome carrying equal weight.
+ *
+ * V8 founder review (2026-08-04): "lightly interacting with
+ * notifications" — a tactile hover/press response, not a new screen
+ * to open. There's nothing further to reveal underneath (these are
+ * illustrative, not real data), so the interaction is honestly just
+ * that: it responds to touch, the way a real notification would. */
 function ProductMomentCard({ moment }: { moment: ProductMoment }) {
   const { icon: Icon, badge, icon_ } = MOMENT_STYLES[moment.kind];
   const isUrgent = moment.kind === "urgent";
@@ -262,9 +293,11 @@ function ProductMomentCard({ moment }: { moment: ProductMoment }) {
     <motion.div
       initial={{ opacity: 0, y: 8, scale: 0.97 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
+      whileHover={{ scale: 1.025, y: -1 }}
+      whileTap={{ scale: 0.965 }}
       transition={{ duration: 0.5, ease: EASE }}
       className={cn(
-        "mx-auto flex max-w-[88%] items-center gap-2.5 rounded-xl border px-3 py-2 text-[12px] font-semibold shadow-sm backdrop-blur-sm",
+        "mx-auto flex max-w-[88%] cursor-pointer items-center gap-2.5 rounded-xl border px-3 py-2 text-[12px] font-semibold shadow-sm backdrop-blur-sm transition-shadow duration-300 hover:shadow-md",
         isUrgent ? "border-attention/30 bg-attention/[0.08] text-attention" : "border-border/60 bg-white/90 text-foreground"
       )}
     >
@@ -353,7 +386,51 @@ function StoryConversation({ story }: { story: ConversationStory }) {
   );
 }
 
-function AutoConversation({ story, storyIndex }: { story: ConversationStory; storyIndex: number }) {
+/** Small dot pagination beneath the phone — the explicit signal that
+ * there's more to see and it's the visitor's to control, the same
+ * language Apple's own product pages use for "there's more here."
+ * Doubles as a direct jump: tap a dot, land on that business. */
+function StoryDots({ active, onSelect }: { active: number; onSelect: (i: number) => void }) {
+  return (
+    <div className="mt-4 flex items-center justify-center gap-2" role="tablist" aria-label="Choose a business to preview">
+      {STORIES.map((s, i) => (
+        <button
+          key={s.businessName}
+          type="button"
+          role="tab"
+          aria-selected={i === active}
+          aria-label={`Show ${s.businessName}`}
+          onClick={() => onSelect(i)}
+          className={cn(
+            "h-1.5 rounded-full transition-all duration-300",
+            i === active ? "w-5 bg-primary" : "w-1.5 bg-primary/25 hover:bg-primary/40"
+          )}
+        />
+      ))}
+    </div>
+  );
+}
+
+/** V8 founder review (2026-08-04): "no longer a looping animation —
+ * a tiny version of ReplyFlow users can explore." A horizontal drag
+ * on the phone itself, elastic and pinned back to centre (the phone
+ * never actually travels — `dragConstraints={{left:0,right:0}}` — it
+ * only resists and springs back), decides the next/previous story on
+ * release. Paired with `StoryDots` below so the interaction is
+ * discoverable even for a visitor who never tries dragging it. */
+function AutoConversation({
+  story,
+  storyIndex,
+  onNext,
+  onPrev,
+  onGoTo,
+}: {
+  story: ConversationStory;
+  storyIndex: number;
+  onNext: () => void;
+  onPrev: () => void;
+  onGoTo: (i: number) => void;
+}) {
   return (
     <div>
       <div className="relative mx-auto max-w-[340px]">
@@ -381,8 +458,19 @@ function AutoConversation({ story, storyIndex }: { story: ConversationStory; sto
          * once every ~12s (eighth founder review — "almost impossible
          * to notice consciously, but enough that the page feels
          * alive") — most of each cycle sits flat, per `times`, with
-         * only a brief jitter near the end. */}
+         * only a brief jitter near the end. `drag="x"` layers on top
+         * of that same element (V8) — Framer composes the drag offset
+         * with the existing `animate` transforms rather than fighting
+         * them, since they touch different transform properties. */}
         <motion.div
+          drag="x"
+          dragConstraints={{ left: 0, right: 0 }}
+          dragElastic={0.12}
+          whileDrag={{ scale: 0.985 }}
+          onDragEnd={(_e, info) => {
+            if (info.offset.x < -50 || info.velocity.x < -350) onNext();
+            else if (info.offset.x > 50 || info.velocity.x > 350) onPrev();
+          }}
           initial={{ y: 0, rotateY: -9, rotateX: 3, rotateZ: -1 }}
           animate={{
             y: [0, -6, 0],
@@ -400,6 +488,7 @@ function AutoConversation({ story, storyIndex }: { story: ConversationStory; sto
             },
           }}
           style={{ transformPerspective: 1300 }}
+          className="cursor-grab touch-pan-y active:cursor-grabbing"
         >
           <DeviceFrame>
             <AnimatePresence mode="wait">
@@ -418,11 +507,22 @@ function AutoConversation({ story, storyIndex }: { story: ConversationStory; sto
         </motion.div>
       </div>
 
+      <StoryDots active={storyIndex} onSelect={onGoTo} />
+
       {/* No pronoun, no "taught her" — quiet confidence rather than an
        * explanation. Still honest that this is illustrative (Visual
-       * Language §0.1), just said once, plainly. */}
-      <p className="mt-5 text-center text-[12px] text-muted-foreground/70">
+       * Language §0.1), just said once, plainly.
+       *
+       * V8 audit finding (2026-08-04): a first-time visitor could
+       * plausibly read "Dean's Plumbing," "Harris Electrical" etc. as
+       * real reference customers rather than examples — nothing near
+       * the phone said otherwise, only the section below it did. One
+       * small, explicit line closes that gap without undercutting the
+       * demo itself. */}
+      <p className="mt-3 text-center text-[12px] text-muted-foreground/70">
         How ReplyFlow replies — grounded in what&apos;s actually been taught, never guessed.
+        <br />
+        Example conversations, not real customers.
       </p>
     </div>
   );
@@ -541,7 +641,7 @@ function HeadlineText({ headline }: { headline: Headline }) {
 
 export function Hero() {
   const router = useRouter();
-  const storyIndex = useRotatingStoryIndex();
+  const { index: storyIndex, goTo, next, prev } = useInteractiveStoryIndex();
   const story = STORIES[storyIndex]!;
   const headlineIndex = useRotatingHeadlineIndex();
   const headline = HEADLINES[headlineIndex]!;
@@ -664,7 +764,7 @@ export function Hero() {
           animate={{ opacity: 1, scale: 1 }}
           transition={{ duration: 0.8, ease: EASE, delay: 0.9 }}
         >
-          <AutoConversation story={story} storyIndex={storyIndex} />
+          <AutoConversation story={story} storyIndex={storyIndex} onNext={next} onPrev={prev} onGoTo={goTo} />
         </motion.div>
       </div>
     </section>

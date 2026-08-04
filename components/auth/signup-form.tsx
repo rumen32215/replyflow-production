@@ -30,12 +30,18 @@ const RULES = [
  * sitting still, mirroring the same "the page feels alive" principle
  * as the Hero's headline and phone — but sequential, not randomised;
  * unlike the Hero's headline this isn't the visitor's first
- * impression, so there's no "always starts the same" problem to fix. */
+ * impression, so there's no "always starts the same" problem to fix.
+ *
+ * V8 "Rewrite around outcomes" (2026-08-04): the original four leaned
+ * on process ("connect", "teach") and one said "ReplyFlow" doing
+ * something *to* the owner rather than *for* them — exactly the
+ * setup-flavoured framing the brief asked to strip out. Rewritten so
+ * every line names something the owner gains, not a step they do. */
 const REASSURANCE_LINES = [
-  "Usually takes under 60 seconds",
-  "Connect your WhatsApp Business number",
-  "Teach ReplyFlow about your business",
-  "Ready to answer customers immediately",
+  "Never miss another customer message",
+  "Works on the WhatsApp number you already use",
+  "She'll learn how you run things — hours, pricing, the lot",
+  "Ready to start catching messages today",
 ] as const;
 
 function useRotatingIndex(length: number, intervalMs: number): number {
@@ -85,7 +91,7 @@ export function SignupForm() {
         Let&apos;s meet your <GradientText>receptionist</GradientText>.
       </h1>
       <p className="mb-4 text-[14.5px] text-muted-foreground">
-        In the next minute, you&apos;ll create an AI receptionist that understands your business.
+        In the next minute, you&apos;ll have someone answering your customers — even when your hands are full.
       </p>
 
       {/* Rotating, not static — the same "the page feels alive"

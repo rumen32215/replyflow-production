@@ -1,33 +1,47 @@
 "use client";
 
-import { createContext, useCallback, useContext, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { EASE } from "@/components/shared/motion";
 
 /**
- * V7 founder review (2026-08-04): the previous CTA transition lived
+ * V7 founder review (2026-08-04): the original CTA transition lived
  * entirely inside `Hero` — a full-screen overlay that unmounted the
  * instant `router.push` swapped routes, since Hero itself unmounts on
- * navigation. That made the handoff a hard cut behind the overlay's
- * back, which read as "a separate screen," not a single continuous
- * motion into sign-up ("remove the full-screen intermediary view...
- * smooth morph into the sign-up form").
- *
- * The fix is structural, not cosmetic: this provider lives in the root
+ * navigation. The fix was structural: this provider lives in the root
  * layout, which persists across every route change (only the nested
- * segment swaps). The overlay it renders therefore survives the
- * `/signup` navigation instead of vanishing with Hero, holds briefly
- * so the new page has time to paint underneath it, then fades away —
- * a genuine crossfade handoff instead of a wash-then-cut.
+ * segment swaps), so whatever it renders survives the `/signup`
+ * navigation instead of vanishing with Hero.
+ *
+ * V8 founder review (2026-08-04): the *content* of that overlay was
+ * then rebuilt from scratch. The V7 version — an opaque brand-gradient
+ * circle washing over the entire viewport, held until the new page
+ * painted underneath — was "technically correct but emotionally
+ * flat," and explicitly named as reading like a loading screen no
+ * matter how it was skinned. The brief pointed at Face ID, Dynamic
+ * Island, Wallet, ElevenLabs — small, anchored, springy, translucent
+ * motion, never a curtain over the whole screen.
+ *
+ * So this version never covers the page. It's a soft, blurred bloom
+ * anchored at wherever the button actually was, plus a few small
+ * sparks and a quick spring-scaled brand mark — all `pointer-events-
+ * none`, all translucent, all gone within ~650ms. Because nothing is
+ * opaque, there's nothing to "hide the swap" behind, which is exactly
+ * why the old version had to coordinate its own dismissal with the
+ * route finishing — this one doesn't have to; it just plays its own
+ * short, fixed-length burst of delight in parallel with a fast
+ * navigation, and the two are never required to line up frame-perfectly
+ * for it to still look right.
  */
 
-const EXPAND_MS = 500;
-/** When the caller should actually fire `router.push` — timed so the
- * circle has fully covered the viewport before the route swaps. */
-export const TRANSITION_NAVIGATE_MS = 550;
-/** Total overlay lifetime — outlives the navigate call by enough for
- * the incoming page to paint, then fades out over its own tail. */
-const TOTAL_LIFETIME_MS = 800;
+const NAVIGATE_MS = 200;
+/** Total time the burst is mounted for — well past its own visible
+ * motion (~500ms) so it never gets cut off mid-fade. */
+const LIFETIME_MS = 650;
+
+/** Fires shortly after the burst starts — early enough that arriving
+ * feels immediate, late enough that the click's own reward has
+ * already registered first. */
+export const TRANSITION_NAVIGATE_MS = NAVIGATE_MS;
 
 interface Origin {
   x: number;
@@ -36,10 +50,10 @@ interface Origin {
 
 const TransitionContext = createContext<((origin: Origin) => void) | null>(null);
 
-/** Fires the shared full-screen brand transition, expanding outward
- * from the given viewport-percentage origin (typically the pressed
- * CTA's own position) — call this, then separately trigger navigation
- * at `TRANSITION_NAVIGATE_MS` so the two stay in sync without this
+/** Fires the shared brand "delight burst," anchored to the given
+ * viewport-percentage origin (typically the pressed CTA's own
+ * position) — call this, then separately trigger navigation at
+ * `TRANSITION_NAVIGATE_MS` so the two stay in sync without this
  * provider needing to know about routing. */
 export function useLaunchTransition(): (origin: Origin) => void {
   const launch = useContext(TransitionContext);
@@ -49,55 +63,116 @@ export function useLaunchTransition(): (origin: Origin) => void {
 
 export function PageTransitionProvider({ children }: { children: React.ReactNode }) {
   const [active, setActive] = useState(false);
-  const [origin, setOrigin] = useState<Origin>({ x: 50, y: 100 });
+  const [origin, setOrigin] = useState<Origin>({ x: 50, y: 50 });
+  const [burstId, setBurstId] = useState(0);
   const dismissRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const launch = useCallback((point: Origin) => {
     setOrigin(point);
     setActive(true);
+    setBurstId((n) => n + 1);
     if (dismissRef.current) clearTimeout(dismissRef.current);
-    dismissRef.current = setTimeout(() => setActive(false), TOTAL_LIFETIME_MS);
+    dismissRef.current = setTimeout(() => setActive(false), LIFETIME_MS);
   }, []);
 
   return (
     <TransitionContext.Provider value={launch}>
       {children}
-      <AnimatePresence>{active && <TransitionOverlay origin={origin} />}</AnimatePresence>
+      <AnimatePresence>{active && <TransitionBurst key={burstId} origin={origin} />}</AnimatePresence>
     </TransitionContext.Provider>
   );
 }
 
-/** The ReplyFlow mark itself (`logo.tsx`'s own icon path), not a
- * generic checkmark — this is meant to read as "opening the app," not
- * "task complete." A soft light burst behind it stands in for the
- * "subtle particles" ingredient without a full particle system, which
- * would fight the Apple-restraint bar set in the previous pass. */
-function TransitionOverlay({ origin }: { origin: Origin }) {
+/** A handful of small brand-coloured sparks, flung outward from the
+ * origin at slightly randomised angles/distances — the "subtle
+ * particles" ingredient, kept genuinely subtle (small, few, quick). */
+function Sparks({ seed }: { seed: number }) {
+  const sparks = useMemo(() => {
+    const colors = ["#2563EB", "#22C55E", "#2563EB", "#22C55E", "#0EA5A4", "#22C55E"];
+    return Array.from({ length: 6 }, (_, i) => {
+      // Deterministic per-burst pseudo-randomness (no hydration risk —
+      // this only ever renders client-side, after a click), spread
+      // evenly around the origin with a little jitter so it reads as
+      // a burst, not a ring.
+      const angle = (i / 6) * Math.PI * 2 + seed * 0.7;
+      const distance = 46 + ((i * 37 + seed * 13) % 26);
+      return {
+        id: i,
+        x: Math.cos(angle) * distance,
+        y: Math.sin(angle) * distance,
+        color: colors[i]!,
+      };
+    });
+  }, [seed]);
+
+  return (
+    <>
+      {sparks.map((s) => (
+        <motion.span
+          key={s.id}
+          aria-hidden
+          className="absolute h-1.5 w-1.5 rounded-full"
+          style={{ background: s.color }}
+          initial={{ x: 0, y: 0, opacity: 0, scale: 0.4 }}
+          animate={{ x: s.x, y: s.y, opacity: [0, 1, 0], scale: [0.4, 1, 0.6] }}
+          transition={{ duration: 0.55, ease: [0.16, 1, 0.3, 1] }}
+        />
+      ))}
+    </>
+  );
+}
+
+function TransitionBurst({ origin }: { origin: Origin }) {
   return (
     <motion.div
-      className="fixed inset-0 z-[100] flex items-center justify-center bg-gradient-to-br from-primary to-success"
-      initial={{ clipPath: `circle(0% at ${origin.x}% ${origin.y}%)` }}
-      animate={{ clipPath: `circle(150% at ${origin.x}% ${origin.y}%)` }}
-      exit={{ opacity: 0, transition: { duration: 0.3, ease: EASE } }}
-      transition={{ duration: EXPAND_MS / 1000, ease: EASE }}
+      aria-hidden
+      className="pointer-events-none fixed inset-0 z-[100] overflow-hidden"
+      initial={{ opacity: 1 }}
+      exit={{ opacity: 0, transition: { duration: 0.2, ease: "easeOut" } }}
     >
-      <motion.div
-        aria-hidden
-        className="absolute h-36 w-36 rounded-full bg-white/25 blur-2xl"
-        initial={{ scale: 0.3, opacity: 0 }}
-        animate={{ scale: 1.5, opacity: [0, 0.7, 0] }}
-        transition={{ duration: 0.9, ease: EASE }}
-      />
-      <motion.div
-        initial={{ scale: 0.4, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
-        transition={{ delay: 0.18, duration: 0.28, ease: EASE }}
-        className="relative flex h-16 w-16 items-center justify-center rounded-full bg-white/15 ring-1 ring-white/30"
-      >
-        <svg viewBox="0 0 24 24" fill="none" className="h-8 w-8">
-          <path d="M4 20l1.6-4.8A8 8 0 1112 20a7.96 7.96 0 01-3.9-1L4 20z" fill="white" />
-        </svg>
-      </motion.div>
+      <div className="absolute" style={{ left: `${origin.x}%`, top: `${origin.y}%` }}>
+        {/* Soft blurred bloom — translucent throughout, never a solid
+         * wash, so the page underneath stays visible the entire time. */}
+        <motion.div
+          className="absolute -translate-x-1/2 -translate-y-1/2 rounded-full blur-2xl"
+          style={{
+            width: 260,
+            height: 260,
+            background: "radial-gradient(circle, rgba(37,99,235,0.5), rgba(34,197,94,0.35) 55%, transparent 75%)",
+          }}
+          initial={{ scale: 0.2, opacity: 0 }}
+          animate={{ scale: [0.2, 1.15, 1.5], opacity: [0, 0.6, 0] }}
+          transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
+        />
+
+        <div className="absolute -translate-x-1/2 -translate-y-1/2">
+          <Sparks seed={Math.round(origin.x * 3 + origin.y * 7)} />
+        </div>
+
+        {/* The brand mark itself, not a checkmark — reads as "opening
+         * the app," not "task complete." Spring physics, not eased
+         * duration, for the liquid, Dynamic-Island-ish snap the brief
+         * asked for. */}
+        <motion.div
+          className="absolute flex h-11 w-11 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-white shadow-[0_8px_24px_-6px_rgba(37,99,235,0.45)] ring-1 ring-black/5"
+          initial={{ scale: 0.3, opacity: 0 }}
+          animate={{ scale: [0.3, 1.12, 1, 0.85], opacity: [0, 1, 1, 0] }}
+          transition={{ duration: 0.55, ease: [0.34, 1.56, 0.64, 1], times: [0, 0.35, 0.7, 1] }}
+        >
+          <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5">
+            <path
+              d="M4 20l1.6-4.8A8 8 0 1112 20a7.96 7.96 0 01-3.9-1L4 20z"
+              fill="url(#rf-transition-gradient)"
+            />
+            <defs>
+              <linearGradient id="rf-transition-gradient" x1="4" y1="4" x2="20" y2="20">
+                <stop offset="0" stopColor="#2563EB" />
+                <stop offset="1" stopColor="#22C55E" />
+              </linearGradient>
+            </defs>
+          </svg>
+        </motion.div>
+      </div>
     </motion.div>
   );
 }

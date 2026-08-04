@@ -75,7 +75,7 @@ export function SignupForm() {
 
   async function onSubmit(values: SignupInput) {
     setSubmitting(true);
-    const { error } = await supabase.auth.signUp({
+    const { data, error } = await supabase.auth.signUp({
       email: values.email,
       password: values.password,
       options: { emailRedirectTo: `${window.location.origin}/auth/callback?next=/welcome` },
@@ -86,7 +86,26 @@ export function SignupForm() {
       toast({ variant: "destructive", title: "Couldn't create account", description: error.message });
       return;
     }
-    router.push(`/verify-email?email=${encodeURIComponent(values.email)}`);
+
+    // V10 founder review (2026-08-04): "don't interrupt momentum by
+    // sending the visitor to email verification... continue directly
+    // into onboarding... someone who just decided to try ReplyFlow
+    // should immediately experience ReplyFlow." Verification itself
+    // isn't removed — it moves later (`VerifyEmailGate`, gating the
+    // WhatsApp connection, the actual point real customer messages
+    // start flowing) rather than sitting in front of onboarding.
+    //
+    // `data.session` is the deciding signal, not an assumption: it
+    // only exists if the Supabase project grants a session straight
+    // out of `signUp()` (i.e. "Confirm email" is off). If a project
+    // still requires confirmation first, this falls back to exactly
+    // the previous behaviour — nobody gets stranded on a page their
+    // session can't actually reach.
+    if (data.session) {
+      router.push("/onboarding/business-name");
+    } else {
+      router.push(`/verify-email?email=${encodeURIComponent(values.email)}`);
+    }
   }
 
   return (

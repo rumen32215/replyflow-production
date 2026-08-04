@@ -13,8 +13,16 @@ import { cn } from "@/lib/utils";
  * iPhone reveal for the same reason marketing shots always do this —
  * it's legible, it's calm, and nobody in the audience is checking it
  * against a real clock. That's the brief's own explicitly-offered
- * fallback, used deliberately rather than as a shortcut. */
-function StatusBar() {
+ * fallback, used deliberately rather than as a shortcut.
+ *
+ * V10 founder review (2026-08-04): "keep 9:41 — but make the battery
+ * believable... never identical forever." The fill width is the only
+ * thing that varies (`14 * pct/100`, same outline/position as before)
+ * — at these sizes a few points of charge barely reads as different
+ * at a glance, which is exactly right; the ask was that it varies,
+ * not that anyone consciously clocks it. */
+function StatusBar({ battery }: { battery: number }) {
+  const fillWidth = (14 * Math.max(0, Math.min(100, battery))) / 100;
   return (
     <div
       className="pointer-events-none absolute inset-x-0 top-0 z-30 flex items-center justify-between px-5 pt-[7px] text-white"
@@ -35,7 +43,7 @@ function StatusBar() {
         </svg>
         <svg width="22" height="11" viewBox="0 0 22 11" fill="none">
           <rect x="0.6" y="0.6" width="18" height="9.8" rx="2.4" stroke="white" strokeOpacity="0.5" strokeWidth="1" />
-          <rect x="2" y="2" width="14" height="7" rx="1.2" fill="white" />
+          <rect x="2" y="2" width={fillWidth} height="7" rx="1.2" fill="white" />
           <rect x="19.3" y="3.5" width="1.7" height="4" rx="0.85" fill="white" fillOpacity="0.5" />
         </svg>
       </div>
@@ -71,10 +79,31 @@ function StatusBar() {
  * Wraps the existing `PhoneFrame`/`Bubble` conversation UI unchanged —
  * this is presentation only, never a change to that shared component
  * (still real, load-bearing UI inside the authenticated product).
+ *
+ * V10 founder review (2026-08-04): "mobile now feels stronger than
+ * desktop... the phone shouldn't just be a scaled version of mobile."
+ * The chassis was only growing 260→300px (15%) from mobile to desktop
+ * while the headline beside it grows 34→52px (53%) — the phone was
+ * quietly staying mobile-sized while everything around it grew,
+ * which is exactly what makes a desktop hero feel like a stretched
+ * phone layout instead of something designed for the canvas it's on.
+ * `lg:w-[340px]` closes most of that gap; `Hero`'s own Bubble call
+ * sites separately add a `lg:text-[14px]` override via `className`
+ * (never touching this component's default) so the conversation text
+ * itself grows with the chassis instead of floating in newly-roomier
+ * padding.
  */
-export function DeviceFrame({ children, className }: { children: React.ReactNode; className?: string }) {
+export function DeviceFrame({
+  children,
+  className,
+  battery = 97,
+}: {
+  children: React.ReactNode;
+  className?: string;
+  battery?: number;
+}) {
   return (
-    <div className={cn("relative mx-auto aspect-[9/19.5] w-[260px] sm:w-[280px] lg:w-[300px]", className)}>
+    <div className={cn("relative mx-auto aspect-[9/19.5] w-[260px] sm:w-[280px] lg:w-[340px]", className)}>
       <div className="relative h-full w-full rounded-[46px] bg-gradient-to-br from-[#4c4c54] via-[#1c1c20] via-45% to-[#050505] p-[3px] shadow-[0_2px_10px_-2px_rgba(0,0,0,0.35),0_60px_120px_-24px_rgba(15,23,42,0.55),0_30px_60px_-28px_rgba(15,23,42,0.45)]">
         {/* Edge highlight — a real object catching light, not decoration. */}
         <div className="pointer-events-none absolute inset-0 rounded-[46px] ring-1 ring-inset ring-white/10" aria-hidden />
@@ -102,7 +131,7 @@ export function DeviceFrame({ children, className }: { children: React.ReactNode
         <div className="relative h-full w-full overflow-hidden rounded-[42px] bg-black">
           {children}
 
-          <StatusBar />
+          <StatusBar battery={battery} />
 
           {/* Dynamic-Island-style cutout, floating inside the screen on
            * top of whatever's there — not a bezel cutout. */}

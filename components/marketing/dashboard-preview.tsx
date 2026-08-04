@@ -123,31 +123,50 @@ const TONE_GLOW: Record<FeedStep["tone"], string> = {
 };
 
 const FEED_VISIBLE = 3;
-const DEFAULT_LEARNED = "your opening hours";
 
 function randomBetween(min: number, max: number): number {
   return min + Math.random() * (max - min);
 }
 
-/** Plays `CHAINS` end to end, one at a time, each step arriving after
- * a randomised pause rather than a fixed tick — "asynchronous," not
- * refreshing. Random per-mount (never in a `useState` initializer, so
- * there's nothing for server and client to disagree about — the same
- * hydration-safety pattern used throughout this page). */
-function useNarrativeFeed(maxVisible: number): { visible: { key: number; step: FeedStep }[]; learned: string } {
+/**
+ * V10 founder review (2026-08-04): "still feels like cards appearing
+ * inside a SaaS dashboard... we are demonstrating autonomy, not
+ * software." Two structural changes, not a re-skin:
+ *
+ * 1. New steps now *append* (`[...v, {key,step}]`), not prepend. The
+ *    founder's own diagram writes every chain top-to-bottom with
+ *    downward arrows (cause above effect) — the previous version had
+ *    the newest card enter at the *top*, which is backwards from that
+ *    reading order. Now the origin (the customer message) is always
+ *    the oldest-of-visible, sitting above what it caused, and each
+ *    new effect arrives *beneath* it — "important activity naturally
+ *    sits above," and every existing card genuinely does shift
+ *    upward as the next thing completes, exactly as asked, because
+ *    it's making room below itself rather than being pushed down.
+ *
+ * 2. `learned` is `string | null`, not a string with a placeholder
+ *    default. The row it drives is never in the DOM until the first
+ *    real knowledge-check step actually fires — "only appear when
+ *    something was genuinely learned, never simply because time
+ *    passed" ruled out ever showing a plausible-sounding default
+ *    before anything had actually happened.
+ */
+function useNarrativeFeed(maxVisible: number): { visible: { key: number; step: FeedStep }[]; learned: string | null } {
   const [visible, setVisible] = useState<{ key: number; step: FeedStep }[]>([]);
-  const [learned, setLearned] = useState(DEFAULT_LEARNED);
+  const [learned, setLearned] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     let keyCounter = 0;
     const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
-    // Seeded with the tail of the first chain so the panel never sits
-    // empty for the ~1.5s before the first live step arrives — reads
-    // as walking in mid-shift, not as the feature booting up.
-    const seed = CHAINS[0]!.steps.slice(-2);
-    setVisible(seed.map((step, i) => ({ key: -seed.length + i, step })));
+    // Seeded with the START of the first chain (the cause, not the
+    // resolution) so the panel never sits empty for the ~1.5s before
+    // the first live step arrives — reads as walking in just as a
+    // message came in, not as the feature booting up.
+    const seed = CHAINS[0]!.steps.slice(0, 2);
+    setVisible(seed.map((step, i) => ({ key: i, step })));
+    keyCounter = seed.length - 1;
 
     async function playChain(chain: FeedChain) {
       for (const step of chain.steps) {
@@ -156,12 +175,22 @@ function useNarrativeFeed(maxVisible: number): { visible: { key: number; step: F
         if (cancelled) return;
         keyCounter += 1;
         const key = keyCounter;
-        setVisible((v) => [{ key, step }, ...v].slice(0, maxVisible));
+        setVisible((v) => [...v, { key, step }].slice(-maxVisible));
         if (step.learned) setLearned(step.learned);
       }
     }
 
     async function loop() {
+      // The seed already showed chain 0's opening beats on screen
+      // without going through `playChain` — finish that exact chain
+      // first, continuing the story already visible, before the
+      // normal randomised rotation (which then deliberately excludes
+      // chain 0 on its first pick, so the same chain never plays
+      // twice back to back).
+      await playChain({ steps: CHAINS[0]!.steps.slice(seed.length) });
+      if (cancelled) return;
+      await wait(randomBetween(3800, 5200));
+
       let lastChain = 0;
       while (!cancelled) {
         let idx = Math.floor(Math.random() * CHAINS.length);
@@ -243,65 +272,86 @@ export function DashboardPreview() {
           </div>
 
           <div className="p-4 sm:p-5">
-            {/* V9 founder review (2026-08-04): "still feels mechanical
-             * — timing, easing, anticipation, settling, hierarchy."
-             * Three changes, not a rebuild: (1) the card itself
-             * arrives on a spring, not a flat ease — it settles rather
-             * than just stopping; (2) the icon badge lands a beat
-             * after the card does, the same "anticipation" a real UI
-             * uses to draw the eye to what just happened rather than
-             * having everything land in one flat instant; (3) a
-             * tone-coloured glow blooms and fades on arrival only —
-             * "hierarchy" between the thing that just happened and the
-             * things that already settled, without a fourth colour or
-             * a louder badge. Exit stays a plain, quick fade — leaving
-             * should feel like quietly stepping back, not another
-             * spring bounce competing for attention. */}
+            {/* V10 founder review (2026-08-04): "cause above effect...
+             * important activity naturally sits above." New steps now
+             * enter from *below* (matching the append-at-the-end
+             * change in `useNarrativeFeed`) and settle upward into
+             * place — reversed from the earlier version, where new
+             * cards dropped in from above. Position, not just motion,
+             * now carries hierarchy too: the oldest-of-visible card
+             * (the cause everything below it stems from) sits at a
+             * calmer, slightly lower opacity than the newest (the
+             * thing that just happened, still the current focus) —
+             * a static gradient, not a fourth colour or a louder
+             * badge, and it updates smoothly as the stack shifts
+             * rather than snapping. Retained from the previous pass:
+             * the spring settle, the staggered icon, and the
+             * tone-coloured arrival glow that blooms once and fades. */}
             <div className="flex flex-col gap-2">
               <AnimatePresence initial={false}>
-                {visible.map(({ key, step }) => (
-                  <motion.div
-                    key={key}
-                    layout
-                    initial={{ opacity: 0, y: -14, scale: 0.95 }}
-                    animate={{
-                      opacity: 1,
-                      y: 0,
-                      scale: 1,
-                      boxShadow: [
-                        `0 0 0 5px rgba(${TONE_GLOW[step.tone]},0.16)`,
-                        "0 0 0 0 rgba(0,0,0,0)",
-                      ],
-                    }}
-                    exit={{ opacity: 0, y: 8, scale: 0.98, transition: { duration: 0.3, ease: EASE } }}
-                    transition={{
-                      layout: { type: "spring", stiffness: 300, damping: 30 },
-                      default: { type: "spring", stiffness: 260, damping: 24, mass: 0.9 },
-                      boxShadow: { duration: 0.9, ease: "easeOut" },
-                    }}
-                    className="flex items-center gap-2.5 rounded-xl border border-border/60 bg-card px-3 py-2.5"
-                  >
-                    <motion.span
-                      initial={{ scale: 0.5, opacity: 0 }}
-                      animate={{ scale: 1, opacity: 1 }}
-                      transition={{ delay: 0.1, type: "spring", stiffness: 420, damping: 18 }}
-                      className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${TONE_CLASSES[step.tone]}`}
+                {visible.map(({ key, step }, idx) => {
+                  const posOpacity = [0.62, 0.85, 1][idx - (visible.length - 3)] ?? 1;
+                  return (
+                    <motion.div
+                      key={key}
+                      layout
+                      initial={{ opacity: 0, y: 14, scale: 0.95 }}
+                      animate={{
+                        opacity: posOpacity,
+                        y: 0,
+                        scale: 1,
+                        boxShadow: [
+                          `0 0 0 5px rgba(${TONE_GLOW[step.tone]},0.16)`,
+                          "0 0 0 0 rgba(0,0,0,0)",
+                        ],
+                      }}
+                      exit={{ opacity: 0, y: -10, scale: 0.98, transition: { duration: 0.3, ease: EASE } }}
+                      transition={{
+                        layout: { type: "spring", stiffness: 300, damping: 30 },
+                        default: { type: "spring", stiffness: 260, damping: 24, mass: 0.9 },
+                        boxShadow: { duration: 0.9, ease: "easeOut" },
+                      }}
+                      className="flex items-center gap-2.5 rounded-xl border border-border/60 bg-card px-3 py-2.5"
                     >
-                      <step.icon className="h-3.5 w-3.5" strokeWidth={2.5} />
-                    </motion.span>
-                    <span className="text-[13px] font-medium text-foreground">{step.text}</span>
-                  </motion.div>
-                ))}
+                      <motion.span
+                        initial={{ scale: 0.5, opacity: 0 }}
+                        animate={{ scale: 1, opacity: 1 }}
+                        transition={{ delay: 0.1, type: "spring", stiffness: 420, damping: 18 }}
+                        className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${TONE_CLASSES[step.tone]}`}
+                      >
+                        <step.icon className="h-3.5 w-3.5" strokeWidth={2.5} />
+                      </motion.span>
+                      <span className="text-[13px] font-medium text-foreground">{step.text}</span>
+                    </motion.div>
+                  );
+                })}
               </AnimatePresence>
             </div>
 
-            <div className="mt-3 flex flex-wrap items-center gap-x-1.5 gap-y-1 border-t border-border/60 pt-3 text-[12.5px] font-semibold text-learning">
-              <BookOpen className="h-3.5 w-3.5 shrink-0" strokeWidth={2.5} />
-              <span>Just learned:</span>
-              <GentleSwap swapKey={learned} className="font-medium text-foreground/80">
-                {learned}
-              </GentleSwap>
-            </div>
+            {/* V10 founder review (2026-08-04): "'Just learned' should
+             * feel earned... only appear when something was genuinely
+             * learned, never simply because time passed." Previously
+             * always present with a plausible-sounding placeholder;
+             * now the whole row is absent from the DOM until the
+             * first real knowledge-check step actually fires, then
+             * arrives once, on its own, rather than ever having shown
+             * something unearned. */}
+            <AnimatePresence>
+              {learned && (
+                <motion.div
+                  initial={{ opacity: 0, y: 6, height: 0, marginTop: 0 }}
+                  animate={{ opacity: 1, y: 0, height: "auto", marginTop: 12 }}
+                  transition={{ duration: 0.4, ease: EASE }}
+                  className="flex flex-wrap items-center gap-x-1.5 gap-y-1 overflow-hidden border-t border-border/60 pt-3 text-[12.5px] font-semibold text-learning"
+                >
+                  <BookOpen className="h-3.5 w-3.5 shrink-0" strokeWidth={2.5} />
+                  <span>Just learned:</span>
+                  <GentleSwap swapKey={learned} className="font-medium text-foreground/80">
+                    {learned}
+                  </GentleSwap>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
         </ScrollReveal>
 

@@ -5,6 +5,8 @@ import { createClient } from "@/lib/supabase/server";
 import { WhatsAppEmbeddedSignup } from "@/components/dashboard/whatsapp-embedded-signup";
 import { Badge } from "@/components/ui/badge";
 import { SettleCard } from "@/components/shared/motion";
+import { VerifyEmailGate } from "@/components/shared/verify-email-gate";
+import { isEmailVerified } from "@/lib/auth/email-verification";
 import { TEST_CONVERSATION_PHONE } from "@/lib/test-conversation";
 
 export const metadata: Metadata = { title: "Connect WhatsApp — ReplyFlow" };
@@ -55,6 +57,29 @@ export default async function WhatsAppConnectionPage() {
 
   if (!connection && !hasRealTestExchange) {
     redirect("/dashboard");
+  }
+
+  // V10 founder review (2026-08-04): sign-up now grants access to
+  // onboarding (and the Test Conversations sandbox above) before
+  // email verification — deliberately, to preserve momentum. This is
+  // the actual gate that decision deferred to: the moment a business
+  // is about to start watching a *real* WhatsApp number for *real*
+  // customer messages. Same "only guards the unconnected path"
+  // philosophy as `hasRealTestExchange` above — a business that's
+  // already connected must always be able to revisit its own
+  // connection status here, regardless of how it got there.
+  if (!connection && !isEmailVerified(user)) {
+    return (
+      <div className="mx-auto max-w-2xl">
+        <SettleCard className="mb-8">
+          <h1 className="text-[26px] font-extrabold tracking-tight">Connect WhatsApp</h1>
+          <p className="mt-1 text-sm text-muted-foreground">One more thing before this goes live.</p>
+        </SettleCard>
+        <SettleCard delay={0.05}>
+          <VerifyEmailGate email={user.email!} />
+        </SettleCard>
+      </div>
+    );
   }
 
   // Only a genuinely unconfigured environment needs to see this — a

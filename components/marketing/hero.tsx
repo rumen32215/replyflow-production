@@ -66,9 +66,17 @@ interface ProductMoment {
  * mechanism the trade-highlight (§8 of this review) is built on. */
 type Trade = "plumbers" | "electricians" | "builders" | "roofers" | "painters";
 
+/** V10 founder review (2026-08-04): "allow each story to have a
+ * different emotional atmosphere... think cinematic lighting... never
+ * recolour WhatsApp, never a gimmick." Purely an ambient glow *behind*
+ * the phone (`MOOD_GLOW` in `AutoConversation` below) — the chrome,
+ * bubbles and header stay exactly as they are for every story. */
+type StoryMood = "green" | "blue" | "amber" | "teal";
+
 interface ConversationStory {
   businessName: string;
   trade: Trade;
+  mood: StoryMood;
   exchanges: readonly [Exchange, Exchange];
   /** Sixth founder review (2026-08-04): "demonstrate a workflow, not
    * only a conversation" — two sequential outcomes, not one, so the
@@ -81,6 +89,7 @@ const STORIES: readonly ConversationStory[] = [
   {
     businessName: "Dean's Plumbing",
     trade: "plumbers",
+    mood: "green",
     exchanges: [
       {
         customer: "Hi, my kitchen tap's been dripping non-stop since this morning — any chance someone can look today?",
@@ -99,6 +108,7 @@ const STORIES: readonly ConversationStory[] = [
   {
     businessName: "Harris Electrical",
     trade: "electricians",
+    mood: "blue",
     exchanges: [
       {
         customer: "Hi, roughly how much would it be to add a couple of extra sockets in the kitchen?",
@@ -117,6 +127,7 @@ const STORIES: readonly ConversationStory[] = [
   {
     businessName: "Ridgeline Roofing",
     trade: "roofers",
+    mood: "amber",
     exchanges: [
       {
         customer: "A few tiles came off in last night's wind — there's water coming into the loft now.",
@@ -135,6 +146,7 @@ const STORIES: readonly ConversationStory[] = [
   {
     businessName: "Whitmore Building Co",
     trade: "builders",
+    mood: "teal",
     exchanges: [
       {
         customer: "Just sent a couple of photos over — there's a crack running right across the bedroom ceiling, want to make sure it's not serious.",
@@ -193,13 +205,10 @@ interface StoryController {
  * it and it keeps exploring with you; leave it alone and it keeps
  * playing on its own.
  *
- * Deterministic on the first render on purpose — `Math.random()`
- * inside a `useState` initializer runs once on the server and again
- * on the client during hydration and the two will always disagree,
- * which React correctly reports as a real content mismatch (caught
- * the hard way, via a real hydration error, in an earlier pass). The
- * actual random pick happens in the effect below, client-only, after
- * hydration is already done.
+ * Always opens on `STORIES[0]` (V10, see the mount effect below) —
+ * deterministic on both the server and the first client render, so
+ * there's nothing here for hydration to disagree about even though
+ * the value is also set again, identically, client-side.
  *
  * Real `clearTimeout`-on-cleanup, the correct idiom for a genuinely
  * long-lived effect — self-heals correctly under React Strict Mode's
@@ -223,10 +232,19 @@ function useInteractiveStoryIndex(): StoryController {
   }, []);
 
   useEffect(() => {
-    const initial = Math.floor(Math.random() * STORIES.length);
-    indexRef.current = initial;
-    setIndex(initial);
-    scheduleNext(initial);
+    // V10 founder review (2026-08-04): "whenever someone first lands
+    // on the page, always begin on slide one — not whichever slide
+    // happened to be active previously." Reverses the earlier
+    // random-start decision deliberately, not by accident — that
+    // randomisation existed to stop the *headline* rotation from
+    // ever feeling scripted on repeat visits, a genuinely different
+    // problem from the phone's opener. Slide one (Dean's Plumbing —
+    // the plainest, most universally-relatable booking) is now always
+    // the first thing shown; auto-play (and any real variety a
+    // visitor sees across repeat visits) still takes over from there.
+    indexRef.current = 0;
+    setIndex(0);
+    scheduleNext(0);
     return () => {
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
     };
@@ -256,7 +274,7 @@ function useInteractiveStoryIndex(): StoryController {
 function TypedReply({ text }: { text: string }) {
   const { display, isThinking, isBusy } = useTypedMessage(text);
   return (
-    <Bubble from="receptionist" className="min-h-[34px]" animateTicks={!isBusy}>
+    <Bubble from="receptionist" className="min-h-[34px] lg:text-[14px]" animateTicks={!isBusy}>
       {isThinking || display.length === 0 ? <TypingDots className="px-1 py-1" /> : <span>{display}</span>}
     </Bubble>
   );
@@ -382,7 +400,7 @@ function StoryConversation({ story }: { story: ConversationStory }) {
     >
       {story.exchanges.slice(0, visibleCount).map((exchange, i) => (
         <div key={i}>
-          <Bubble from="customer">{exchange.customer}</Bubble>
+          <Bubble from="customer" className="lg:text-[14px]">{exchange.customer}</Bubble>
           <TypedReply text={exchange.reply} />
         </div>
       ))}
@@ -422,6 +440,26 @@ function StoryDots({ active, onSelect }: { active: number; onSelect: (i: number)
   );
 }
 
+/** V10 founder review (2026-08-04): "make the battery believable...
+ * slight variation between stories... never identical forever." One
+ * fixed value per story (not a live drain simulation — that would be
+ * a much bigger, noisier thing to build for something that "shouldn't
+ * attract attention individually") so it's still fully deterministic
+ * and hydration-safe, just no longer the same 100% every time. */
+const BATTERY_BY_STORY: readonly number[] = [97, 94, 90, 86] as const;
+
+/** Two-stop radial gradients, one per `StoryMood` — same structure as
+ * the glow this replaces, only the colour changes. Kept as a lookup
+ * table (never a template-string colour) for the same reason
+ * `MOMENT_STYLES` above is one: it's the honest way to say "these are
+ * the only four, deliberately," not an open palette. */
+const MOOD_GLOW: Record<StoryMood, string> = {
+  green: "radial-gradient(circle, rgba(34,197,94,0.20), rgba(34,197,94,0.08) 55%, transparent 75%)",
+  blue: "radial-gradient(circle, rgba(37,99,235,0.20), rgba(37,99,235,0.08) 55%, transparent 75%)",
+  amber: "radial-gradient(circle, rgba(245,158,11,0.22), rgba(245,158,11,0.08) 55%, transparent 75%)",
+  teal: "radial-gradient(circle, rgba(20,184,166,0.20), rgba(20,184,166,0.08) 55%, transparent 75%)",
+};
+
 /** V8 founder review (2026-08-04): "no longer a looping animation —
  * a tiny version of ReplyFlow users can explore." A horizontal drag
  * on the phone itself, elastic and pinned back to centre (the phone
@@ -444,21 +482,42 @@ function AutoConversation({
 }) {
   return (
     <div>
-      <div className="relative mx-auto max-w-[340px]">
+      <div className="relative mx-auto max-w-[340px] lg:max-w-[400px]">
         {/* The one focal glow — a single soft light source behind the
          * phone. Eighth founder review (2026-08-04): "subtle screen
          * glow" / "tiny shadow movement," Apple-subtle — tied to the
          * exact same float timing as the phone below so it reads as
          * one connected, alive object rather than a second, unrelated
          * animation. Sized to the phone's own correct proportions
-         * rather than the old, too-wide footprint. */}
-        <motion.div
-          aria-hidden
-          className="pointer-events-none absolute inset-0 -z-10 rounded-full blur-3xl"
-          style={{ background: "radial-gradient(circle, rgba(37,99,235,0.18), rgba(34,197,94,0.11) 55%, transparent 75%)" }}
-          animate={{ opacity: [0.85, 1, 0.85], scale: [1, 1.05, 1] }}
-          transition={{ duration: 4.2, repeat: Infinity, ease: "easeInOut" }}
-        />
+         * rather than the old, too-wide footprint.
+         *
+         * V10 founder review (2026-08-04): "cinematic lighting... a
+         * different emotional atmosphere per story, without
+         * recolouring WhatsApp." All four mood glows are stacked and
+         * always mounted; only their own opacity crossfades when the
+         * active story changes (0.6s), while each one keeps breathing
+         * independently underneath (the original 4.2s pulse) — the
+         * same "crossfade two layers, don't try to interpolate a
+         * gradient string" technique already used for the story
+         * content itself, so switching moods is exactly as seamless
+         * as switching stories. */}
+        <div className="pointer-events-none absolute inset-0 -z-10 rounded-full blur-3xl" aria-hidden>
+          {STORIES.map((s, i) => (
+            <motion.div
+              key={s.businessName}
+              className="absolute inset-0 rounded-full"
+              animate={{ opacity: i === storyIndex ? 1 : 0 }}
+              transition={{ duration: 0.6, ease: EASE }}
+            >
+              <motion.div
+                className="h-full w-full rounded-full"
+                style={{ background: MOOD_GLOW[s.mood] }}
+                animate={{ opacity: [0.85, 1, 0.85], scale: [1, 1.05, 1] }}
+                transition={{ duration: 4.2, repeat: Infinity, ease: "easeInOut" }}
+              />
+            </motion.div>
+          ))}
+        </div>
         {/* A held-at-an-angle presentation, not dead-on — the single
          * biggest thing separating a photographed product shot from a
          * screenshot-in-a-frame (fifth founder review, 2026-08-04, a
@@ -501,7 +560,7 @@ function AutoConversation({
           style={{ transformPerspective: 1300 }}
           className="cursor-grab touch-pan-y active:cursor-grabbing"
         >
-          <DeviceFrame>
+          <DeviceFrame battery={BATTERY_BY_STORY[storyIndex] ?? 97}>
             {/* V9 founder review (2026-08-04): "the black transition
              * between phone stories breaks immersion... no black
              * flashes, no obvious reset." Root cause was `mode="wait"`
@@ -578,7 +637,12 @@ function TradeEyebrow({ activeTrade }: { activeTrade: Trade | null }) {
         <span key={trade}>
           <span
             className={cn(
-              "inline-block transition-colors duration-700 ease-out",
+              // V10 founder review (2026-08-04): "the transition still
+              // lingers slightly too long... 15-20% quicker, not
+              // faster overall." 700ms → 575ms is an 18% cut — enough
+              // to feel like a confident rotation rather than a wait,
+              // without turning it into a genuinely fast animation.
+              "inline-block transition-colors duration-[575ms] ease-out",
               trade === activeTrade ? "font-extrabold text-primary" : "font-bold text-primary/55"
             )}
           >
@@ -763,6 +827,23 @@ export function Hero() {
           <span className="font-semibold text-foreground">you&apos;d actually send</span>.
         </motion.p>
 
+        {/* V10 founder review (2026-08-04): explicitly asked as a
+         * design judgement, not an instruction — "is 'Meet your
+         * receptionist' appearing at the moment a visitor naturally
+         * wants to act?" Reviewed and left exactly where it is.
+         * Reasoning: it already sits at the *first* natural decision
+         * point (right after the headline/subhead have made the
+         * promise), which is what actually matters for an audience
+         * this memory already establishes as mobile-first and often
+         * short on scroll depth — moving it below the phone would
+         * trade a real, measurable risk (visitors who never reach a
+         * second CTA) for a "see proof first" benefit the phone
+         * mostly already delivers anyway, since on both mobile and
+         * desktop it sits only a short scroll below, still inside the
+         * same first impression. This matches the standard high-
+         * converting shape (Linear, Stripe, Apple product pages all
+         * keep a primary CTA in the hero, with supporting proof
+         * below) rather than being a default nobody reconsidered. */}
         <motion.div
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
@@ -795,21 +876,36 @@ export function Hero() {
             </span>
           </motion.button>
 
-          {/* Reassurance, not small print — each point earns its own
-           * quiet checkmark rather than reading as one line of legal
-           * copy tacked under the button. */}
+          {/* V10 founder review (2026-08-04): "correct but emotionally
+           * flat... each point should feel like its own reassurance."
+           * Each point now lands on its own short beat instead of all
+           * three appearing as one flat block, and the checkmark sits
+           * in a small filled circle rather than bare — the same
+           * "token, not just an icon" treatment already used for
+           * every other badge on this page (`MOMENT_STYLES`,
+           * `TONE_CLASSES`), so these read as three small, deliberate
+           * confirmations landing in sequence, not one line of small
+           * print with checkmarks stuck on the front. */}
           <div className="mt-4 flex flex-wrap items-center justify-center gap-x-4 gap-y-1.5">
-            {TRIAL_POINTS.map((point) => (
-              <span key={point} className="flex items-center gap-1.5 text-[13.5px] font-medium text-foreground/80">
-                <Check className="h-3.5 w-3.5 text-success" strokeWidth={3} />
+            {TRIAL_POINTS.map((point, i) => (
+              <motion.span
+                key={point}
+                initial={{ opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.4, ease: EASE, delay: 0.85 + i * 0.1 }}
+                className="flex items-center gap-1.5 text-[13.5px] font-medium text-foreground/80"
+              >
+                <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-success/15">
+                  <Check className="h-2.5 w-2.5 text-success" strokeWidth={3.5} />
+                </span>
                 {point}
-              </span>
+              </motion.span>
             ))}
           </div>
         </motion.div>
       </div>
 
-      <div className="relative mx-auto mt-16 max-w-[560px] px-6 pb-20 sm:mt-20 sm:pb-28 lg:pb-32">
+      <div className="relative mx-auto mt-16 max-w-[560px] px-6 pb-20 sm:mt-20 sm:pb-28 lg:mt-24 lg:max-w-[640px] lg:pb-32">
         <motion.div
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}

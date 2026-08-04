@@ -63,6 +63,7 @@ export function PhoneFrame({
   className,
   scrollable = false,
   bodyRef,
+  headerInsetTop = false,
 }: {
   businessName: string;
   children: React.ReactNode;
@@ -80,6 +81,14 @@ export function PhoneFrame({
   /** Only meaningful with `scrollable` — lets the caller auto-scroll
    * to the newest message as the conversation grows. */
   bodyRef?: React.Ref<HTMLDivElement>;
+  /** Opt-in only, default false — every existing caller keeps its
+   * exact current header padding. `DeviceFrame`'s Dynamic-Island-style
+   * cutout floats on top of this header (confirmed live: "Ridgeline
+   * Roofing" rendered as "Ridgelir" behind it, a real overlap, not a
+   * hypothetical one); real apps reserve a safe-area inset below the
+   * island so header content never renders behind it, which is all
+   * this does. */
+  headerInsetTop?: boolean;
 }) {
   return (
     <div
@@ -89,7 +98,12 @@ export function PhoneFrame({
         className
       )}
     >
-      <div className="flex shrink-0 items-center gap-3 bg-[#075E54] px-4 py-3 text-white">
+      <div
+        className={cn(
+          "flex shrink-0 items-center gap-3 bg-[#075E54] px-4 pb-3 text-white",
+          headerInsetTop ? "pt-[42px]" : "pt-3"
+        )}
+      >
         <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/20 text-[12px] font-bold">
           {businessName.slice(0, 1).toUpperCase() || "R"}
         </div>

@@ -54,7 +54,11 @@ interface ConversationStory {
   businessName: string;
   trade: Trade;
   exchanges: readonly [Exchange, Exchange];
-  productMoment: ProductMoment;
+  /** Sixth founder review (2026-08-04): "demonstrate a workflow, not
+   * only a conversation" — two sequential outcomes, not one, so the
+   * settled phone reads as ReplyFlow actually running the business
+   * behind the scenes rather than a single static confirmation. */
+  productMoments: readonly [ProductMoment, ProductMoment];
 }
 
 const STORIES: readonly ConversationStory[] = [
@@ -71,7 +75,10 @@ const STORIES: readonly ConversationStory[] = [
         reply: "It will, yeah — I'll let him know it's a repeat visit. See you at 4.",
       },
     ],
-    productMoment: { text: "Job card created — kitchen tap, 4:00pm", tone: "success" },
+    productMoments: [
+      { text: "Job card created — kitchen tap, 4:00pm", tone: "success" },
+      { text: "Added to today's schedule", tone: "success" },
+    ],
   },
   {
     businessName: "Harris Electrical",
@@ -86,7 +93,10 @@ const STORIES: readonly ConversationStory[] = [
         reply: "Great — they'll ring you on this number in the next hour or so.",
       },
     ],
-    productMoment: { text: "Callback reminder set for this afternoon", tone: "success" },
+    productMoments: [
+      { text: "Callback reminder set for this afternoon", tone: "success" },
+      { text: "Customer added to follow-ups", tone: "success" },
+    ],
   },
   {
     businessName: "Ridgeline Roofing",
@@ -101,7 +111,10 @@ const STORIES: readonly ConversationStory[] = [
         reply: "No problem — if you can, keep something under the leak until then.",
       },
     ],
-    productMoment: { text: "Flagged for you — urgent, water ingress", tone: "attention" },
+    productMoments: [
+      { text: "Flagged for you — urgent, water ingress", tone: "attention" },
+      { text: "Team notified immediately", tone: "success" },
+    ],
   },
   {
     businessName: "Bell & Co Decorators",
@@ -116,7 +129,10 @@ const STORIES: readonly ConversationStory[] = [
         reply: "Brilliant, I'll get that booked in for Thursday.",
       },
     ],
-    productMoment: { text: "Booking added — Thursday", tone: "success" },
+    productMoments: [
+      { text: "Booking added — Thursday", tone: "success" },
+      { text: "Schedule updated", tone: "success" },
+    ],
   },
 ] as const;
 
@@ -221,20 +237,26 @@ function ProductMomentCard({ moment }: { moment: ProductMoment }) {
   );
 }
 
-/** How long the finished thread rests before the product moment quietly
- * appears beneath it — long enough to read as "after," not "during." */
+/** How long the finished thread rests before the first product moment
+ * quietly appears beneath it — long enough to read as "after," not
+ * "during" — and the pause between the first and second moment, short
+ * enough to read as one continuous process rather than two unrelated
+ * events. */
 const PRODUCT_MOMENT_DELAY_MS = 900;
+const PRODUCT_MOMENT_STEP_MS = 1100;
 
 /** One story's own conversation, playing once from the top on mount.
  * The phone frame itself is now a fixed size (`DeviceFrame`); this
  * scrolls its own message thread inside that fixed frame rather than
  * growing it, and keeps the thread scrolled to the newest message.
  * Once the last reply has finished typing, the fixed screen's
- * remaining empty space is used to reveal what that conversation left
- * behind (fifth founder review, 2026-08-04) rather than sitting blank. */
+ * remaining empty space reveals what that conversation set in motion
+ * — two sequential outcomes, not one, so it reads as ReplyFlow
+ * actually running a small workflow rather than a single static
+ * confirmation (sixth founder review, 2026-08-04). */
 function StoryConversation({ story }: { story: ConversationStory }) {
   const [visibleCount, setVisibleCount] = useState(0);
-  const [showMoment, setShowMoment] = useState(false);
+  const [momentCount, setMomentCount] = useState(0);
   const startedRef = useRef(false);
   const bodyRef = useRef<HTMLDivElement>(null);
 
@@ -255,7 +277,9 @@ function StoryConversation({ story }: { story: ConversationStory }) {
         await wait(estimateTypeMs(story.exchanges[i]!.reply));
       }
       await wait(PRODUCT_MOMENT_DELAY_MS);
-      setShowMoment(true);
+      setMomentCount(1);
+      await wait(PRODUCT_MOMENT_STEP_MS);
+      setMomentCount(2);
     }
     void run();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -263,13 +287,14 @@ function StoryConversation({ story }: { story: ConversationStory }) {
 
   useEffect(() => {
     bodyRef.current?.scrollTo({ top: bodyRef.current.scrollHeight, behavior: "smooth" });
-  }, [visibleCount, showMoment]);
+  }, [visibleCount, momentCount]);
 
   return (
     <PhoneFrame
       businessName={story.businessName}
       scrollable
       bodyRef={bodyRef}
+      headerInsetTop
       className="h-full w-full rounded-none border-0 shadow-none"
     >
       {story.exchanges.slice(0, visibleCount).map((exchange, i) => (
@@ -278,9 +303,11 @@ function StoryConversation({ story }: { story: ConversationStory }) {
           <TypedReply text={exchange.reply} />
         </div>
       ))}
-      {showMoment && (
-        <div className="pt-2">
-          <ProductMomentCard moment={story.productMoment} />
+      {momentCount > 0 && (
+        <div className="space-y-1.5 pt-2">
+          {story.productMoments.slice(0, momentCount).map((moment, i) => (
+            <ProductMomentCard key={i} moment={moment} />
+          ))}
         </div>
       )}
     </PhoneFrame>
@@ -290,10 +317,12 @@ function StoryConversation({ story }: { story: ConversationStory }) {
 function AutoConversation({ story, storyIndex }: { story: ConversationStory; storyIndex: number }) {
   return (
     <div>
-      <div className="relative mx-auto max-w-[400px]">
+      <div className="relative mx-auto max-w-[340px]">
         {/* The one focal glow — a single soft light source behind the
          * phone, static rather than animated (the phone's own slow
-         * float below is already the one thing that moves here). */}
+         * float below is already the one thing that moves here). Sized
+         * to the phone's own new, correct proportions rather than the
+         * old, too-wide footprint. */}
         <div
           aria-hidden
           className="pointer-events-none absolute inset-0 -z-10 rounded-full blur-3xl"
@@ -453,7 +482,7 @@ export function Hero() {
         <div className="aurora-blob aurora-blob-success" />
       </div>
 
-      <div className="relative mx-auto max-w-3xl px-6 pt-12 text-center sm:pt-28 lg:pt-32">
+      <div className="relative mx-auto max-w-3xl px-6 pt-8 text-center sm:pt-14 lg:pt-16">
         <TradeEyebrow activeTrade={story.trade} />
 
         <motion.div layout transition={{ duration: 0.4, ease: EASE }}>
@@ -475,11 +504,10 @@ export function Hero() {
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, ease: EASE, delay: 0.4 }}
-          className="mx-auto mt-6 max-w-[46ch] text-[17px] leading-relaxed text-muted-foreground sm:text-[18px]"
+          className="mx-auto mt-6 max-w-[42ch] text-[17px] leading-relaxed text-muted-foreground sm:text-[18px]"
         >
-          Your customers keep messaging{" "}
-          <span className="font-semibold text-foreground">on WhatsApp</span> — ReplyFlow replies with{" "}
-          <span className="font-semibold text-foreground">real knowledge of your business</span>, not generic chat.
+          Every WhatsApp message gets a reply that{" "}
+          <span className="font-semibold text-foreground">actually knows your business</span>.
         </motion.p>
 
         <motion.div

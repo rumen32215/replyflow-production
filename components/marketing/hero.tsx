@@ -7,11 +7,8 @@ import {
   ArrowRight,
   Check,
   AlertTriangle,
-  ClipboardCheck,
   CalendarCheck,
-  Clock,
   UserPlus,
-  Bell,
   MessageCircle,
   Sparkles,
   BookOpen,
@@ -24,6 +21,10 @@ import { PhoneFrame, Bubble } from "@/components/shared/phone-preview";
 import { TypingDots, useTypedMessage } from "@/components/shared/typed-message";
 import { DeviceFrame } from "@/components/marketing/device-frame";
 import { useLaunchTransition, TRANSITION_NAVIGATE_MS } from "@/components/shared/page-transition";
+import type { ProductMoment } from "@/components/marketing/product-moment";
+import { ProductMomentCard } from "@/components/marketing/product-moment";
+import type { StoryMood } from "@/components/marketing/mood-glow";
+import { MOOD_GLOW } from "@/components/marketing/mood-glow";
 import { cn } from "@/lib/utils";
 
 /**
@@ -49,44 +50,9 @@ interface Exchange {
   reply: string;
 }
 
-/** What the conversation quietly leaves behind once it settles — the
- * fixed-height screen (`device-frame.tsx`) has real empty space below
- * a two-exchange thread; fifth founder review (2026-08-04) asked for
- * that space to show the product actually working, not sit blank. One
- * per story, each a real, accurate downstream outcome of that exact
- * conversation (a Work Card, an escalation flag, a diary booking) —
- * never an invented capability.
- *
- * Seventh founder review (2026-08-04): these all looked "almost
- * identical" — a real product surfaces different kinds of outcomes
- * with real visual hierarchy (Linear/Stripe/Apple notification
- * language), not one generic green success box repeated. `kind` picks
- * both the icon and the accent colour from `MOMENT_STYLES` below. */
-interface ProductMoment {
-  text: string;
-  kind: "job" | "booking" | "scheduled" | "customer" | "urgent" | "team";
-}
-
 /** Matches one of the exact words in the eyebrow line below — the
  * mechanism the trade-highlight (§8 of this review) is built on. */
 type Trade = "plumbers" | "electricians" | "builders" | "roofers" | "painters";
-
-/** V10 founder review (2026-08-04): "allow each story to have a
- * different emotional atmosphere... think cinematic lighting... never
- * recolour WhatsApp, never a gimmick." Purely an ambient glow *behind*
- * the phone (`MOOD_GLOW` in `AutoConversation` below) — the chrome,
- * bubbles and header stay exactly as they are for every story.
- *
- * Founder review (2026-08-04): "booking confirmed → warm green,
- * urgent emergency → subtle red, learning → blue, payoff → soft
- * amber" — confirmed explicitly to mean red, "used efficiently," not
- * a hue drift toward green. Named `"urgent"` here rather than `"red"`
- * because that's its actual role on the page (it's what decides the
- * value, not the other way round) — see `MOOD_GLOW` below for the
- * literal colour, kept deliberately a touch quieter than the other
- * three (red carries more visual alarm per unit of opacity than
- * green/blue/amber do). */
-type StoryMood = "green" | "urgent" | "blue" | "amber";
 
 interface BaseSlide {
   businessName: string;
@@ -374,57 +340,6 @@ function TypedReply({ text }: { text: string }) {
   );
 }
 
-/** Icon + accent per moment `kind` — real hierarchy instead of one
- * repeated green box (seventh founder review, 2026-08-04, "think
- * Linear, Stripe, Apple — not generic green success boxes"). Tailwind
- * needs statically-written class names to find them at build time, so
- * this is a lookup table, never a template-string colour name. */
-const MOMENT_STYLES: Record<
-  ProductMoment["kind"],
-  { icon: typeof ClipboardCheck; badge: string; icon_: string }
-> = {
-  job: { icon: ClipboardCheck, badge: "bg-success/15", icon_: "text-success" },
-  booking: { icon: CalendarCheck, badge: "bg-primary/15", icon_: "text-primary" },
-  scheduled: { icon: Clock, badge: "bg-learning/15", icon_: "text-learning" },
-  customer: { icon: UserPlus, badge: "bg-success/15", icon_: "text-success" },
-  urgent: { icon: AlertTriangle, badge: "bg-attention/20", icon_: "text-attention" },
-  team: { icon: Bell, badge: "bg-primary/15", icon_: "text-primary" },
-};
-
-/** The settled-conversation reveal — a system moment, not another
- * chat bubble, so it never reads as something either party "said."
- * `urgent` gets a visibly heavier treatment (tinted card, coloured
- * border) than the routine confirmations — "some should feel more
- * important than others," not every outcome carrying equal weight.
- *
- * V8 founder review (2026-08-04): "lightly interacting with
- * notifications" — a tactile hover/press response, not a new screen
- * to open. There's nothing further to reveal underneath (these are
- * illustrative, not real data), so the interaction is honestly just
- * that: it responds to touch, the way a real notification would. */
-function ProductMomentCard({ moment }: { moment: ProductMoment }) {
-  const { icon: Icon, badge, icon_ } = MOMENT_STYLES[moment.kind];
-  const isUrgent = moment.kind === "urgent";
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 8, scale: 0.97 }}
-      animate={{ opacity: 1, y: 0, scale: 1 }}
-      whileHover={{ scale: 1.025, y: -1 }}
-      whileTap={{ scale: 0.965 }}
-      transition={{ duration: 0.5, ease: EASE }}
-      className={cn(
-        "mx-auto flex max-w-[88%] cursor-pointer items-center gap-2.5 rounded-xl border px-3 py-2 text-[12px] font-semibold shadow-sm backdrop-blur-sm transition-shadow duration-300 hover:shadow-md",
-        isUrgent ? "border-attention/30 bg-attention/[0.08] text-attention" : "border-border/60 bg-white/90 text-foreground"
-      )}
-    >
-      <span className={cn("flex h-6 w-6 shrink-0 items-center justify-center rounded-lg", badge)}>
-        <Icon className={cn("h-3.5 w-3.5", icon_)} strokeWidth={2.5} />
-      </span>
-      {moment.text}
-    </motion.div>
-  );
-}
-
 /** How long the finished thread rests before the first outcome quietly
  * appears beneath it — long enough to read as "after," not "during" —
  * and the pause before the second, short enough that it reads as the
@@ -683,34 +598,6 @@ function StoryDots({ active, onSelect }: { active: number; onSelect: (i: number)
  * attract attention individually") so it's still fully deterministic
  * and hydration-safe, just no longer the same 100% every time. */
 const BATTERY_BY_STORY: readonly number[] = [97, 94, 90, 86] as const;
-
-/** One radial gradient per `StoryMood`. Kept as a lookup table (never
- * a template-string colour) for the same reason `MOMENT_STYLES` above
- * is one: it's the honest way to say "these are the only four,
- * deliberately," not an open palette.
- *
- * Founder review (2026-08-04): "don't simply blur colour — light the
- * scene... the phone should feel like a real object sitting inside
- * coloured light." Two changes from the previous pass: (1) the focal
- * point moved off-centre (`at 38% 30%`, an ellipse rather than a
- * circle) to match the *exact* direction `device-frame.tsx`'s own
- * physical key-light already comes from (its top-left edge highlight)
- * — one coherent light source for the whole object instead of a flat
- * centred blur competing with it; (2) `urgent` is red again ("used
- * efficiently," confirmed explicitly) but held a touch quieter than
- * the other three — red carries more visual alarm per unit of opacity
- * than green/blue/amber do, so matching their exact stop values would
- * overshoot "subtle." Reuses the exact `--destructive` HSL value
- * already defined in `globals.css` (`hsl(0 74% 50%)`, converted to
- * its rgb equivalent here since a gradient string needs raw channel
- * values) rather than inventing a new red the product doesn't
- * otherwise use for "urgent." */
-const MOOD_GLOW: Record<StoryMood, string> = {
-  green: "radial-gradient(ellipse 75% 65% at 38% 30%, rgba(34,197,94,0.30), rgba(34,197,94,0.12) 55%, transparent 78%)",
-  urgent: "radial-gradient(ellipse 75% 65% at 38% 30%, rgba(222,33,33,0.20), rgba(222,33,33,0.08) 55%, transparent 78%)",
-  blue: "radial-gradient(ellipse 75% 65% at 38% 30%, rgba(37,99,235,0.30), rgba(37,99,235,0.12) 55%, transparent 78%)",
-  amber: "radial-gradient(ellipse 75% 65% at 38% 30%, rgba(245,158,11,0.32), rgba(245,158,11,0.13) 55%, transparent 78%)",
-};
 
 /** V8 founder review (2026-08-04): "no longer a looping animation —
  * a tiny version of ReplyFlow users can explore." A horizontal drag

@@ -12,6 +12,7 @@ import {
   Bell,
   BookOpen,
   Inbox,
+  Wrench,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { EASE, ScrollReveal, GentleSwap } from "@/components/shared/motion";
@@ -58,19 +59,23 @@ interface FeedChain {
 }
 
 /** Three different shifts, not one loop wearing different clothes.
- * Each ends on "Inbox cleared" deliberately — the one repeated beat
- * is the resolution itself, the same way every real work session
- * ends the same way regardless of how it got there. */
+ * Each ends on "Inbox cleared" then one further beat — the founder's
+ * own example chain (V9, 2026-08-04) closes on "Owner uninterrupted,"
+ * not just a system-state fact. Every chain now ends on that same
+ * idea in its own words (`Wrench`/`primary`, deliberately distinct
+ * from every colour used earlier in the chain) — the payoff isn't
+ * that the inbox is tidy, it's that none of this needed the owner. */
 const CHAINS: readonly FeedChain[] = [
   {
     steps: [
       { icon: MessageCircle, tone: "primary", text: "A customer messages in" },
       { icon: Sparkles, tone: "primary", text: "A reply is drafted instantly" },
-      { icon: BookOpen, tone: "learning", text: "Checked against what she's been taught", learned: "how you price call-outs" },
+      { icon: BookOpen, tone: "learning", text: "Checked against what's been taught", learned: "how you price call-outs" },
       { icon: CalendarCheck, tone: "success", text: "Thursday afternoon booked in" },
       { icon: Clock, tone: "learning", text: "Diary updated" },
       { icon: CheckCircle2, tone: "success", text: "Customer confirms the time" },
       { icon: Inbox, tone: "success", text: "Inbox cleared" },
+      { icon: Wrench, tone: "primary", text: "You never had to stop what you were doing" },
     ],
   },
   {
@@ -82,6 +87,7 @@ const CHAINS: readonly FeedChain[] = [
       { icon: Clock, tone: "learning", text: "Follow-up reminder set", learned: "what counts as an emergency" },
       { icon: CheckCircle2, tone: "success", text: "Added to today's schedule" },
       { icon: Inbox, tone: "success", text: "Inbox cleared" },
+      { icon: Wrench, tone: "primary", text: "Handled before you even saw your phone" },
     ],
   },
   {
@@ -93,6 +99,7 @@ const CHAINS: readonly FeedChain[] = [
       { icon: CalendarCheck, tone: "success", text: "Booking added to the diary" },
       { icon: Clock, tone: "learning", text: "Reminder set for the day before" },
       { icon: Inbox, tone: "success", text: "Inbox cleared" },
+      { icon: Wrench, tone: "primary", text: "One less thing waiting for you tonight" },
     ],
   },
 ] as const;
@@ -102,6 +109,17 @@ const TONE_CLASSES: Record<FeedStep["tone"], string> = {
   success: "bg-success/10 text-success",
   attention: "bg-attention/15 text-attention",
   learning: "bg-learning/10 text-learning",
+};
+
+/** Raw RGB triplets matching the same design-system tokens as
+ * `TONE_CLASSES` above — needed here (not as Tailwind classes)
+ * because the arrival glow below is an animated `boxShadow` keyframe,
+ * which Tailwind can't express declaratively. */
+const TONE_GLOW: Record<FeedStep["tone"], string> = {
+  primary: "37,99,235",
+  success: "34,197,94",
+  attention: "245,158,11",
+  learning: "168,85,247",
 };
 
 const FEED_VISIBLE = 3;
@@ -178,7 +196,20 @@ export function DashboardPreview() {
           transition={{ duration: 0.6, ease: EASE }}
           className="text-[21px] font-semibold leading-relaxed text-foreground sm:text-[24px]"
         >
-          While you&apos;re on the job, she&apos;s already working the phones.
+          {/* V9 founder review (2026-08-04): "introduces an
+           * unnecessary gender and feels weaker than the rest of the
+           * page... a headline that better represents ReplyFlow as an
+           * intelligent business system rather than a person." Judged
+           * against alternatives built the same way ("One system,
+           * working every message," "Nothing waits for you to be
+           * free," "Every message handled — while you're somewhere
+           * else entirely") — this one won for naming the actual
+           * feature shown directly beneath it ("Front Desk," the
+           * panel's own real label), for reusing a work idiom this
+           * trade audience already lives by ("clocks off"), and for
+           * implying always-on reliability without having to state it
+           * outright — all without a pronoun. */}
+          The front desk that never clocks off.
         </motion.p>
 
         <motion.p
@@ -212,21 +243,52 @@ export function DashboardPreview() {
           </div>
 
           <div className="p-4 sm:p-5">
+            {/* V9 founder review (2026-08-04): "still feels mechanical
+             * — timing, easing, anticipation, settling, hierarchy."
+             * Three changes, not a rebuild: (1) the card itself
+             * arrives on a spring, not a flat ease — it settles rather
+             * than just stopping; (2) the icon badge lands a beat
+             * after the card does, the same "anticipation" a real UI
+             * uses to draw the eye to what just happened rather than
+             * having everything land in one flat instant; (3) a
+             * tone-coloured glow blooms and fades on arrival only —
+             * "hierarchy" between the thing that just happened and the
+             * things that already settled, without a fourth colour or
+             * a louder badge. Exit stays a plain, quick fade — leaving
+             * should feel like quietly stepping back, not another
+             * spring bounce competing for attention. */}
             <div className="flex flex-col gap-2">
               <AnimatePresence initial={false}>
                 {visible.map(({ key, step }) => (
                   <motion.div
                     key={key}
                     layout
-                    initial={{ opacity: 0, y: -10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: 10 }}
-                    transition={{ duration: 0.5, ease: EASE }}
+                    initial={{ opacity: 0, y: -14, scale: 0.95 }}
+                    animate={{
+                      opacity: 1,
+                      y: 0,
+                      scale: 1,
+                      boxShadow: [
+                        `0 0 0 5px rgba(${TONE_GLOW[step.tone]},0.16)`,
+                        "0 0 0 0 rgba(0,0,0,0)",
+                      ],
+                    }}
+                    exit={{ opacity: 0, y: 8, scale: 0.98, transition: { duration: 0.3, ease: EASE } }}
+                    transition={{
+                      layout: { type: "spring", stiffness: 300, damping: 30 },
+                      default: { type: "spring", stiffness: 260, damping: 24, mass: 0.9 },
+                      boxShadow: { duration: 0.9, ease: "easeOut" },
+                    }}
                     className="flex items-center gap-2.5 rounded-xl border border-border/60 bg-card px-3 py-2.5"
                   >
-                    <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${TONE_CLASSES[step.tone]}`}>
+                    <motion.span
+                      initial={{ scale: 0.5, opacity: 0 }}
+                      animate={{ scale: 1, opacity: 1 }}
+                      transition={{ delay: 0.1, type: "spring", stiffness: 420, damping: 18 }}
+                      className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${TONE_CLASSES[step.tone]}`}
+                    >
                       <step.icon className="h-3.5 w-3.5" strokeWidth={2.5} />
-                    </span>
+                    </motion.span>
                     <span className="text-[13px] font-medium text-foreground">{step.text}</span>
                   </motion.div>
                 ))}

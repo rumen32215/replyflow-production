@@ -1,6 +1,49 @@
 import { cn } from "@/lib/utils";
 
 /**
+ * V9 founder review (2026-08-04): "the phone should stop feeling like
+ * a demo... realistic status bar, battery, signal, Wi-Fi, current
+ * time (or believable static time if live time complicates
+ * implementation)." A real clock reads two different values on the
+ * server and the client the instant a second ticks over between
+ * render and hydration — a genuine, previously-confirmed hydration
+ * hazard on this exact page (see `Hero`'s own headline/story rotation
+ * notes). Apple's own product photography has used the same fixed
+ * "9:41" in almost every keynote and marketing shot since the first
+ * iPhone reveal for the same reason marketing shots always do this —
+ * it's legible, it's calm, and nobody in the audience is checking it
+ * against a real clock. That's the brief's own explicitly-offered
+ * fallback, used deliberately rather than as a shortcut. */
+function StatusBar() {
+  return (
+    <div
+      className="pointer-events-none absolute inset-x-0 top-0 z-30 flex items-center justify-between px-5 pt-[7px] text-white"
+      aria-hidden
+    >
+      <span className="text-[13px] font-semibold tabular-nums tracking-tight">9:41</span>
+      <div className="flex items-center gap-[3px]">
+        <svg width="14" height="10" viewBox="0 0 14 10" fill="none">
+          <rect x="0" y="6.5" width="2.6" height="3.5" rx="0.5" fill="white" />
+          <rect x="3.8" y="4.5" width="2.6" height="5.5" rx="0.5" fill="white" />
+          <rect x="7.6" y="2.5" width="2.6" height="7.5" rx="0.5" fill="white" />
+          <rect x="11.4" y="0" width="2.6" height="10" rx="0.5" fill="white" />
+        </svg>
+        <svg width="13" height="10" viewBox="0 0 13 10" fill="none">
+          <path d="M6.5 8.6a1 1 0 100 2 1 1 0 000-2z" fill="white" />
+          <path d="M3.6 6.1a4.2 4.2 0 015.8 0" stroke="white" strokeWidth="1.3" strokeLinecap="round" />
+          <path d="M1.1 3.6a7.6 7.6 0 0110.8 0" stroke="white" strokeWidth="1.3" strokeLinecap="round" />
+        </svg>
+        <svg width="22" height="11" viewBox="0 0 22 11" fill="none">
+          <rect x="0.6" y="0.6" width="18" height="9.8" rx="2.4" stroke="white" strokeOpacity="0.5" strokeWidth="1" />
+          <rect x="2" y="2" width="14" height="7" rx="1.2" fill="white" />
+          <rect x="19.3" y="3.5" width="1.7" height="4" rx="0.85" fill="white" fillOpacity="0.5" />
+        </svg>
+      </div>
+    </div>
+  );
+}
+
+/**
  * The premium device chassis for the Landing Experience Hero
  * (`DOCS/SPECS/ReplyFlow-Landing-Experience-Design.md` §2).
  *
@@ -58,6 +101,8 @@ export function DeviceFrame({ children, className }: { children: React.ReactNode
          * by its content. Conversations scroll inside it instead. */}
         <div className="relative h-full w-full overflow-hidden rounded-[42px] bg-black">
           {children}
+
+          <StatusBar />
 
           {/* Dynamic-Island-style cutout, floating inside the screen on
            * top of whatever's there — not a bezel cutout. */}

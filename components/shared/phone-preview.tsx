@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { EASE } from "@/components/shared/motion";
 import { TypingDots, useTypedMessage } from "@/components/shared/typed-message";
@@ -19,6 +20,32 @@ export interface PreviewTurn {
   text: string;
 }
 
+/** WhatsApp's own real sent → delivered → read progression — a single
+ * check, then a double grey check, then a double check tinted teal.
+ * Opt-in only (`animateTicks` on `Bubble`, default off) so every
+ * existing real-product caller (Test Conversations, Receptionist
+ * playground, onboarding demo) renders exactly as before; only the
+ * Landing Experience Hero turns it on (V9 "message delivery
+ * behaviour"). */
+function DeliveryTicks({ stage }: { stage: "sent" | "delivered" | "read" }) {
+  const color = stage === "read" ? "#53BDEB" : "rgba(0,0,0,0.38)";
+  return (
+    <svg
+      width={stage === "sent" ? "10" : "14"}
+      height="10"
+      viewBox={stage === "sent" ? "0 0 10 10" : "0 0 14 10"}
+      fill="none"
+      className="inline-block align-text-bottom"
+      aria-hidden
+    >
+      <path d="M0.5 5.3L3.3 8L9 1.5" stroke={color} strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+      {stage !== "sent" && (
+        <path d="M4.5 5.3L7.3 8L13 1.5" stroke={color} strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+      )}
+    </svg>
+  );
+}
+
 /** Exported for reuse by Test Conversations
  * (components/dashboard/receptionist/test-conversation.tsx) — a real
  * scrolling thread, not a single fixed preview, but the same bubble
@@ -27,12 +54,30 @@ export function Bubble({
   from,
   children,
   className,
+  animateTicks = false,
 }: {
   from: "customer" | "receptionist";
   children: React.ReactNode;
   className?: string;
+  /** Opt-in only, default false — see `DeliveryTicks` above. Runs its
+   * own short sent → delivered → read timer once mounted; the caller
+   * only needs to say *when* a message counts as sent (by mounting
+   * with this true), not manage the stages itself. */
+  animateTicks?: boolean;
 }) {
   const isCustomer = from === "customer";
+  const [stage, setStage] = useState<"sent" | "delivered" | "read">("sent");
+
+  useEffect(() => {
+    if (!animateTicks || isCustomer) return;
+    const t1 = setTimeout(() => setStage("delivered"), 450);
+    const t2 = setTimeout(() => setStage("read"), 1150);
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+    };
+  }, [animateTicks, isCustomer]);
+
   return (
     <div className={cn("flex", isCustomer ? "justify-start" : "justify-end")}>
       <div
@@ -45,6 +90,11 @@ export function Bubble({
         )}
       >
         {children}
+        {animateTicks && !isCustomer && (
+          <span className="ml-1.5 inline-block">
+            <DeliveryTicks stage={stage} />
+          </span>
+        )}
       </div>
     </div>
   );
@@ -114,7 +164,14 @@ export function PhoneFrame({
       </div>
       <div
         ref={bodyRef}
-        className={cn("space-y-2 px-3 py-4", scrollable && "flex-1 overflow-y-auto")}
+        className={cn(
+          "space-y-2 px-3 py-4",
+          // `overscroll-contain` stops a fully-scrolled thread from
+          // chaining its scroll into the page behind it; the inline
+          // iOS momentum property is what makes a short internal
+          // scroll actually feel like a phone rather than a div.
+          scrollable && "flex-1 overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch]"
+        )}
         style={{ backgroundImage: "radial-gradient(circle at 20% 10%, rgba(255,255,255,0.35), transparent 40%)" }}
       >
         {children}

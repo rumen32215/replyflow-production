@@ -102,16 +102,16 @@ const STORIES: readonly ConversationStory[] = [
     exchanges: [
       {
         customer: "Hi, roughly how much would it be to add a couple of extra sockets in the kitchen?",
-        reply: "Depends a bit on the wiring run, so I don't want to guess at it — I'll get one of the team to call and give you a proper price. Does this afternoon work?",
+        reply: "For two extra sockets on an easy day-time job, that's normally around £180 including parts. Want me to pencil in a time?",
       },
       {
-        customer: "Yeah, that's fine.",
-        reply: "Great — they'll ring you on this number in the next hour or so.",
+        customer: "Yeah go on then, when's the next slot?",
+        reply: "I've got Wednesday at 10am free — I'll get that booked in for you.",
       },
     ],
     productMoments: [
-      { text: "Reminder set to call back this afternoon", kind: "scheduled" },
-      { text: "Customer saved for the follow-up", kind: "customer" },
+      { text: "Quote sent — grounded in your pricing rules", kind: "job" },
+      { text: "Wednesday 10am added to the diary", kind: "scheduled" },
     ],
   },
   {
@@ -133,21 +133,21 @@ const STORIES: readonly ConversationStory[] = [
     ],
   },
   {
-    businessName: "Bell & Co Decorators",
-    trade: "painters",
+    businessName: "Whitmore Building Co",
+    trade: "builders",
     exchanges: [
       {
-        customer: "Hi, do you have anyone free to repaint a bedroom this week?",
-        reply: "We do — Thursday or Friday both work. Which's better for you?",
+        customer: "Just sent a couple of photos over — there's a crack running right across the bedroom ceiling, want to make sure it's not serious.",
+        reply: "Got them, thanks — that's worth a proper look rather than guessing over text. I can get someone round Thursday morning, does that work?",
       },
       {
-        customer: "Thursday's perfect.",
-        reply: "Brilliant, I'll get that booked in for Thursday.",
+        customer: "Thursday's good, morning's better for me anyway.",
+        reply: "Perfect, I'll pencil that in — bring the photos up when they visit so nothing's missed.",
       },
     ],
     productMoments: [
-      { text: "Thursday confirmed with the customer", kind: "booking" },
-      { text: "Diary updated for the new booking", kind: "scheduled" },
+      { text: "Booked in for a proper look — Thursday morning", kind: "job" },
+      { text: "Diary updated automatically", kind: "scheduled" },
     ],
   },
 ] as const;
@@ -248,11 +248,15 @@ function useInteractiveStoryIndex(): StoryController {
 }
 
 /** Fresh mount per exchange — identical convention to `preparing-
- * receptionist.tsx`'s own `TypedReply`. */
+ * receptionist.tsx`'s own `TypedReply`. `animateTicks` only turns on
+ * once the message has actually finished typing (`!isBusy`) — a
+ * message can't be "sent" while it's still being composed, so the
+ * sent → delivered → read progression only ever starts at exactly the
+ * moment that's true (V9 "message delivery behaviour"). */
 function TypedReply({ text }: { text: string }) {
-  const { display, isThinking } = useTypedMessage(text);
+  const { display, isThinking, isBusy } = useTypedMessage(text);
   return (
-    <Bubble from="receptionist" className="min-h-[34px]">
+    <Bubble from="receptionist" className="min-h-[34px]" animateTicks={!isBusy}>
       {isThinking || display.length === 0 ? <TypingDots className="px-1 py-1" /> : <span>{display}</span>}
     </Bubble>
   );
@@ -340,17 +344,24 @@ function StoryConversation({ story }: { story: ConversationStory }) {
     if (startedRef.current) return;
     startedRef.current = true;
     const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+    // V9 "typing pauses, tiny response delays": a fixed wait every
+    // time reads as a metronome the moment you watch it twice. A
+    // small random jitter (never in a `useState` initializer — this
+    // only ever runs client-side, after mount, so there's no
+    // hydration mismatch to worry about) keeps every playthrough
+    // slightly different, the way a real person's response time is.
+    const jitter = (ms: number, spread: number) => ms + (Math.random() * spread * 2 - spread);
 
     async function run() {
-      await wait(900);
+      await wait(jitter(900, 150));
       for (let i = 0; i < story.exchanges.length; i++) {
-        if (i > 0) await wait(1300);
+        if (i > 0) await wait(jitter(1300, 250));
         setVisibleCount(i + 1);
         await wait(estimateTypeMs(story.exchanges[i]!.reply));
       }
-      await wait(PRODUCT_MOMENT_DELAY_MS);
+      await wait(jitter(PRODUCT_MOMENT_DELAY_MS, 150));
       setMomentCount(1);
-      await wait(PRODUCT_MOMENT_STEP_MS);
+      await wait(jitter(PRODUCT_MOMENT_STEP_MS, 200));
       setMomentCount(2);
     }
     void run();
@@ -491,14 +502,26 @@ function AutoConversation({
           className="cursor-grab touch-pan-y active:cursor-grabbing"
         >
           <DeviceFrame>
-            <AnimatePresence mode="wait">
+            {/* V9 founder review (2026-08-04): "the black transition
+             * between phone stories breaks immersion... no black
+             * flashes, no obvious reset." Root cause was `mode="wait"`
+             * — it fully unmounts the outgoing story, waits, then
+             * mounts the incoming one, and during that gap *nothing*
+             * is rendered inside the screen, exposing its own raw
+             * `bg-black` (`device-frame.tsx`'s screen div). Removing
+             * `mode="wait"` lets the two overlap: the outgoing story
+             * fades out while the incoming one fades in on top of it,
+             * both absolutely stacked so they occupy the same space —
+             * every story shares the same wallpaper and header colour,
+             * so the cross-blend never exposes anything but phone. */}
+            <AnimatePresence initial={false}>
               <motion.div
                 key={storyIndex}
                 initial={{ opacity: 0, scale: 0.98 }}
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.98 }}
-                transition={{ duration: 0.55, ease: EASE }}
-                className="h-full"
+                transition={{ duration: 0.5, ease: EASE }}
+                className="absolute inset-0 h-full w-full"
               >
                 <StoryConversation story={story} />
               </motion.div>
@@ -531,7 +554,17 @@ function AutoConversation({
 /** The eyebrow line, with the trade matching whatever story is
  * currently on screen quietly carrying more weight than the rest —
  * ties the claim ("for plumbers, electricians...") to the real,
- * specific example playing below it, without a new UI element. */
+ * specific example playing below it, without a new UI element.
+ *
+ * V9 founder review (2026-08-04): "the goal is not to make them
+ * larger or louder... a tiny moment of recognition... the visitor
+ * should instantly recognise 'this is for me' without consciously
+ * noticing an animation happened." The colour crossfade alone read as
+ * an animation playing; pairing it with a small, non-animating weight
+ * step (font-bold → font-extrabold, a state, not a tween) gives the
+ * active word more quiet confidence without adding any more motion to
+ * notice — the eye registers "that word is stronger" before it ever
+ * registers "something moved." */
 function TradeEyebrow({ activeTrade }: { activeTrade: Trade | null }) {
   return (
     <motion.p
@@ -545,14 +578,14 @@ function TradeEyebrow({ activeTrade }: { activeTrade: Trade | null }) {
         <span key={trade}>
           <span
             className={cn(
-              "transition-colors duration-700",
-              trade === activeTrade ? "text-primary" : "text-primary/60"
+              "inline-block transition-colors duration-700 ease-out",
+              trade === activeTrade ? "font-extrabold text-primary" : "font-bold text-primary/55"
             )}
           >
             {trade}
           </span>
           {i < EYEBROW_TRADES.length - 1 && (
-            <span className="text-primary/60">{i === EYEBROW_TRADES.length - 2 ? " & " : ", "}</span>
+            <span className="text-primary/55">{i === EYEBROW_TRADES.length - 2 ? " & " : ", "}</span>
           )}
         </span>
       ))}
@@ -702,14 +735,32 @@ export function Hero() {
           </AnimatePresence>
         </motion.div>
 
+        {/* V9 founder review (2026-08-04): "now feels like the weakest
+         * copy on the page... generate 15-20 alternatives, judge them
+         * against ReplyFlow's design principles, choose the strongest."
+         * Full shortlist and reasoning captured in the commit/PR notes
+         * for this pass. The winner keeps the existing sentence's own
+         * cadence and its one emphasised word ("actually"), rather than
+         * discarding what already worked, but replaces "knows your
+         * business" — increasingly the phone's own job to prove, not
+         * the subhead's job to assert — with a claim the subhead alone
+         * can carry: that the reply is one you'd genuinely stand
+         * behind. "You'd actually send" folds in trust (you'd put your
+         * name to it), understanding (it has to know your business to
+         * earn that), reliability (it's true of every reply, not just
+         * this one) and autonomy (the unstated tension that it was
+         * sent without you) into one short, ownable line — never
+         * generic SaaS phrasing like "AI-powered" or "automate your
+         * replies," which describe the mechanism instead of the
+         * outcome. */}
         <motion.p
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, ease: EASE, delay: 0.4 }}
           className="mx-auto mt-6 max-w-[42ch] text-[17px] leading-relaxed text-muted-foreground sm:text-[18px]"
         >
-          Every WhatsApp message gets a reply that{" "}
-          <span className="font-semibold text-foreground">actually knows your business</span>.
+          Every WhatsApp message gets a reply{" "}
+          <span className="font-semibold text-foreground">you&apos;d actually send</span>.
         </motion.p>
 
         <motion.div

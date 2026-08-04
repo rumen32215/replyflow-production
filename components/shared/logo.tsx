@@ -23,7 +23,7 @@ export function Logo({ className, showWordmark = true }: { className?: string; s
         </svg>
       </span>
       {showWordmark && (
-        <span className="text-[19px] font-extrabold tracking-tight">
+        <span className="text-[19px] font-extrabold tracking-tighter">
           <GradientText>{BRAND.name}</GradientText>
         </span>
       )}

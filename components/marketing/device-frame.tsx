@@ -18,6 +18,16 @@ import { cn } from "@/lib/utils";
  * first version, per the same review — restrained enough to read as a
  * real device, not an illustration of one.
  *
+ * Fifth founder review (2026-08-04): still "the weakest part" even
+ * with a fixed size — the chassis read as a flat painted gradient
+ * rather than a photographed object. A real studio product shot has a
+ * light source (a rim catching one edge), a curved-metal gradient
+ * (diagonal, several stops, not a flat top-to-bottom fade), and a
+ * grounded contact shadow close to the object in addition to the soft
+ * ambient one further out. All three added below — no new motion, no
+ * new elements that move, purely how the existing static chassis
+ * catches light.
+ *
  * Wraps the existing `PhoneFrame`/`Bubble` conversation UI unchanged —
  * this is presentation only, never a change to that shared component
  * (still real, load-bearing UI inside the authenticated product).
@@ -25,9 +35,16 @@ import { cn } from "@/lib/utils";
 export function DeviceFrame({ children, className }: { children: React.ReactNode; className?: string }) {
   return (
     <div className={cn("relative", className)}>
-      <div className="relative rounded-[38px] bg-gradient-to-b from-[#38383d] via-[#19191c] to-[#0a0a0c] p-[6px] pt-6 shadow-[0_50px_100px_-24px_rgba(15,23,42,0.5),0_25px_50px_-28px_rgba(15,23,42,0.4)]">
+      <div className="relative rounded-[38px] bg-gradient-to-br from-[#4b4b53] via-[#232327] via-40% to-[#0a0a0c] p-[6px] pt-6 shadow-[0_2px_10px_-2px_rgba(0,0,0,0.35),0_50px_100px_-24px_rgba(15,23,42,0.5),0_25px_50px_-28px_rgba(15,23,42,0.4)]">
         {/* Edge highlight — a real object catching light, not decoration. */}
         <div className="pointer-events-none absolute inset-0 rounded-[38px] ring-1 ring-inset ring-white/10" aria-hidden />
+
+        {/* A studio key-light catching the left edge — the one detail
+         * that most separates "photographed metal" from "flat gradient." */}
+        <div
+          className="pointer-events-none absolute -left-px top-6 bottom-6 z-10 w-px rounded-full bg-gradient-to-b from-transparent via-white/40 to-transparent"
+          aria-hidden
+        />
 
         {/* Camera/notch cutout, sitting in its own bezel space above the
          * screen — never overlapping real content. */}

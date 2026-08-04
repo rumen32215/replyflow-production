@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { ArrowRight, Check } from "lucide-react";
+import { ArrowRight, Check, CheckCircle2, AlertTriangle } from "lucide-react";
 import { EASE } from "@/components/shared/motion";
 import { GradientText } from "@/components/shared/gradient-text";
 import { PhoneFrame, Bubble } from "@/components/shared/phone-preview";
@@ -34,6 +34,18 @@ interface Exchange {
   reply: string;
 }
 
+/** What the conversation quietly leaves behind once it settles — the
+ * fixed-height screen (`device-frame.tsx`) has real empty space below
+ * a two-exchange thread; fifth founder review (2026-08-04) asked for
+ * that space to show the product actually working, not sit blank. One
+ * per story, each a real, accurate downstream outcome of that exact
+ * conversation (a Work Card, an escalation flag, a diary booking) —
+ * never an invented capability. */
+interface ProductMoment {
+  text: string;
+  tone: "success" | "attention";
+}
+
 /** Matches one of the exact words in the eyebrow line below — the
  * mechanism the trade-highlight (§8 of this review) is built on. */
 type Trade = "plumbers" | "electricians" | "builders" | "roofers" | "painters";
@@ -42,6 +54,7 @@ interface ConversationStory {
   businessName: string;
   trade: Trade;
   exchanges: readonly [Exchange, Exchange];
+  productMoment: ProductMoment;
 }
 
 const STORIES: readonly ConversationStory[] = [
@@ -58,6 +71,7 @@ const STORIES: readonly ConversationStory[] = [
         reply: "It will, yeah — I'll let him know it's a repeat visit. See you at 4.",
       },
     ],
+    productMoment: { text: "Job card created — kitchen tap, 4:00pm", tone: "success" },
   },
   {
     businessName: "Harris Electrical",
@@ -72,6 +86,7 @@ const STORIES: readonly ConversationStory[] = [
         reply: "Great — they'll ring you on this number in the next hour or so.",
       },
     ],
+    productMoment: { text: "Callback reminder set for this afternoon", tone: "success" },
   },
   {
     businessName: "Ridgeline Roofing",
@@ -86,6 +101,7 @@ const STORIES: readonly ConversationStory[] = [
         reply: "No problem — if you can, keep something under the leak until then.",
       },
     ],
+    productMoment: { text: "Flagged for you — urgent, water ingress", tone: "attention" },
   },
   {
     businessName: "Bell & Co Decorators",
@@ -100,6 +116,7 @@ const STORIES: readonly ConversationStory[] = [
         reply: "Brilliant, I'll get that booked in for Thursday.",
       },
     ],
+    productMoment: { text: "Booking added — Thursday", tone: "success" },
   },
 ] as const;
 
@@ -184,12 +201,40 @@ function TypedReply({ text }: { text: string }) {
   );
 }
 
+/** The settled-conversation reveal — a system moment, not another
+ * chat bubble, so it never reads as something either party "said." */
+function ProductMomentCard({ moment }: { moment: ProductMoment }) {
+  const Icon = moment.tone === "attention" ? AlertTriangle : CheckCircle2;
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.5, ease: EASE }}
+      className="mx-auto flex max-w-[88%] items-center gap-2 rounded-xl border border-border/60 bg-white/90 px-3 py-2 text-[12px] font-semibold text-foreground shadow-sm backdrop-blur-sm"
+    >
+      <Icon
+        className={cn("h-4 w-4 shrink-0", moment.tone === "attention" ? "text-attention" : "text-success")}
+        strokeWidth={2.5}
+      />
+      {moment.text}
+    </motion.div>
+  );
+}
+
+/** How long the finished thread rests before the product moment quietly
+ * appears beneath it — long enough to read as "after," not "during." */
+const PRODUCT_MOMENT_DELAY_MS = 900;
+
 /** One story's own conversation, playing once from the top on mount.
  * The phone frame itself is now a fixed size (`DeviceFrame`); this
  * scrolls its own message thread inside that fixed frame rather than
- * growing it, and keeps the thread scrolled to the newest message. */
+ * growing it, and keeps the thread scrolled to the newest message.
+ * Once the last reply has finished typing, the fixed screen's
+ * remaining empty space is used to reveal what that conversation left
+ * behind (fifth founder review, 2026-08-04) rather than sitting blank. */
 function StoryConversation({ story }: { story: ConversationStory }) {
   const [visibleCount, setVisibleCount] = useState(0);
+  const [showMoment, setShowMoment] = useState(false);
   const startedRef = useRef(false);
   const bodyRef = useRef<HTMLDivElement>(null);
 
@@ -209,6 +254,8 @@ function StoryConversation({ story }: { story: ConversationStory }) {
         setVisibleCount(i + 1);
         await wait(estimateTypeMs(story.exchanges[i]!.reply));
       }
+      await wait(PRODUCT_MOMENT_DELAY_MS);
+      setShowMoment(true);
     }
     void run();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -216,7 +263,7 @@ function StoryConversation({ story }: { story: ConversationStory }) {
 
   useEffect(() => {
     bodyRef.current?.scrollTo({ top: bodyRef.current.scrollHeight, behavior: "smooth" });
-  }, [visibleCount]);
+  }, [visibleCount, showMoment]);
 
   return (
     <PhoneFrame
@@ -231,6 +278,11 @@ function StoryConversation({ story }: { story: ConversationStory }) {
           <TypedReply text={exchange.reply} />
         </div>
       ))}
+      {showMoment && (
+        <div className="pt-2">
+          <ProductMomentCard moment={story.productMoment} />
+        </div>
+      )}
     </PhoneFrame>
   );
 }
@@ -247,7 +299,19 @@ function AutoConversation({ story, storyIndex }: { story: ConversationStory; sto
           className="pointer-events-none absolute inset-0 -z-10 rounded-full blur-3xl"
           style={{ background: "radial-gradient(circle, rgba(37,99,235,0.18), rgba(34,197,94,0.11) 55%, transparent 75%)" }}
         />
-        <motion.div animate={{ y: [0, -6, 0] }} transition={{ duration: 4.2, repeat: Infinity, ease: "easeInOut" }}>
+        {/* A held-at-an-angle presentation, not dead-on — the single
+         * biggest thing separating a photographed product shot from a
+         * screenshot-in-a-frame (fifth founder review, 2026-08-04, a
+         * real Apple Wallet promo card as the reference point). The
+         * tilt itself is static (same value in `initial` and
+         * `animate`, so nothing rotates); only `y` actually animates,
+         * floating within that fixed 3D plane rather than flat. */}
+        <motion.div
+          initial={{ y: 0, rotateY: -9, rotateX: 3, rotateZ: -1 }}
+          animate={{ y: [0, -6, 0], rotateY: -9, rotateX: 3, rotateZ: -1 }}
+          transition={{ duration: 4.2, repeat: Infinity, ease: "easeInOut" }}
+          style={{ transformPerspective: 1300 }}
+        >
           <DeviceFrame>
             <AnimatePresence mode="wait">
               <motion.div
@@ -309,10 +373,75 @@ function TradeEyebrow({ activeTrade }: { activeTrade: Trade | null }) {
 
 const TRIAL_POINTS = ["7 days free", "No card needed", "No commitment"] as const;
 
+/** Several pre-written statements, same emotional register as the
+ * original ("up a ladder") — sixth founder review (2026-08-04) asked
+ * for the headline itself to rotate via crossfade, not typing, kept
+ * to a handful so it reads as considered rather than gimmicky. Each
+ * names the substring `Headline` should carry through `GradientText`. */
+interface Headline {
+  text: string;
+  emphasis: string;
+}
+
+const HEADLINES: readonly Headline[] = [
+  { text: "Never miss another job because you were up a ladder.", emphasis: "up a ladder" },
+  { text: "Never lose another customer because you couldn't answer.", emphasis: "couldn't answer" },
+  { text: "Your customers never know you're busy.", emphasis: "never know" },
+  { text: "Your business keeps moving while you work.", emphasis: "keeps moving" },
+  { text: "Every message gets handled.", emphasis: "handled" },
+  { text: "Your receptionist never takes a day off.", emphasis: "day off" },
+] as const;
+
+const HEADLINE_INTERVAL_MS = 5200;
+
+/** Sequential, not random — the order itself never changes, so the
+ * first render is identical on server and client and there's no
+ * `Math.random()`-in-`useState` hydration risk to avoid here at all.
+ * Real `setInterval`-with-cleanup, the correct convention for a
+ * genuinely long-lived effect (see `useRotatingStoryIndex` above). */
+function useRotatingHeadlineIndex(): number {
+  const [index, setIndex] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => {
+      setIndex((i) => (i + 1) % HEADLINES.length);
+    }, HEADLINE_INTERVAL_MS);
+    return () => clearInterval(id);
+  }, []);
+  return index;
+}
+
+/** A `background-clip: text` gradient recalculates per line box, so a
+ * multi-word emphasis phrase that happens to wrap mid-phrase (confirmed
+ * live: "couldn't" / "answer" landing on separate lines at desktop
+ * width) rendered as one flat colour per line instead of one smooth
+ * sweep — reading as two disconnected colours, not one considered
+ * accent. `whitespace-nowrap` on the emphasis span doesn't stop the
+ * phrase from wrapping to the next line when it needs to (the browser
+ * can still break immediately before/after a nowrap span) — it only
+ * stops it from splitting internally, so the gradient is always one
+ * continuous sweep across the whole phrase, on whichever line it
+ * lands. (Each `HEADLINES` emphasis is kept short enough — a couple
+ * of words — that "the whole phrase as one unbreakable unit" never
+ * risks overflowing the narrowest, mobile, width.) */
+function HeadlineText({ headline }: { headline: Headline }) {
+  const start = headline.text.indexOf(headline.emphasis);
+  const before = headline.text.slice(0, start);
+  const after = headline.text.slice(start + headline.emphasis.length);
+  return (
+    <>
+      {before}
+      <GradientText className="whitespace-nowrap">{headline.emphasis}</GradientText>
+      {after}
+    </>
+  );
+}
+
 export function Hero() {
   const router = useRouter();
   const storyIndex = useRotatingStoryIndex();
   const story = STORIES[storyIndex]!;
+  const headlineIndex = useRotatingHeadlineIndex();
+  const headline = HEADLINES[headlineIndex]!;
 
   return (
     <section className="relative overflow-hidden">
@@ -324,18 +453,23 @@ export function Hero() {
         <div className="aurora-blob aurora-blob-success" />
       </div>
 
-      <div className="relative mx-auto max-w-3xl px-6 pt-20 text-center sm:pt-28 lg:pt-32">
+      <div className="relative mx-auto max-w-3xl px-6 pt-12 text-center sm:pt-28 lg:pt-32">
         <TradeEyebrow activeTrade={story.trade} />
 
-        <motion.h1
-          initial={{ opacity: 0, y: 14 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, ease: EASE, delay: 0.15 }}
-          className="text-[34px] font-extrabold leading-[1.12] tracking-tight sm:text-[44px] lg:text-[52px]"
-        >
-          Never miss another job because you were{" "}
-          <GradientText>up a ladder</GradientText>.
-        </motion.h1>
+        <motion.div layout transition={{ duration: 0.4, ease: EASE }}>
+          <AnimatePresence mode="wait">
+            <motion.h1
+              key={headlineIndex}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              transition={{ duration: 0.5, ease: EASE }}
+              className="text-[34px] font-extrabold leading-[1.12] tracking-tight sm:text-[44px] lg:text-[52px]"
+            >
+              <HeadlineText headline={headline} />
+            </motion.h1>
+          </AnimatePresence>
+        </motion.div>
 
         <motion.p
           initial={{ opacity: 0, y: 12 }}
@@ -343,9 +477,9 @@ export function Hero() {
           transition={{ duration: 0.6, ease: EASE, delay: 0.4 }}
           className="mx-auto mt-6 max-w-[46ch] text-[17px] leading-relaxed text-muted-foreground sm:text-[18px]"
         >
-          ReplyFlow answers your{" "}
-          <span className="font-semibold text-foreground">WhatsApp while you work</span> — and actually{" "}
-          <span className="font-semibold text-foreground">knows your business</span>, not just how to chat.
+          Your customers keep messaging{" "}
+          <span className="font-semibold text-foreground">on WhatsApp</span> — ReplyFlow replies with{" "}
+          <span className="font-semibold text-foreground">real knowledge of your business</span>, not generic chat.
         </motion.p>
 
         <motion.div

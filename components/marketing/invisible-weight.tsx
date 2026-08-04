@@ -1,78 +1,92 @@
 "use client";
 
+import { CalendarCheck, MessageCircle, ClipboardCheck, CheckCircle2 } from "lucide-react";
 import { motion } from "framer-motion";
-import { EASE } from "@/components/shared/motion";
+import { EASE, ScrollReveal } from "@/components/shared/motion";
 
 /**
  * Landing Experience, Section 2 — The Invisible Weight
- * (`DOCS/SPECS/ReplyFlow-Landing-Experience-Design.md` §3). Recognition,
- * not explanation — the questions are quoted directly from Founder
- * Handbook Ch.01's "The Invisible Weight," unaltered, closing on that
- * same chapter's own line. No feature mapping here; that's §4's job.
+ * (`DOCS/SPECS/ReplyFlow-Landing-Experience-Design.md` §3).
  *
- * Fourth founder review (2026-08-04): the four questions all opening
- * "Did I..." read as a list once every line arrives in identical size
- * and rhythm — the fix isn't different words (these are quoted, not
- * invented) but irregular presentation: a hand-tuned, uneven pace
- * (quick pair, a real pause, quick pair again) and a small, deliberate
- * size variation per line, closer to how these thoughts actually
- * arrive than a metronome would be. No scatter, no rotation, no
- * gimmicks — still centred, still calm, still `whileInView` (first
- * real use of the scroll-triggered "Arrival" motion purpose for a
- * staggered group, `ScrollReveal`'s own technique applied per line).
+ * Sixth founder review (2026-08-04) — the biggest content change of
+ * this pass. The previous version quoted Founder Handbook Ch.01's four
+ * "Did I..." questions directly; the founder's own instruction here
+ * was explicit: stop naming the worry, start showing the answer to
+ * it — a quiet preview of what ReplyFlow actually keeps track of,
+ * closer to a dashboard teaser than a list of anxieties. The one line
+ * from the old version the founder singled out as already right (*"The
+ * mental load is often far bigger than the physical work"*) survives,
+ * moved to the top as the section's opening thought rather than its
+ * closing one — recognition first, then the demonstration.
  *
- * The closing line is the section's actual emotional conclusion, not
- * a caption — given real size, weight, and its own slower, separate
- * entrance after a genuine pause, rather than just the fifth line in
- * the same list.
+ * The four rows below reuse the product's own real status vocabulary
+ * and colour tokens (attention = needs a look, success = resolved,
+ * primary = neutral information) — a genuine taste of the real
+ * dashboard's visual language, not an invented illustration of one.
+ * Honest per Visual Language §0.1: captioned as an example, since a
+ * signed-out visitor has no real data yet.
  */
 
-interface Question {
+interface StatusRow {
+  icon: typeof CalendarCheck;
+  tone: "success" | "attention" | "primary";
   text: string;
-  /** Seconds after the section enters view — hand-tuned, not uniform. */
-  delay: number;
-  /** A small, deliberate step, not a dramatic one. */
-  size: string;
 }
 
-const QUESTIONS: readonly Question[] = [
-  { text: "Did I reply to that customer?", delay: 0, size: "text-[22px] sm:text-[25px]" },
-  { text: "Did I send that quotation?", delay: 0.4, size: "text-[19px] sm:text-[22px]" },
-  { text: "Did I forget somebody?", delay: 1.3, size: "text-[24px] sm:text-[27px]" },
-  { text: "What jobs need my attention today?", delay: 1.7, size: "text-[20px] sm:text-[23px]" },
+const ROWS: readonly StatusRow[] = [
+  { icon: CalendarCheck, tone: "success", text: "3 jobs booked today" },
+  { icon: MessageCircle, tone: "attention", text: "1 customer waiting for a reply" },
+  { icon: ClipboardCheck, tone: "primary", text: "2 quotes waiting for your OK" },
+  { icon: CheckCircle2, tone: "success", text: "Nothing's been missed this week" },
 ] as const;
+
+const TONE_CLASSES: Record<StatusRow["tone"], string> = {
+  success: "bg-success/10 text-success",
+  attention: "bg-attention/10 text-attention",
+  primary: "bg-primary/10 text-primary",
+};
 
 export function InvisibleWeight() {
   return (
     <section className="bg-card">
-      <div className="mx-auto max-w-2xl px-6 py-20 text-center sm:py-28 lg:py-32">
-        <div className="space-y-5 sm:space-y-6">
-          {QUESTIONS.map((question) => (
-            <motion.p
-              key={question.text}
-              initial={{ opacity: 0, y: 10 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true, margin: "0px 0px -80px 0px" }}
-              transition={{ duration: 0.5, ease: EASE, delay: question.delay }}
-              className={`${question.size} font-semibold leading-snug tracking-tight text-foreground`}
-            >
-              {question.text}
-            </motion.p>
-          ))}
-        </div>
-
-        {/* The conclusion, not another list item — larger, heavier,
-         * and given a real pause and its own slower settle rather than
-         * arriving on the same beat as the questions above it. */}
+      <div className="mx-auto max-w-lg px-6 py-20 text-center sm:py-28 lg:py-32">
         <motion.p
-          initial={{ opacity: 0, y: 14, scale: 0.97 }}
-          whileInView={{ opacity: 1, y: 0, scale: 1 }}
+          initial={{ opacity: 0, y: 12 }}
+          whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true, margin: "0px 0px -80px 0px" }}
-          transition={{ duration: 0.7, ease: EASE, delay: 2.6 }}
-          className="mt-14 text-[19px] font-semibold leading-relaxed text-foreground sm:mt-16 sm:text-[22px]"
+          transition={{ duration: 0.6, ease: EASE }}
+          className="text-[21px] font-semibold leading-relaxed text-foreground sm:text-[24px]"
         >
           The mental load is often far bigger than the physical work.
         </motion.p>
+
+        <motion.p
+          initial={{ opacity: 0, y: 10 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, margin: "0px 0px -80px 0px" }}
+          transition={{ duration: 0.5, ease: EASE, delay: 0.25 }}
+          className="mt-4 text-[15px] text-muted-foreground"
+        >
+          Here&apos;s what a day looks like once something else is keeping track.
+        </motion.p>
+
+        <ScrollReveal
+          delay={0.5}
+          className="mt-10 rounded-2xl border border-border bg-background p-5 text-left shadow-sm sm:p-6"
+        >
+          <div className="space-y-4">
+            {ROWS.map((row, i) => (
+              <ScrollReveal key={row.text} delay={0.6 + i * 0.1} className="flex items-center gap-3">
+                <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${TONE_CLASSES[row.tone]}`}>
+                  <row.icon className="h-4 w-4" strokeWidth={2.5} />
+                </span>
+                <span className="text-[14.5px] font-medium text-foreground">{row.text}</span>
+              </ScrollReveal>
+            ))}
+          </div>
+        </ScrollReveal>
+
+        <p className="mt-4 text-[12px] text-muted-foreground/70">An example day — not real data.</p>
       </div>
     </section>
   );

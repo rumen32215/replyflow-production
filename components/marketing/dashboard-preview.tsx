@@ -1,56 +1,120 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import {
   MessageCircle,
-  Sparkles,
-  BookOpen,
-  FileText,
   CalendarCheck,
+  AlertTriangle,
+  UserPlus,
+  CheckCircle2,
+  Clock,
+  FileText,
   Bell,
+  BookOpen,
 } from "lucide-react";
-import { motion } from "framer-motion";
-import { EASE, ScrollReveal } from "@/components/shared/motion";
+import { motion, AnimatePresence } from "framer-motion";
+import { EASE, ScrollReveal, GentleSwap } from "@/components/shared/motion";
 
 /**
  * Landing Experience, Section 2 — was "The Invisible Weight" (worry
- * questions), then a dashboard-stat teaser (sixth founder review).
+ * questions), then a dashboard-stat teaser, then a labelled sign-up
+ * checklist preview (ninth founder review).
  *
- * Ninth founder review (2026-08-04): "this is now the weakest section
- * — someone discovering ReplyFlow has no idea what these numbers
- * mean." The phone above already demonstrates the product; this
- * section's job is to answer the next question a genuinely interested
- * visitor has — "what actually happens after I sign up?" — with a
- * small, labelled preview of the real dashboard (`Front Desk`) rather
- * than unexplained counts. Also fixes a real gap named directly: the
- * WhatsApp Business connection (one of the biggest selling points)
- * was barely mentioned anywhere on the page — it's now the first,
- * most visually distinct tile, in the product's real WhatsApp green,
- * plus its own explicit line beneath the preview.
+ * V7 "Prove it, don't explain it" (2026-08-04): "now the weakest
+ * section" again, for a different reason than before — the phone
+ * above already *proves* the product works; this section immediately
+ * reverted to explaining it ("what happens the moment you sign up?"),
+ * a signup-checklist framing that doesn't belong right after a live
+ * demo. The brief: replace the story entirely, and answer "what is
+ * ReplyFlow actually doing behind the scenes?" — while the owner is
+ * out working, not while they're filling in a signup form.
+ *
+ * Two things needed to be true for the preview to read as "she's
+ * genuinely working right now" rather than a static screenshot:
+ * events had to keep happening on their own (the live feed below,
+ * `useLiveFeed`) and the thing everyone claims — "it learns your
+ * business" — had to be shown as concrete examples, not asserted
+ * (`LEARNED`, point 4 of the brief, literally: show what it learns
+ * rather than say it learns).
  */
 
-interface Tile {
-  icon: typeof Sparkles;
+interface ActivityEvent {
+  icon: typeof MessageCircle;
   tone: "primary" | "success" | "attention" | "learning";
   text: string;
 }
 
-const TILES: readonly Tile[] = [
-  { icon: Sparkles, tone: "primary", text: "Receptionist online" },
-  { icon: BookOpen, tone: "learning", text: "Business knowledge taught" },
-  { icon: FileText, tone: "primary", text: "Quotes ready to send" },
-  { icon: CalendarCheck, tone: "success", text: "Appointments booked" },
-  { icon: MessageCircle, tone: "attention", text: "Customer waiting for a reply" },
-  { icon: Bell, tone: "learning", text: "Team notified" },
+/** Present-perfect, one completed action each — read as things that
+ * *just happened*, not status labels. A WhatsApp mention survives
+ * here specifically so the "connects to your existing number" claim
+ * (a named priority in the previous review) stays visible without
+ * this section reverting to a checklist to say it. */
+const ACTIVITY: readonly ActivityEvent[] = [
+  { icon: MessageCircle, tone: "primary", text: "Answered a WhatsApp message about tomorrow" },
+  { icon: CalendarCheck, tone: "success", text: "Booked Thursday afternoon into the diary" },
+  { icon: AlertTriangle, tone: "attention", text: "Spotted an urgent job and alerted the team" },
+  { icon: UserPlus, tone: "primary", text: "Saved a new customer's details automatically" },
+  { icon: CheckCircle2, tone: "success", text: "Cleared the inbox — every message answered" },
+  { icon: Clock, tone: "learning", text: "Set a reminder to call back this afternoon" },
+  { icon: FileText, tone: "primary", text: "Sent a quote while still finishing the last job" },
+  { icon: Bell, tone: "learning", text: "Notified the team the moment it mattered" },
 ] as const;
 
-const TONE_CLASSES: Record<Tile["tone"], string> = {
+/** What "she learns your business" concretely means — shown, not
+ * claimed. Cycles the same way the sign-up page's own reassurance
+ * line does (`signup-form.tsx`'s `REASSURANCE_LINES`), reusing the
+ * project's established "quiet rotating proof line" pattern. */
+const LEARNED: readonly string[] = [
+  "your opening hours",
+  "which areas you cover",
+  "how you price call-outs",
+  "what counts as an emergency",
+  "your most-asked questions",
+  "how you like bookings confirmed",
+] as const;
+
+const TONE_CLASSES: Record<ActivityEvent["tone"], string> = {
   primary: "bg-primary/10 text-primary",
   success: "bg-success/10 text-success",
-  attention: "bg-attention/10 text-attention",
+  attention: "bg-attention/15 text-attention",
   learning: "bg-learning/10 text-learning",
 };
 
+const FEED_VISIBLE = 3;
+const FEED_INTERVAL_MS = 3400;
+const LEARNED_INTERVAL_MS = 2600;
+
+function useRotatingIndex(length: number, intervalMs: number): number {
+  const [index, setIndex] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setIndex((i) => (i + 1) % length), intervalMs);
+    return () => clearInterval(id);
+  }, [length, intervalMs]);
+  return index;
+}
+
+/** A live log, not a static list — a new event slides in from the top
+ * on its own timer, the oldest visible one slides out, and every card
+ * still on screen shifts down via `layout` rather than jumping. */
+function useLiveFeed(intervalMs: number): number {
+  const [head, setHead] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setHead((h) => h + 1), intervalMs);
+    return () => clearInterval(id);
+  }, [intervalMs]);
+  return head;
+}
+
 export function DashboardPreview() {
+  const head = useLiveFeed(FEED_INTERVAL_MS);
+  const learnedIndex = useRotatingIndex(LEARNED.length, LEARNED_INTERVAL_MS);
+
+  const visible = Array.from({ length: FEED_VISIBLE }, (_, k) => {
+    const pos = head - k;
+    const eventIndex = ((pos % ACTIVITY.length) + ACTIVITY.length) % ACTIVITY.length;
+    return { key: pos, event: ACTIVITY[eventIndex]! };
+  });
+
   return (
     <section className="bg-card">
       <div className="mx-auto max-w-lg px-6 py-20 text-center sm:py-28 lg:py-32">
@@ -61,7 +125,7 @@ export function DashboardPreview() {
           transition={{ duration: 0.6, ease: EASE }}
           className="text-[21px] font-semibold leading-relaxed text-foreground sm:text-[24px]"
         >
-          What happens the moment you sign up?
+          While you&apos;re on the job, she&apos;s already working the phones.
         </motion.p>
 
         <motion.p
@@ -71,13 +135,9 @@ export function DashboardPreview() {
           transition={{ duration: 0.5, ease: EASE, delay: 0.25 }}
           className="mt-4 text-[15px] text-muted-foreground"
         >
-          In minutes, ReplyFlow becomes the digital front desk for your business.
+          Every reply, booking and follow-up happens quietly in the background. Here&apos;s a snapshot of what that looks like, live.
         </motion.p>
 
-        {/* A real, labelled window — "Front Desk" is the product's own
-         * name for this screen, not an invented mockup title — with a
-         * live "online" pulse so the preview itself feels alive, the
-         * same instinct as the phone above. */}
         <ScrollReveal
           delay={0.5}
           className="mt-10 overflow-hidden rounded-2xl border border-border bg-background text-left shadow-md"
@@ -99,43 +159,39 @@ export function DashboardPreview() {
           </div>
 
           <div className="p-4 sm:p-5">
-            {/* The WhatsApp connection is one of the biggest selling
-             * points and the page barely said it out loud — this tile
-             * is deliberately larger and in WhatsApp's own real green
-             * (not the app's internal `success` token), so it reads as
-             * distinct on sight, not just another row in the list. */}
-            <ScrollReveal
-              delay={0.6}
-              className="mb-3 flex items-center gap-3 rounded-xl border border-[#25D366]/25 bg-[#25D366]/[0.08] px-3.5 py-3"
-            >
-              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#25D366]/15">
-                <MessageCircle className="h-[18px] w-[18px] text-[#128C4A]" strokeWidth={2.5} />
-              </span>
-              <div className="min-w-0">
-                <p className="text-[14px] font-semibold text-foreground">WhatsApp Business connected</p>
-                <p className="text-[12px] text-muted-foreground">Your existing number — no new app for customers to learn.</p>
-              </div>
-            </ScrollReveal>
+            <div className="flex flex-col gap-2">
+              <AnimatePresence initial={false}>
+                {visible.map(({ key, event }) => (
+                  <motion.div
+                    key={key}
+                    layout
+                    initial={{ opacity: 0, y: -10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: 10 }}
+                    transition={{ duration: 0.5, ease: EASE }}
+                    className="flex items-center gap-2.5 rounded-xl border border-border/60 bg-card px-3 py-2.5"
+                  >
+                    <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${TONE_CLASSES[event.tone]}`}>
+                      <event.icon className="h-3.5 w-3.5" strokeWidth={2.5} />
+                    </span>
+                    <span className="text-[13px] font-medium text-foreground">{event.text}</span>
+                  </motion.div>
+                ))}
+              </AnimatePresence>
+            </div>
 
-            <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
-              {TILES.map((tile, i) => (
-                <ScrollReveal
-                  key={tile.text}
-                  delay={0.7 + i * 0.08}
-                  className="flex items-center gap-2.5 rounded-xl border border-border/60 bg-card px-3 py-2.5"
-                >
-                  <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${TONE_CLASSES[tile.tone]}`}>
-                    <tile.icon className="h-3.5 w-3.5" strokeWidth={2.5} />
-                  </span>
-                  <span className="text-[13px] font-medium text-foreground">{tile.text}</span>
-                </ScrollReveal>
-              ))}
+            <div className="mt-3 flex flex-wrap items-center gap-x-1.5 gap-y-1 border-t border-border/60 pt-3 text-[12.5px] font-semibold text-learning">
+              <BookOpen className="h-3.5 w-3.5 shrink-0" strokeWidth={2.5} />
+              <span>Just learned:</span>
+              <GentleSwap swapKey={learnedIndex} className="font-medium text-foreground/80">
+                {LEARNED[learnedIndex]}
+              </GentleSwap>
             </div>
           </div>
         </ScrollReveal>
 
         <p className="mt-4 text-[12px] text-muted-foreground/70">
-          An example office — not real data. Connects to the WhatsApp Business number you already use.
+          An example office, showing typical activity — not real data. Runs on the WhatsApp Business number you already use.
         </p>
       </div>
     </section>

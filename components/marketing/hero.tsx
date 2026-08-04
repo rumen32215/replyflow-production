@@ -18,6 +18,7 @@ import { GradientText } from "@/components/shared/gradient-text";
 import { PhoneFrame, Bubble } from "@/components/shared/phone-preview";
 import { TypingDots, useTypedMessage } from "@/components/shared/typed-message";
 import { DeviceFrame } from "@/components/marketing/device-frame";
+import { useLaunchTransition, TRANSITION_NAVIGATE_MS } from "@/components/shared/page-transition";
 import { cn } from "@/lib/utils";
 
 /**
@@ -91,8 +92,8 @@ const STORIES: readonly ConversationStory[] = [
       },
     ],
     productMoments: [
-      { text: "Job card created — kitchen tap, 4:00pm", kind: "job" },
-      { text: "Added to today's schedule", kind: "scheduled" },
+      { text: "Confirmed the 4pm slot with the customer", kind: "job" },
+      { text: "Diary updated automatically", kind: "scheduled" },
     ],
   },
   {
@@ -109,8 +110,8 @@ const STORIES: readonly ConversationStory[] = [
       },
     ],
     productMoments: [
-      { text: "Callback reminder set for this afternoon", kind: "scheduled" },
-      { text: "Customer added to follow-ups", kind: "customer" },
+      { text: "Reminder set to call back this afternoon", kind: "scheduled" },
+      { text: "Customer saved for the follow-up", kind: "customer" },
     ],
   },
   {
@@ -127,8 +128,8 @@ const STORIES: readonly ConversationStory[] = [
       },
     ],
     productMoments: [
-      { text: "Flagged for you — urgent, water ingress", kind: "urgent" },
-      { text: "Team notified immediately", kind: "team" },
+      { text: "Recognised as urgent — water ingress", kind: "urgent" },
+      { text: "Team alerted without waiting to be asked", kind: "team" },
     ],
   },
   {
@@ -145,8 +146,8 @@ const STORIES: readonly ConversationStory[] = [
       },
     ],
     productMoments: [
-      { text: "Booking added — Thursday", kind: "booking" },
-      { text: "Schedule updated", kind: "scheduled" },
+      { text: "Thursday confirmed with the customer", kind: "booking" },
+      { text: "Diary updated for the new booking", kind: "scheduled" },
     ],
   },
 ] as const;
@@ -538,46 +539,14 @@ function HeadlineText({ headline }: { headline: Headline }) {
   );
 }
 
-/** How long the celebration plays before the actual navigation fires
- * — inside the founder's stated 400–700ms window. */
-const CTA_TRANSITION_MS = 600;
-
-/** Eighth founder review (2026-08-04): pressing "Meet your
- * receptionist" shouldn't just instantly swap to the sign-up page —
- * "a beautiful micro-celebration... like opening a premium Apple
- * application." A brand-gradient circle expands from the button's own
- * corner of the screen, a checkmark confirms, then the real
- * navigation fires underneath it — so whatever brief work Next does
- * to mount `/signup` is masked by an already-opaque, intentional
- * moment instead of being a blank flash. */
-function CtaTransitionOverlay() {
-  return (
-    <motion.div
-      className="fixed inset-0 z-[100] flex items-center justify-center bg-gradient-to-br from-primary to-success"
-      initial={{ clipPath: "circle(0% at 50% 100%)" }}
-      animate={{ clipPath: "circle(150% at 50% 100%)" }}
-      exit={{ opacity: 0, transition: { duration: 0.25 } }}
-      transition={{ duration: 0.55, ease: EASE }}
-    >
-      <motion.div
-        initial={{ scale: 0.4, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
-        transition={{ delay: 0.22, duration: 0.3, ease: EASE }}
-        className="flex h-16 w-16 items-center justify-center rounded-full bg-white/15 ring-1 ring-white/30"
-      >
-        <Check className="h-8 w-8 text-white" strokeWidth={3} />
-      </motion.div>
-    </motion.div>
-  );
-}
-
 export function Hero() {
   const router = useRouter();
   const storyIndex = useRotatingStoryIndex();
   const story = STORIES[storyIndex]!;
   const headlineIndex = useRotatingHeadlineIndex();
   const headline = HEADLINES[headlineIndex]!;
-  const [isTransitioning, setIsTransitioning] = useState(false);
+  const launchTransition = useLaunchTransition();
+  const [isNavigating, setIsNavigating] = useState(false);
 
   // Prefetched as soon as the Hero mounts, not on click — a
   // `router.push` from a plain button (unlike `<Link>`) never
@@ -588,16 +557,25 @@ export function Hero() {
     router.prefetch("/signup");
   }, [router]);
 
-  function handleMeetReceptionist() {
-    if (isTransitioning) return;
-    setIsTransitioning(true);
-    setTimeout(() => router.push("/signup"), CTA_TRANSITION_MS);
+  // V7 founder review (2026-08-04): the transition now expands from
+  // wherever the CTA actually sits on screen — a literal "CTA
+  // expansion" — rather than always from the viewport's bottom
+  // centre, and lives in the shared, cross-route `PageTransitionProvider`
+  // (root layout) so it survives the `/signup` navigation instead of
+  // unmounting with Hero and cutting hard to the new page.
+  function handleMeetReceptionist(e: React.MouseEvent<HTMLButtonElement>) {
+    if (isNavigating) return;
+    setIsNavigating(true);
+    const rect = e.currentTarget.getBoundingClientRect();
+    launchTransition({
+      x: ((rect.left + rect.width / 2) / window.innerWidth) * 100,
+      y: ((rect.top + rect.height / 2) / window.innerHeight) * 100,
+    });
+    setTimeout(() => router.push("/signup"), TRANSITION_NAVIGATE_MS);
   }
 
   return (
     <section className="relative overflow-hidden">
-      <AnimatePresence>{isTransitioning && <CtaTransitionOverlay />}</AnimatePresence>
-
       {/* Ambient atmosphere only — the one motion purpose that doesn't
        * carry information (Visual Language §7 category 4). Identical
        * primitive already used on Front Desk's own arrival moment. */}
@@ -647,8 +625,9 @@ export function Hero() {
           <motion.button
             type="button"
             onClick={handleMeetReceptionist}
-            whileHover={{ y: -2 }}
-            whileTap={{ scale: 0.985 }}
+            whileHover={isNavigating ? undefined : { y: -2 }}
+            whileTap={isNavigating ? undefined : { scale: 0.985 }}
+            animate={{ scale: isNavigating ? 1.06 : 1 }}
             transition={{ type: "spring", stiffness: 400, damping: 24 }}
             className="group relative inline-flex items-center gap-2 overflow-hidden rounded-xl bg-primary px-7 py-3.5 text-[15px] font-semibold text-primary-foreground shadow-sm transition-shadow duration-300 hover:shadow-[0_10px_30px_-8px_rgba(37,99,235,0.55)]"
           >

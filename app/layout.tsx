@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import { Toaster } from "@/components/ui/toaster";
+import { PageTransitionProvider } from "@/components/shared/page-transition";
 import "./globals.css";
 
 const inter = Inter({
@@ -19,7 +20,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" className={inter.variable}>
       <body className="font-sans">
-        {children}
+        <PageTransitionProvider>{children}</PageTransitionProvider>
         <Toaster />
       </body>
     </html>

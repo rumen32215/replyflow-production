@@ -71,22 +71,54 @@ type Trade = "plumbers" | "electricians" | "builders" | "roofers" | "painters";
  * recolour WhatsApp, never a gimmick." Purely an ambient glow *behind*
  * the phone (`MOOD_GLOW` in `AutoConversation` below) — the chrome,
  * bubbles and header stay exactly as they are for every story. */
-type StoryMood = "green" | "blue" | "amber" | "teal";
+type StoryMood = "green" | "blue" | "amber" | "teal" | "purple";
 
-interface ConversationStory {
+interface BaseSlide {
   businessName: string;
   trade: Trade;
   mood: StoryMood;
-  exchanges: readonly [Exchange, Exchange];
-  /** Sixth founder review (2026-08-04): "demonstrate a workflow, not
-   * only a conversation" — two sequential outcomes, not one, so the
-   * settled phone reads as ReplyFlow actually running the business
-   * behind the scenes rather than a single static confirmation. */
-  productMoments: readonly [ProductMoment, ProductMoment];
 }
 
-const STORIES: readonly ConversationStory[] = [
+/** Founder review (2026-08-04): "four conversations is too many —
+ * eventually your brain says okay I get it." Only two slides are
+ * still conversations now; the other two are a genuinely different
+ * *kind* of slide, not another exchange wearing a different business
+ * name. Every swipe now demonstrates something a different swipe
+ * doesn't. */
+interface ConversationSlide extends BaseSlide {
+  kind: "conversation";
+  exchanges: readonly [Exchange, Exchange];
+  /** A single settled outcome, not two — "reading is work"; one tight
+   * proof point lands faster than two. */
+  outcome: ProductMoment;
+}
+
+/** "Instead of another conversation, show ReplyFlow's brain... no
+ * chat, just intelligence." Same `PhoneFrame` chrome as every other
+ * slide (the founder's own principle: "the WhatsApp UI should remain
+ * almost untouched" — no new screen design to build or explain), but
+ * the thread area shows a short checklist of what's actually been
+ * learned instead of any bubbles. */
+interface BrainSlide extends BaseSlide {
+  kind: "brain";
+  learned: readonly string[];
+}
+
+/** "Show the owner's benefit... inbox empty, diary synced... owner
+ * still on the tools." Same checklist grammar as `BrainSlide` — the
+ * two non-conversation slides deliberately share one visual language,
+ * so the *only* things that vary are which slide is a conversation at
+ * all and what the checklist says, never a third new format. */
+interface BenefitSlide extends BaseSlide {
+  kind: "benefit";
+  outcomes: readonly string[];
+}
+
+type StorySlide = ConversationSlide | BrainSlide | BenefitSlide;
+
+const STORIES: readonly StorySlide[] = [
   {
+    kind: "conversation",
     businessName: "Dean's Plumbing",
     trade: "plumbers",
     mood: "green",
@@ -100,50 +132,10 @@ const STORIES: readonly ConversationStory[] = [
         reply: "It will, yeah — I'll let him know it's a repeat visit. See you at 4.",
       },
     ],
-    productMoments: [
-      { text: "Confirmed the 4pm slot with the customer", kind: "job" },
-      { text: "Diary updated automatically", kind: "scheduled" },
-    ],
+    outcome: { text: "Booked in for 4pm today", kind: "job" },
   },
   {
-    businessName: "Harris Electrical",
-    trade: "electricians",
-    mood: "blue",
-    exchanges: [
-      {
-        customer: "Hi, roughly how much would it be to add a couple of extra sockets in the kitchen?",
-        reply: "For two extra sockets on an easy day-time job, that's normally around £180 including parts. Want me to pencil in a time?",
-      },
-      {
-        customer: "Yeah go on then, when's the next slot?",
-        reply: "I've got Wednesday at 10am free — I'll get that booked in for you.",
-      },
-    ],
-    productMoments: [
-      { text: "Quote sent — grounded in your pricing rules", kind: "job" },
-      { text: "Wednesday 10am added to the diary", kind: "scheduled" },
-    ],
-  },
-  {
-    businessName: "Ridgeline Roofing",
-    trade: "roofers",
-    mood: "amber",
-    exchanges: [
-      {
-        customer: "A few tiles came off in last night's wind — there's water coming into the loft now.",
-        reply: "That's worth getting looked at today — I'm letting the team know right now, someone will call you shortly to sort a time.",
-      },
-      {
-        customer: "Thanks, really appreciate it.",
-        reply: "No problem — if you can, keep something under the leak until then.",
-      },
-    ],
-    productMoments: [
-      { text: "Recognised as urgent — water ingress", kind: "urgent" },
-      { text: "Team alerted without waiting to be asked", kind: "team" },
-    ],
-  },
-  {
+    kind: "conversation",
     businessName: "Whitmore Building Co",
     trade: "builders",
     mood: "teal",
@@ -157,10 +149,26 @@ const STORIES: readonly ConversationStory[] = [
         reply: "Perfect, I'll pencil that in — bring the photos up when they visit so nothing's missed.",
       },
     ],
-    productMoments: [
-      { text: "Booked in for a proper look — Thursday morning", kind: "job" },
-      { text: "Diary updated automatically", kind: "scheduled" },
+    outcome: { text: "Booked in for Thursday morning", kind: "booking" },
+  },
+  {
+    kind: "brain",
+    businessName: "Harris Electrical",
+    trade: "electricians",
+    mood: "blue",
+    learned: [
+      "Learned your call-out pricing",
+      "Learned your preferred suppliers",
+      "Knows what counts as an emergency",
+      "Answers exactly how you would",
     ],
+  },
+  {
+    kind: "benefit",
+    businessName: "Ridgeline Roofing",
+    trade: "roofers",
+    mood: "purple",
+    outcomes: ["Inbox cleared", "Diary synced", "Reminder set for tomorrow", "Customer confirmed", "You — still on the tools"],
   },
 ] as const;
 
@@ -171,13 +179,26 @@ function estimateTypeMs(text: string): number {
   return 150 + 520 + Math.min(1500, Math.max(650, text.length * 14));
 }
 
-function estimateStoryMs(story: ConversationStory): number {
-  return 900 + estimateTypeMs(story.exchanges[0].reply) + 1300 + estimateTypeMs(story.exchanges[1].reply);
+/** Checklist slides (`brain`/`benefit`) have no typing to time against,
+ * just a per-item reveal cadence — `CHECKLIST_STEP_MS` below is that
+ * cadence's nominal value, mirrored here for the auto-advance clock. */
+function estimateStoryMs(story: StorySlide): number {
+  if (story.kind === "conversation") {
+    return 900 + estimateTypeMs(story.exchanges[0].reply) + 1300 + estimateTypeMs(story.exchanges[1].reply);
+  }
+  const items = story.kind === "brain" ? story.learned.length : story.outcomes.length;
+  return 1000 + items * CHECKLIST_STEP_MS + 1200;
 }
 
 /** How long a finished conversation rests, fully settled, before the
  * next one quietly begins — long enough to actually read it. */
 const REST_MS = 6500;
+
+/** Nominal per-item reveal pace for the two checklist slides (`brain`,
+ * `benefit`) — real playback jitters this slightly (see
+ * `ChecklistSlideView`), this is just what the auto-advance clock
+ * plans against. */
+const CHECKLIST_STEP_MS = 650;
 
 function pickNextIndex(current: number): number {
   if (STORIES.length <= 1) return 0;
@@ -331,26 +352,21 @@ function ProductMomentCard({ moment }: { moment: ProductMoment }) {
   );
 }
 
-/** How long the finished thread rests before the first product moment
- * quietly appears beneath it — long enough to read as "after," not
- * "during" — and the pause between the first and second moment, short
- * enough to read as one continuous process rather than two unrelated
- * events. */
+/** How long the finished thread rests before the outcome quietly
+ * appears beneath it — long enough to read as "after," not "during." */
 const PRODUCT_MOMENT_DELAY_MS = 900;
-const PRODUCT_MOMENT_STEP_MS = 1100;
 
-/** One story's own conversation, playing once from the top on mount.
- * The phone frame itself is now a fixed size (`DeviceFrame`); this
- * scrolls its own message thread inside that fixed frame rather than
- * growing it, and keeps the thread scrolled to the newest message.
- * Once the last reply has finished typing, the fixed screen's
- * remaining empty space reveals what that conversation set in motion
- * — two sequential outcomes, not one, so it reads as ReplyFlow
- * actually running a small workflow rather than a single static
- * confirmation (sixth founder review, 2026-08-04). */
-function StoryConversation({ story }: { story: ConversationStory }) {
+/** A conversation slide, playing once from the top on mount. The
+ * phone frame itself is a fixed size (`DeviceFrame`); this scrolls
+ * its own message thread inside that fixed frame rather than growing
+ * it, and keeps the thread scrolled to the newest message. Once the
+ * last reply has finished typing, the fixed screen's remaining empty
+ * space reveals what that conversation set in motion — a single
+ * settled outcome (founder review, 2026-08-04: "reading is work," one
+ * tight proof point beats two competing for attention). */
+function ConversationSlideView({ slide }: { slide: ConversationSlide }) {
   const [visibleCount, setVisibleCount] = useState(0);
-  const [momentCount, setMomentCount] = useState(0);
+  const [showOutcome, setShowOutcome] = useState(false);
   const startedRef = useRef(false);
   const bodyRef = useRef<HTMLDivElement>(null);
 
@@ -372,15 +388,13 @@ function StoryConversation({ story }: { story: ConversationStory }) {
 
     async function run() {
       await wait(jitter(900, 150));
-      for (let i = 0; i < story.exchanges.length; i++) {
+      for (let i = 0; i < slide.exchanges.length; i++) {
         if (i > 0) await wait(jitter(1300, 250));
         setVisibleCount(i + 1);
-        await wait(estimateTypeMs(story.exchanges[i]!.reply));
+        await wait(estimateTypeMs(slide.exchanges[i]!.reply));
       }
       await wait(jitter(PRODUCT_MOMENT_DELAY_MS, 150));
-      setMomentCount(1);
-      await wait(jitter(PRODUCT_MOMENT_STEP_MS, 200));
-      setMomentCount(2);
+      setShowOutcome(true);
     }
     void run();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -388,31 +402,107 @@ function StoryConversation({ story }: { story: ConversationStory }) {
 
   useEffect(() => {
     bodyRef.current?.scrollTo({ top: bodyRef.current.scrollHeight, behavior: "smooth" });
-  }, [visibleCount, momentCount]);
+  }, [visibleCount, showOutcome]);
 
   return (
     <PhoneFrame
-      businessName={story.businessName}
+      businessName={slide.businessName}
       scrollable
       bodyRef={bodyRef}
       headerInsetTop
       className="h-full w-full rounded-none border-0 shadow-none"
     >
-      {story.exchanges.slice(0, visibleCount).map((exchange, i) => (
+      {slide.exchanges.slice(0, visibleCount).map((exchange, i) => (
         <div key={i}>
           <Bubble from="customer" className="lg:text-[14px]">{exchange.customer}</Bubble>
           <TypedReply text={exchange.reply} />
         </div>
       ))}
-      {momentCount > 0 && (
-        <div className="space-y-1.5 pt-2">
-          {story.productMoments.slice(0, momentCount).map((moment, i) => (
-            <ProductMomentCard key={i} moment={moment} />
-          ))}
+      {showOutcome && (
+        <div className="pt-2">
+          <ProductMomentCard moment={slide.outcome} />
         </div>
       )}
     </PhoneFrame>
   );
+}
+
+/** "No chat. Just intelligence" (`brain`) / "show the owner's
+ * benefit" (`benefit`) — the two non-conversation slides share this
+ * exact grammar deliberately (founder review, 2026-08-04): a short
+ * list of plain statements, each landing one at a time, no bubbles,
+ * no icons beyond a single reused checkmark. The last item on a
+ * `benefit` slide is the entire point of that slide — the only place
+ * this component allows itself any real emphasis. */
+function ChecklistSlideView({ slide }: { slide: BrainSlide | BenefitSlide }) {
+  const items = slide.kind === "brain" ? slide.learned : slide.outcomes;
+  const [visibleCount, setVisibleCount] = useState(0);
+  const startedRef = useRef(false);
+  const bodyRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (startedRef.current) return;
+    startedRef.current = true;
+    const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+    const jitter = (ms: number, spread: number) => ms + (Math.random() * spread * 2 - spread);
+
+    async function run() {
+      await wait(jitter(1000, 150));
+      for (let i = 0; i < items.length; i++) {
+        if (i > 0) await wait(jitter(CHECKLIST_STEP_MS, 120));
+        setVisibleCount(i + 1);
+      }
+    }
+    void run();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    bodyRef.current?.scrollTo({ top: bodyRef.current.scrollHeight, behavior: "smooth" });
+  }, [visibleCount]);
+
+  return (
+    <PhoneFrame
+      businessName={slide.businessName}
+      scrollable
+      bodyRef={bodyRef}
+      headerInsetTop
+      className="h-full w-full rounded-none border-0 shadow-none"
+    >
+      <div className="flex min-h-full flex-col items-center justify-center gap-2.5 py-4">
+        {items.slice(0, visibleCount).map((text, i) => {
+          const isPayoff = slide.kind === "benefit" && i === items.length - 1;
+          return (
+            <motion.div
+              key={text}
+              initial={{ opacity: 0, y: 10, scale: 0.96 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              transition={{ type: "spring", stiffness: 300, damping: 26 }}
+              className={cn(
+                "flex w-full max-w-[88%] items-center gap-2.5 rounded-xl border px-3.5 py-2.5 text-[13px] font-semibold shadow-sm backdrop-blur-sm lg:text-[14px]",
+                isPayoff ? "border-primary/25 bg-primary/[0.06] text-primary" : "border-border/60 bg-white/90 text-foreground"
+              )}
+            >
+              <span
+                className={cn(
+                  "flex h-5 w-5 shrink-0 items-center justify-center rounded-full",
+                  isPayoff ? "bg-primary/15" : "bg-success/15"
+                )}
+              >
+                <Check className={cn("h-3 w-3", isPayoff ? "text-primary" : "text-success")} strokeWidth={3} />
+              </span>
+              {text}
+            </motion.div>
+          );
+        })}
+      </div>
+    </PhoneFrame>
+  );
+}
+
+function StoryConversation({ story }: { story: StorySlide }) {
+  if (story.kind === "conversation") return <ConversationSlideView slide={story} />;
+  return <ChecklistSlideView slide={story} />;
 }
 
 /** Small dot pagination beneath the phone — the explicit signal that
@@ -452,12 +542,17 @@ const BATTERY_BY_STORY: readonly number[] = [97, 94, 90, 86] as const;
  * the glow this replaces, only the colour changes. Kept as a lookup
  * table (never a template-string colour) for the same reason
  * `MOMENT_STYLES` above is one: it's the honest way to say "these are
- * the only four, deliberately," not an open palette. */
+ * the only five, deliberately," not an open palette. `purple` matches
+ * the same `learning` design-system token already used everywhere
+ * else on this page for "organised/scheduled" (the Front Desk chains'
+ * own `Clock` icon, etc.) — the owner-benefit slide's own colour
+ * inherits that existing association rather than inventing a new one. */
 const MOOD_GLOW: Record<StoryMood, string> = {
   green: "radial-gradient(circle, rgba(34,197,94,0.20), rgba(34,197,94,0.08) 55%, transparent 75%)",
   blue: "radial-gradient(circle, rgba(37,99,235,0.20), rgba(37,99,235,0.08) 55%, transparent 75%)",
   amber: "radial-gradient(circle, rgba(245,158,11,0.22), rgba(245,158,11,0.08) 55%, transparent 75%)",
   teal: "radial-gradient(circle, rgba(20,184,166,0.20), rgba(20,184,166,0.08) 55%, transparent 75%)",
+  purple: "radial-gradient(circle, rgba(168,85,247,0.20), rgba(168,85,247,0.08) 55%, transparent 75%)",
 };
 
 /** V8 founder review (2026-08-04): "no longer a looping animation —
@@ -474,7 +569,7 @@ function AutoConversation({
   onPrev,
   onGoTo,
 }: {
-  story: ConversationStory;
+  story: StorySlide;
   storyIndex: number;
   onNext: () => void;
   onPrev: () => void;
@@ -593,18 +688,15 @@ function AutoConversation({
 
       {/* No pronoun, no "taught her" — quiet confidence rather than an
        * explanation. Still honest that this is illustrative (Visual
-       * Language §0.1), just said once, plainly.
-       *
-       * V8 audit finding (2026-08-04): a first-time visitor could
-       * plausibly read "Dean's Plumbing," "Harris Electrical" etc. as
-       * real reference customers rather than examples — nothing near
-       * the phone said otherwise, only the section below it did. One
-       * small, explicit line closes that gap without undercutting the
-       * demo itself. */}
+       * Language §0.1), just said once, plainly. Generalised from
+       * "how ReplyFlow replies" to "how ReplyFlow works" so it's true
+       * of all four slide kinds now, not just the two that are
+       * conversations (V10 audit finding, 2026-08-04, re-applied here
+       * to the restructured slides). */}
       <p className="mt-3 text-center text-[12px] text-muted-foreground/70">
-        How ReplyFlow replies — grounded in what&apos;s actually been taught, never guessed.
+        How ReplyFlow works — grounded in what&apos;s actually been taught, never guessed.
         <br />
-        Example conversations, not real customers.
+        Illustrative examples, not real customer data.
       </p>
     </div>
   );

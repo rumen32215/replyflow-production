@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { Logo } from "@/components/shared/logo";
 import { Hero } from "@/components/marketing/hero";
-import { DashboardPreview } from "@/components/marketing/dashboard-preview";
+import { DayInTheLife } from "@/components/marketing/day-in-the-life";
 
 /**
  * The ReplyFlow Landing Experience (`DOCS/SPECS/ReplyFlow-Landing-
@@ -32,7 +32,7 @@ export function LandingPage() {
 
       <main>
         <Hero />
-        <DashboardPreview />
+        <DayInTheLife />
         {/* Sections 3–8 (How ReplyFlow Works, Trust & Safety, Product
          * Intelligence, Business Understanding, Social Proof, Call to
          * Action) land here one at a time, per founder direction — not

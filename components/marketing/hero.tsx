@@ -12,6 +12,11 @@ import {
   Clock,
   UserPlus,
   Bell,
+  MessageCircle,
+  Sparkles,
+  BookOpen,
+  FileText,
+  CheckCircle2,
 } from "lucide-react";
 import { EASE } from "@/components/shared/motion";
 import { GradientText } from "@/components/shared/gradient-text";
@@ -72,12 +77,16 @@ type Trade = "plumbers" | "electricians" | "builders" | "roofers" | "painters";
  * the phone (`MOOD_GLOW` in `AutoConversation` below) — the chrome,
  * bubbles and header stay exactly as they are for every story.
  *
- * Founder review (2026-08-04): "the glow is not decorative, it is
- * storytelling... booking confirmed → warm green, urgent emergency →
- * subtle red, learning → blue, payoff → soft amber." Four moods for
- * four slides now, one each, no leftovers — matches `STORIES` below
- * exactly. */
-type StoryMood = "green" | "red" | "blue" | "amber";
+ * Founder review (2026-08-04): "booking confirmed → warm green,
+ * urgent emergency → subtle red, learning → blue, payoff → soft
+ * amber" — confirmed explicitly to mean red, "used efficiently," not
+ * a hue drift toward green. Named `"urgent"` here rather than `"red"`
+ * because that's its actual role on the page (it's what decides the
+ * value, not the other way round) — see `MOOD_GLOW` below for the
+ * literal colour, kept deliberately a touch quieter than the other
+ * three (red carries more visual alarm per unit of opacity than
+ * green/blue/amber do). */
+type StoryMood = "green" | "urgent" | "blue" | "amber";
 
 interface BaseSlide {
   businessName: string;
@@ -94,9 +103,15 @@ interface BaseSlide {
 interface ConversationSlide extends BaseSlide {
   kind: "conversation";
   exchanges: readonly [Exchange, Exchange];
-  /** A single settled outcome, not two — "reading is work"; one tight
-   * proof point lands faster than two. */
-  outcome: ProductMoment;
+  /** Founder review (2026-08-04): "the ending currently feels
+   * unfinished... continue one step further, show that the problem
+   * actually progressed... people buy outcomes, not notifications."
+   * Back to two, deliberately different from the very first version
+   * of this (V7-era, two disconnected facts) — these two are a
+   * sequence: the second only makes sense once the first has already
+   * happened (a booking exists before it can be confirmed to the
+   * customer; a team can only be dispatched once it's been alerted). */
+  outcomes: readonly [ProductMoment, ProductMoment];
 }
 
 /** Founder review (2026-08-04): "slides 1 and 2 work because they
@@ -104,23 +119,36 @@ interface ConversationSlide extends BaseSlide {
  * intelligent system behind it." Not another conversation, not a
  * "list of notification cards" either (the exact thing the previous
  * version was correctly called out for) — a deliberate, brief
- * departure from WhatsApp's own chrome (`TeachingSlideView` gives it
- * a distinct ReplyFlow-branded header) so the visitor consciously
- * registers "this is a different screen" before reading a word of it. */
-interface TeachingSlide extends BaseSlide {
-  kind: "teaching";
-  learning: readonly string[];
+ * departure from WhatsApp's own chrome (`ReplyFlowAppShell` gives it a
+ * distinct ReplyFlow-branded header) so the visitor consciously
+ * registers "this is a different screen" before reading a word of it.
+ *
+ * Second founder review (2026-08-04): the *content* still read as a
+ * checklist — "another list of ticks... doesn't explain the product."
+ * Replaced with a short grid of named capabilities/outcomes
+ * (`AppTile`, `TILE_STYLES` below) — evolved from the very first
+ * "Front Desk" concept (a labelled window with an icon-tile grid),
+ * architecturally, not visually: "the owner should instantly
+ * understand — I know exactly what this product does." */
+interface AppTile {
+  icon: typeof AlertTriangle;
+  text: string;
+  tone: "whatsapp" | "primary" | "success" | "attention" | "learning";
 }
 
-/** "Show the owner's benefit... not inbox cleared, not diary synced —
- * those are features. What does the owner get?" Shares `TeachingSlide`'s
- * departure from WhatsApp chrome (same ReplyFlow-branded header,
- * `PayoffSlideView`) but its own settle-then-emphasise grammar — every
- * item is already true the moment it appears (nothing "in progress"),
- * and the last line is the entire reason this slide exists. */
+interface TeachingSlide extends BaseSlide {
+  kind: "teaching";
+  tiles: readonly [AppTile, AppTile, AppTile, AppTile];
+}
+
+/** Shares `TeachingSlide`'s departure from WhatsApp chrome (same
+ * ReplyFlow-branded header, same tile grammar) — the only structural
+ * difference is the last tile always carries the `payoff` treatment
+ * (`AppTileGridView` below), the one piece of real emphasis either
+ * slide allows itself. */
 interface PayoffSlide extends BaseSlide {
   kind: "payoff";
-  outcomes: readonly string[];
+  tiles: readonly [AppTile, AppTile, AppTile, AppTile];
 }
 
 type StorySlide = ConversationSlide | TeachingSlide | PayoffSlide;
@@ -141,7 +169,16 @@ const STORIES: readonly StorySlide[] = [
         reply: "It will, yeah — I'll let him know it's a repeat visit. See you at 4.",
       },
     ],
-    outcome: { text: "Booked in for 4pm today", kind: "job" },
+    // Founder review (2026-08-04): "the ending feels unfinished...
+    // people buy outcomes, not notifications." A sequence, not two
+    // unrelated facts — the booking exists first, then the customer
+    // is told it exists. That second beat is the one that actually
+    // matters to the owner reading this: not just "it's in my
+    // calendar," but "the customer already knows and isn't waiting."
+    outcomes: [
+      { text: "Booked in for 4pm today", kind: "job" },
+      { text: "Confirmation sent to the customer", kind: "customer" },
+    ],
   },
   {
     // Founder review (2026-08-04): "Slide 2: WhatsApp emergency
@@ -153,7 +190,7 @@ const STORIES: readonly StorySlide[] = [
     kind: "conversation",
     businessName: "Ridgeline Roofing",
     trade: "roofers",
-    mood: "red",
+    mood: "urgent",
     exchanges: [
       {
         customer: "A few tiles came off in last night's wind — there's water coming into the loft now.",
@@ -164,21 +201,47 @@ const STORIES: readonly StorySlide[] = [
         reply: "No problem — if you can, keep something under the leak until then.",
       },
     ],
-    outcome: { text: "Flagged as urgent — team alerted", kind: "urgent" },
+    // "Continue one step further. Show that the problem actually
+    // progressed." Not "flagged, then alerted" (two ways of saying
+    // the same internal fact) — an alert is still just a
+    // notification. The second beat has to be the thing that
+    // actually changes the outcome: someone is now physically moving
+    // toward the problem.
+    outcomes: [
+      { text: "Flagged as urgent — team alerted", kind: "urgent" },
+      { text: "Someone's on the way to sort it", kind: "team" },
+    ],
   },
   {
     kind: "teaching",
     businessName: "Harris Electrical",
     trade: "electricians",
     mood: "blue",
-    learning: ["Pricing rules", "Preferred suppliers", "Emergency priorities", "Tone of voice"],
+    // Founder review (2026-08-04): "everything inside the screen is
+    // wrong... another list of ticks... doesn't explain the product.
+    // WhatsApp connected, Receptionist online, Business knowledge
+    // learned, Quotes ready..." — business outcomes the owner
+    // instantly recognises, not internal settings ("pricing rules,"
+    // "tone of voice") nobody outside the product would describe
+    // themselves as caring about.
+    tiles: [
+      { icon: MessageCircle, text: "WhatsApp connected", tone: "whatsapp" },
+      { icon: Sparkles, text: "Receptionist online", tone: "primary" },
+      { icon: BookOpen, text: "Knowledge learned", tone: "learning" },
+      { icon: FileText, text: "Quotes ready", tone: "primary" },
+    ],
   },
   {
     kind: "payoff",
     businessName: "Whitmore Building Co",
     trade: "builders",
     mood: "amber",
-    outcomes: ["Today's jobs organised", "Urgent messages handled", "Quotes already sent", "Customers updated", "You stayed on the tools"],
+    tiles: [
+      { icon: CalendarCheck, text: "Appointments booked", tone: "success" },
+      { icon: UserPlus, text: "Customers updated", tone: "success" },
+      { icon: AlertTriangle, text: "Urgent, prioritised", tone: "attention" },
+      { icon: CheckCircle2, text: "Nothing waiting for you", tone: "primary" },
+    ],
   },
 ] as const;
 
@@ -195,10 +258,9 @@ function estimateTypeMs(text: string): number {
  * here for the auto-advance clock. */
 function estimateStoryMs(story: StorySlide): number {
   if (story.kind === "conversation") {
-    return 900 + estimateTypeMs(story.exchanges[0].reply) + 1300 + estimateTypeMs(story.exchanges[1].reply);
+    return 900 + estimateTypeMs(story.exchanges[0].reply) + 1300 + estimateTypeMs(story.exchanges[1].reply) + PRODUCT_MOMENT_DELAY_MS + PRODUCT_MOMENT_STEP_MS;
   }
-  const items = story.kind === "teaching" ? story.learning.length : story.outcomes.length;
-  return 1000 + items * CHECKLIST_STEP_MS + 1200;
+  return 1000 + story.tiles.length * CHECKLIST_STEP_MS + 1200;
 }
 
 /** How long a finished conversation rests, fully settled, before the
@@ -363,9 +425,12 @@ function ProductMomentCard({ moment }: { moment: ProductMoment }) {
   );
 }
 
-/** How long the finished thread rests before the outcome quietly
- * appears beneath it — long enough to read as "after," not "during." */
+/** How long the finished thread rests before the first outcome quietly
+ * appears beneath it — long enough to read as "after," not "during" —
+ * and the pause before the second, short enough that it reads as the
+ * story continuing, not a second, unrelated event. */
 const PRODUCT_MOMENT_DELAY_MS = 900;
+const PRODUCT_MOMENT_STEP_MS = 1000;
 
 /** A conversation slide, playing once from the top on mount. The
  * phone frame itself is a fixed size (`DeviceFrame`); this scrolls
@@ -377,7 +442,7 @@ const PRODUCT_MOMENT_DELAY_MS = 900;
  * tight proof point beats two competing for attention). */
 function ConversationSlideView({ slide }: { slide: ConversationSlide }) {
   const [visibleCount, setVisibleCount] = useState(0);
-  const [showOutcome, setShowOutcome] = useState(false);
+  const [outcomeCount, setOutcomeCount] = useState(0);
   const startedRef = useRef(false);
   const bodyRef = useRef<HTMLDivElement>(null);
 
@@ -404,8 +469,15 @@ function ConversationSlideView({ slide }: { slide: ConversationSlide }) {
         setVisibleCount(i + 1);
         await wait(estimateTypeMs(slide.exchanges[i]!.reply));
       }
+      // Founder review (2026-08-04): "continue one step further, show
+      // that the problem actually progressed." Both outcomes stay
+      // visible once shown — the second doesn't replace the first, it
+      // builds on it, so the phone visibly narrates a short sequence
+      // rather than a single fact.
       await wait(jitter(PRODUCT_MOMENT_DELAY_MS, 150));
-      setShowOutcome(true);
+      setOutcomeCount(1);
+      await wait(jitter(PRODUCT_MOMENT_STEP_MS, 200));
+      setOutcomeCount(2);
     }
     void run();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -413,7 +485,7 @@ function ConversationSlideView({ slide }: { slide: ConversationSlide }) {
 
   useEffect(() => {
     bodyRef.current?.scrollTo({ top: bodyRef.current.scrollHeight, behavior: "smooth" });
-  }, [visibleCount, showOutcome]);
+  }, [visibleCount, outcomeCount]);
 
   return (
     <PhoneFrame
@@ -429,9 +501,11 @@ function ConversationSlideView({ slide }: { slide: ConversationSlide }) {
           <TypedReply text={exchange.reply} />
         </div>
       ))}
-      {showOutcome && (
-        <div className="pt-2">
-          <ProductMomentCard moment={slide.outcome} />
+      {outcomeCount > 0 && (
+        <div className="space-y-1.5 pt-2">
+          {slide.outcomes.slice(0, outcomeCount).map((moment, i) => (
+            <ProductMomentCard key={i} moment={moment} />
+          ))}
         </div>
       )}
     </PhoneFrame>
@@ -481,23 +555,44 @@ function ReplyFlowAppShell({
   );
 }
 
-/** A single settings-style list, not stacked cards — every row shares
- * one rounded container and a divider, the same grammar `PayoffSlideView`
- * below reuses so the two "inside ReplyFlow" slides feel like one
- * consistent app, not two one-off screens. */
-function AppRowList({ children }: { children: React.ReactNode }) {
-  return <div className="divide-y divide-border/60 overflow-hidden rounded-2xl border border-border/60 bg-white/75 shadow-sm">{children}</div>;
-}
+/** Icon + accent per tile `tone` — the same lookup-table discipline as
+ * `MOMENT_STYLES` above, for the same reason. `whatsapp` is the one
+ * literal (not design-system-token) colour on this whole page,
+ * deliberately: WhatsApp's own real green, not the app's internal
+ * `success` token, so "WhatsApp connected" reads as an accurate brand
+ * fact rather than one more app-coloured tile. */
+const TILE_STYLES: Record<AppTile["tone"], { badge: string; icon_: string }> = {
+  whatsapp: { badge: "bg-[#25D366]/15", icon_: "text-[#128C4A]" },
+  primary: { badge: "bg-primary/15", icon_: "text-primary" },
+  success: { badge: "bg-success/15", icon_: "text-success" },
+  attention: { badge: "bg-attention/20", icon_: "text-attention" },
+  learning: { badge: "bg-learning/15", icon_: "text-learning" },
+};
 
-/** "Instead of another conversation, show ReplyFlow's brain... enough
- * to create curiosity, not enough to overwhelm." Each row starts
- * "learning" (a soft pulsing dot) and resolves to "learned" (a
- * checkmark) a beat later — real process, not a pre-made list — which
- * is also the thing that most separates this from the notification-
- * card look the founder specifically ruled out. */
-function TeachingSlideView({ slide }: { slide: TeachingSlide }) {
+/** Founder review (2026-08-04), second round: "everything inside the
+ * screen is wrong... another list of ticks... doesn't explain the
+ * product." Evolved from the very first "Front Desk" concept
+ * (architecturally, not visually) — a small grid of named
+ * capabilities/outcomes, each with its own icon and colour, glanced at
+ * once rather than read top to bottom like a list. The one thing
+ * `TeachingSlideView`/`PayoffSlideView` used to do differently — a
+ * "still learning" pulse state — doesn't apply to either any more:
+ * both slides now show things that are simply *true*, not things
+ * mid-way through happening, so one shared grid view replaces both.
+ * `payoffLast` is the only variation between the two: the payoff
+ * slide's final tile gets the one piece of real emphasis this
+ * component allows itself, the same "last item is the point" rule
+ * every other multi-item reveal on this page already follows. */
+function AppTileGridView({
+  subtitle,
+  tiles,
+  payoffLast = false,
+}: {
+  subtitle: string;
+  tiles: readonly AppTile[];
+  payoffLast?: boolean;
+}) {
   const [visibleCount, setVisibleCount] = useState(0);
-  const [settledCount, setSettledCount] = useState(0);
   const startedRef = useRef(false);
   const bodyRef = useRef<HTMLDivElement>(null);
 
@@ -509,87 +604,7 @@ function TeachingSlideView({ slide }: { slide: TeachingSlide }) {
 
     async function run() {
       await wait(jitter(900, 150));
-      for (let i = 0; i < slide.learning.length; i++) {
-        setVisibleCount(i + 1);
-        await wait(jitter(520, 100));
-        setSettledCount(i + 1);
-        await wait(jitter(280, 80));
-      }
-    }
-    void run();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  useEffect(() => {
-    bodyRef.current?.scrollTo({ top: bodyRef.current.scrollHeight, behavior: "smooth" });
-  }, [visibleCount, settledCount]);
-
-  return (
-    <ReplyFlowAppShell subtitle={`Learning about ${slide.businessName}`} bodyRef={bodyRef}>
-      <AppRowList>
-        {slide.learning.slice(0, visibleCount).map((label, i) => {
-          const isSettled = i < settledCount;
-          return (
-            <div key={label} className="flex items-center justify-between gap-3 px-4 py-3">
-              <span
-                className={cn(
-                  "text-[13px] font-medium transition-colors duration-300 lg:text-[14px]",
-                  isSettled ? "text-foreground" : "text-muted-foreground"
-                )}
-              >
-                {label}
-              </span>
-              <span className="flex h-5 w-5 shrink-0 items-center justify-center">
-                <AnimatePresence mode="wait">
-                  {isSettled ? (
-                    <motion.span
-                      key="check"
-                      initial={{ scale: 0.4, opacity: 0 }}
-                      animate={{ scale: 1, opacity: 1 }}
-                      transition={{ type: "spring", stiffness: 420, damping: 18 }}
-                      className="flex h-5 w-5 items-center justify-center rounded-full bg-primary/15"
-                    >
-                      <Check className="h-3 w-3 text-primary" strokeWidth={3} />
-                    </motion.span>
-                  ) : (
-                    <motion.span key="pulse" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="relative flex h-2.5 w-2.5">
-                      <motion.span
-                        className="absolute inline-flex h-full w-full rounded-full bg-primary/50"
-                        animate={{ scale: [1, 1.8, 1], opacity: [0.6, 0, 0.6] }}
-                        transition={{ duration: 1, repeat: Infinity, ease: "easeInOut" }}
-                      />
-                      <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-primary" />
-                    </motion.span>
-                  )}
-                </AnimatePresence>
-              </span>
-            </div>
-          );
-        })}
-      </AppRowList>
-    </ReplyFlowAppShell>
-  );
-}
-
-/** "Not inbox cleared, not diary synced — those are features. What
- * does the owner get?" Every row is already true the moment it
- * appears (no learning-in-progress beat — that's `TeachingSlideView`'s
- * job, not this one's), and the final row is the entire reason this
- * slide exists — the only real emphasis this component allows itself. */
-function PayoffSlideView({ slide }: { slide: PayoffSlide }) {
-  const [visibleCount, setVisibleCount] = useState(0);
-  const startedRef = useRef(false);
-  const bodyRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (startedRef.current) return;
-    startedRef.current = true;
-    const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
-    const jitter = (ms: number, spread: number) => ms + (Math.random() * spread * 2 - spread);
-
-    async function run() {
-      await wait(jitter(1000, 150));
-      for (let i = 0; i < slide.outcomes.length; i++) {
+      for (let i = 0; i < tiles.length; i++) {
         if (i > 0) await wait(jitter(CHECKLIST_STEP_MS, 120));
         setVisibleCount(i + 1);
       }
@@ -598,46 +613,42 @@ function PayoffSlideView({ slide }: { slide: PayoffSlide }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  useEffect(() => {
-    bodyRef.current?.scrollTo({ top: bodyRef.current.scrollHeight, behavior: "smooth" });
-  }, [visibleCount]);
-
   return (
-    <ReplyFlowAppShell subtitle={`${slide.businessName} — today`} bodyRef={bodyRef}>
-      <AppRowList>
-        {slide.outcomes.slice(0, visibleCount).map((text, i) => {
-          const isPayoff = i === slide.outcomes.length - 1;
+    <ReplyFlowAppShell subtitle={subtitle} bodyRef={bodyRef}>
+      <div className="grid grid-cols-2 gap-2">
+        {tiles.map((tile, i) => {
+          const isPayoff = payoffLast && i === tiles.length - 1;
+          const { badge, icon_ } = TILE_STYLES[tile.tone];
+          const visible = i < visibleCount;
           return (
             <motion.div
-              key={text}
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ duration: 0.4, ease: EASE }}
-              className={cn("flex items-center gap-3 px-4 py-3", isPayoff && "bg-primary/[0.07]")}
+              key={tile.text}
+              initial={{ opacity: 0, y: 10, scale: 0.94 }}
+              animate={visible ? { opacity: 1, y: 0, scale: 1 } : { opacity: 0, y: 10, scale: 0.94 }}
+              transition={{ type: "spring", stiffness: 320, damping: 24 }}
+              className={cn(
+                "flex flex-col items-start gap-2 rounded-xl border p-2.5 shadow-sm",
+                isPayoff ? "border-primary/25 bg-primary/[0.07]" : "border-border/60 bg-white/85"
+              )}
             >
-              <span
-                className={cn(
-                  "flex h-5 w-5 shrink-0 items-center justify-center rounded-full",
-                  isPayoff ? "bg-primary/15" : "bg-success/15"
-                )}
-              >
-                <Check className={cn("h-3 w-3", isPayoff ? "text-primary" : "text-success")} strokeWidth={3} />
+              <span className={cn("flex h-7 w-7 shrink-0 items-center justify-center rounded-lg", badge)}>
+                <tile.icon className={cn("h-3.5 w-3.5", icon_)} strokeWidth={2.5} />
               </span>
-              <span className={cn("text-[13px] lg:text-[14px]", isPayoff ? "font-bold text-primary" : "font-medium text-foreground")}>
-                {text}
+              <span className={cn("text-[11.5px] font-semibold leading-tight lg:text-[12.5px]", isPayoff ? "text-primary" : "text-foreground")}>
+                {tile.text}
               </span>
             </motion.div>
           );
         })}
-      </AppRowList>
+      </div>
     </ReplyFlowAppShell>
   );
 }
 
 function StoryConversation({ story }: { story: StorySlide }) {
   if (story.kind === "conversation") return <ConversationSlideView slide={story} />;
-  if (story.kind === "teaching") return <TeachingSlideView slide={story} />;
-  return <PayoffSlideView slide={story} />;
+  if (story.kind === "teaching") return <AppTileGridView subtitle="What I quietly do" tiles={story.tiles} />;
+  return <AppTileGridView subtitle={`${story.businessName} — today`} tiles={story.tiles} payoffLast />;
 }
 
 /** Small dot pagination beneath the phone — the explicit signal that
@@ -673,27 +684,32 @@ function StoryDots({ active, onSelect }: { active: number; onSelect: (i: number)
  * and hydration-safe, just no longer the same 100% every time. */
 const BATTERY_BY_STORY: readonly number[] = [97, 94, 90, 86] as const;
 
-/** Two-stop radial gradients, one per `StoryMood`. Kept as a lookup
- * table (never a template-string colour) for the same reason
- * `MOMENT_STYLES` above is one: it's the honest way to say "these are
- * the only four, deliberately," not an open palette.
+/** One radial gradient per `StoryMood`. Kept as a lookup table (never
+ * a template-string colour) for the same reason `MOMENT_STYLES` above
+ * is one: it's the honest way to say "these are the only four,
+ * deliberately," not an open palette.
  *
- * Founder review (2026-08-04): "the glow is not decorative, it is
- * storytelling... the glow should extend beyond the edges of the
- * phone, softly lighting the surrounding background." Stop opacities
- * raised from the previous pass (0.20/0.08 → 0.26/0.11) — a glow
- * spread this much further now needs a bit more strength at the same
- * two stops to still register at all by the time it's this diffuse,
- * without it reading as neon up close. `red` reuses the exact
- * `--destructive` HSL value already defined in `globals.css`
- * (`hsl(0 74% 50%)`, converted to its rgb equivalent here since a CSS
- * gradient string needs raw channel values) rather than inventing a
- * new red the rest of the product doesn't already use for "urgent." */
+ * Founder review (2026-08-04): "don't simply blur colour — light the
+ * scene... the phone should feel like a real object sitting inside
+ * coloured light." Two changes from the previous pass: (1) the focal
+ * point moved off-centre (`at 38% 30%`, an ellipse rather than a
+ * circle) to match the *exact* direction `device-frame.tsx`'s own
+ * physical key-light already comes from (its top-left edge highlight)
+ * — one coherent light source for the whole object instead of a flat
+ * centred blur competing with it; (2) `urgent` is red again ("used
+ * efficiently," confirmed explicitly) but held a touch quieter than
+ * the other three — red carries more visual alarm per unit of opacity
+ * than green/blue/amber do, so matching their exact stop values would
+ * overshoot "subtle." Reuses the exact `--destructive` HSL value
+ * already defined in `globals.css` (`hsl(0 74% 50%)`, converted to
+ * its rgb equivalent here since a gradient string needs raw channel
+ * values) rather than inventing a new red the product doesn't
+ * otherwise use for "urgent." */
 const MOOD_GLOW: Record<StoryMood, string> = {
-  green: "radial-gradient(circle, rgba(34,197,94,0.26), rgba(34,197,94,0.11) 55%, transparent 75%)",
-  red: "radial-gradient(circle, rgba(222,33,33,0.24), rgba(222,33,33,0.10) 55%, transparent 75%)",
-  blue: "radial-gradient(circle, rgba(37,99,235,0.26), rgba(37,99,235,0.11) 55%, transparent 75%)",
-  amber: "radial-gradient(circle, rgba(245,158,11,0.28), rgba(245,158,11,0.11) 55%, transparent 75%)",
+  green: "radial-gradient(ellipse 75% 65% at 38% 30%, rgba(34,197,94,0.30), rgba(34,197,94,0.12) 55%, transparent 78%)",
+  urgent: "radial-gradient(ellipse 75% 65% at 38% 30%, rgba(222,33,33,0.20), rgba(222,33,33,0.08) 55%, transparent 78%)",
+  blue: "radial-gradient(ellipse 75% 65% at 38% 30%, rgba(37,99,235,0.30), rgba(37,99,235,0.12) 55%, transparent 78%)",
+  amber: "radial-gradient(ellipse 75% 65% at 38% 30%, rgba(245,158,11,0.32), rgba(245,158,11,0.13) 55%, transparent 78%)",
 };
 
 /** V8 founder review (2026-08-04): "no longer a looping animation —
@@ -1125,26 +1141,28 @@ export function Hero() {
            * confirmations landing in sequence, not one line of small
            * print with checkmarks stuck on the front.
            *
-           * Founder review (2026-08-04): on mobile, three items in one
-           * `flex-wrap` row left "No commitment" as an orphan on its
-           * own second line — not a font-size problem, a layout one.
-           * Rather than shrinking text to force a fit that was never
-           * guaranteed to hold at every width, mobile gets its own
-           * deliberate arrangement: a centred vertical stack, each
-           * point full width and never at risk of wrapping mid-phrase.
-           * `sm:` and up reverts to the original single row — desktop
-           * already had the room and was never the problem. */}
-          <div className="mt-4 flex flex-col items-center gap-2 sm:flex-row sm:flex-wrap sm:justify-center sm:gap-x-4 sm:gap-y-1.5">
+           * Second founder review (2026-08-04): the vertical mobile
+           * stack fixed the wrap, but "I actually prefer the older
+           * horizontal treatment... I want the visual confidence of
+           * ✓ 7 days free ✓ No card needed ✓ No commitment [on one
+           * line]... even if mobile needs slightly smaller spacing or
+           * typography." One row at every breakpoint now, never
+           * `flex-wrap` — mobile earns that by getting its own
+           * tighter type/badge/gap sizing (11.5px text, 3.5-unit
+           * badge, 2-unit gaps) rather than by giving up the single
+           * line; `sm:` and up steps back up to the original sizing,
+           * which already had the room. */}
+          <div className="mt-4 flex items-center justify-center gap-x-2 gap-y-1.5 sm:gap-x-4">
             {TRIAL_POINTS.map((point, i) => (
               <motion.span
                 key={point}
                 initial={{ opacity: 0, y: 6 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.4, ease: EASE, delay: 0.85 + i * 0.1 }}
-                className="flex items-center gap-1.5 text-[13.5px] font-medium text-foreground/80"
+                className="flex items-center gap-1 text-[11.5px] font-medium text-foreground/80 sm:gap-1.5 sm:text-[13.5px]"
               >
-                <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-success/15">
-                  <Check className="h-2.5 w-2.5 text-success" strokeWidth={3.5} />
+                <span className="flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full bg-success/15 sm:h-4 sm:w-4">
+                  <Check className="h-2 w-2 text-success sm:h-2.5 sm:w-2.5" strokeWidth={3.5} />
                 </span>
                 {point}
               </motion.span>

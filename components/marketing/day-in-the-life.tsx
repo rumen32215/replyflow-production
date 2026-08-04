@@ -41,6 +41,21 @@ import { EASE } from "@/components/shared/motion";
  * point of it. Still no cards, no icons beyond the same two dot sizes
  * already here, no per-item colour-coding — still evidence, not a
  * dashboard, just no longer bare.
+ *
+ * Third founder review (2026-08-04): "the current title doesn't
+ * create enough emotion... feels like documentation. The previous
+ * direction ('front desk that never clocks off') had stronger
+ * positioning. Don't simply restore the old version — combine the
+ * best parts of both." The old headline's confidence, this section's
+ * own honest framing (a day, not a piece of software) — but not its
+ * exact words: `HEADLINES` in `hero.tsx` already has "Your business
+ * keeps moving while you work," and a near-echo of that here would be
+ * exactly the repetition the same review explicitly warned against.
+ * "You worked. The business handled the rest." keeps that declarative
+ * shape (a short claim, not a hedge) while naming a feeling neither
+ * the old nor the previous-pass headline did: relief, specifically —
+ * not just "it happened," but "you didn't have to be the one holding
+ * it together."
  */
 
 interface Moment {
@@ -85,7 +100,7 @@ export function DayInTheLife() {
           transition={{ duration: 0.6, ease: EASE }}
           className="text-[22px] font-semibold leading-relaxed text-foreground sm:text-[26px]"
         >
-          You didn&apos;t have to think about any of this today.
+          You worked. The business handled the rest.
         </motion.p>
 
         <motion.div

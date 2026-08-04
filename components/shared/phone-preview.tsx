@@ -61,14 +61,35 @@ export function PhoneFrame({
   businessName,
   children,
   className,
+  scrollable = false,
+  bodyRef,
 }: {
   businessName: string;
   children: React.ReactNode;
   className?: string;
+  /** Opt-in only, default false — every existing caller (onboarding's
+   * demo, Test Conversations) keeps its exact current natural-height
+   * behaviour unchanged. Landing Experience Hero (`DOCS/SPECS/
+   * ReplyFlow-Landing-Experience-Design.md` §2, fourth founder review)
+   * needs the opposite: a real phone is a fixed physical object, so
+   * its own DeviceFrame gives this a fixed screen height and the
+   * message thread has to scroll inside it instead of growing the
+   * frame — the header stays pinned, exactly like a real WhatsApp
+   * thread never scrolls its own header away. */
+  scrollable?: boolean;
+  /** Only meaningful with `scrollable` — lets the caller auto-scroll
+   * to the newest message as the conversation grows. */
+  bodyRef?: React.Ref<HTMLDivElement>;
 }) {
   return (
-    <div className={cn("overflow-hidden rounded-[28px] border border-border bg-[#e7e1d8] shadow-md", className)}>
-      <div className="flex items-center gap-3 bg-[#075E54] px-4 py-3 text-white">
+    <div
+      className={cn(
+        "overflow-hidden rounded-[28px] border border-border bg-[#e7e1d8] shadow-md",
+        scrollable && "flex h-full flex-col",
+        className
+      )}
+    >
+      <div className="flex shrink-0 items-center gap-3 bg-[#075E54] px-4 py-3 text-white">
         <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/20 text-[12px] font-bold">
           {businessName.slice(0, 1).toUpperCase() || "R"}
         </div>
@@ -78,7 +99,8 @@ export function PhoneFrame({
         </div>
       </div>
       <div
-        className="space-y-2 px-3 py-4"
+        ref={bodyRef}
+        className={cn("space-y-2 px-3 py-4", scrollable && "flex-1 overflow-y-auto")}
         style={{ backgroundImage: "radial-gradient(circle at 20% 10%, rgba(255,255,255,0.35), transparent 40%)" }}
       >
         {children}

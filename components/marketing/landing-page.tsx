@@ -19,9 +19,12 @@ export function LandingPage() {
     <div className="min-h-screen bg-background">
       <header className="mx-auto flex max-w-6xl items-center justify-between px-6 py-6">
         <Logo />
+        {/* Existing customers see this every day — it earns a real,
+         * considered shape (a quiet pill, not a bare link floating in
+         * space), not the same weight as the primary CTA. */}
         <Link
           href="/login"
-          className="text-[14px] font-semibold text-muted-foreground transition-colors hover:text-foreground"
+          className="rounded-full border border-border px-4 py-1.5 text-[13.5px] font-semibold text-foreground/80 transition-colors hover:border-primary/30 hover:text-foreground"
         >
           Log in
         </Link>

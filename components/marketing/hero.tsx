@@ -3,31 +3,30 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, Check } from "lucide-react";
 import { EASE } from "@/components/shared/motion";
 import { GradientText } from "@/components/shared/gradient-text";
 import { PhoneFrame, Bubble } from "@/components/shared/phone-preview";
 import { TypingDots, useTypedMessage } from "@/components/shared/typed-message";
 import { DeviceFrame } from "@/components/marketing/device-frame";
+import { cn } from "@/lib/utils";
 
 /**
  * Landing Experience, Section 1 — Hero (`DOCS/SPECS/ReplyFlow-Landing-
  * Experience-Design.md` §2, `DOCS/SPECS/ReplyFlow-Visual-Language.md`).
  *
- * Third founder review (2026-08-04) — immersion, not components. Two
- * changes this pass is built around, on top of an unchanged
- * conversation-typing mechanism (still the exact fresh-mount-per-turn
- * `TypedReply` pattern from `preparing-receptionist.tsx`):
- *
- * 1. The phone is presented inside `DeviceFrame` — a believable product
- *    shot, not a rounded rectangle — while the conversation UI itself
- *    (`PhoneFrame`/`Bubble`) is completely unchanged.
- * 2. A small handcrafted library of conversations, covering different
- *    trades and situations, plays on a loop: one selected at random on
- *    load, and — with no visible control, nothing to click — quietly
- *    replaced by a different one after it's had time to be read. The
- *    visitor witnesses this happening; there is still no button, chip,
- *    or interaction anywhere in the Hero.
+ * Fourth founder review (2026-08-04) — enhancement, not a redesign.
+ * The conversation-typing mechanism, the four-story library, and the
+ * random-then-rotating selection are unchanged (all praised directly
+ * — "keep that"). What changed: the device is now a fixed physical
+ * object (see `device-frame.tsx`'s own note on why), a handful of
+ * carefully chosen words carry real emphasis instead of the whole
+ * paragraph reading as one grey block, the trial line reads as
+ * reassurance instead of small print, and the eyebrow line quietly
+ * names which trade is currently on screen — a small, considered
+ * addition (not a new feature) that ties "for plumbers, electricians,
+ * builders, roofers & painters" to the real, specific example playing
+ * below it.
  */
 
 interface Exchange {
@@ -35,14 +34,20 @@ interface Exchange {
   reply: string;
 }
 
+/** Matches one of the exact words in the eyebrow line below — the
+ * mechanism the trade-highlight (§8 of this review) is built on. */
+type Trade = "plumbers" | "electricians" | "builders" | "roofers" | "painters";
+
 interface ConversationStory {
   businessName: string;
+  trade: Trade;
   exchanges: readonly [Exchange, Exchange];
 }
 
 const STORIES: readonly ConversationStory[] = [
   {
     businessName: "Dean's Plumbing",
+    trade: "plumbers",
     exchanges: [
       {
         customer: "Hi, my kitchen tap's been dripping non-stop since this morning — any chance someone can look today?",
@@ -56,6 +61,7 @@ const STORIES: readonly ConversationStory[] = [
   },
   {
     businessName: "Harris Electrical",
+    trade: "electricians",
     exchanges: [
       {
         customer: "Hi, roughly how much would it be to add a couple of extra sockets in the kitchen?",
@@ -69,6 +75,7 @@ const STORIES: readonly ConversationStory[] = [
   },
   {
     businessName: "Ridgeline Roofing",
+    trade: "roofers",
     exchanges: [
       {
         customer: "A few tiles came off in last night's wind — there's water coming into the loft now.",
@@ -82,6 +89,7 @@ const STORIES: readonly ConversationStory[] = [
   },
   {
     businessName: "Bell & Co Decorators",
+    trade: "painters",
     exchanges: [
       {
         customer: "Hi, do you have anyone free to repaint a bedroom this week?",
@@ -94,6 +102,8 @@ const STORIES: readonly ConversationStory[] = [
     ],
   },
 ] as const;
+
+const EYEBROW_TRADES: readonly Trade[] = ["plumbers", "electricians", "builders", "roofers", "painters"] as const;
 
 /** Mirrors `preparing-receptionist.tsx`'s own pacing formula. */
 function estimateTypeMs(text: string): number {
@@ -116,24 +126,23 @@ function pickNextIndex(current: number): number {
 }
 
 /**
- * Rotates through `STORIES` for as long as the visitor is on the page
- * — no visible control, nothing to click. Deliberately no cleanup flag
- * combined with a mount-once ref (the exact Strict Mode trap the
- * previous pass hit and fixed): this uses real `cancelled`-on-cleanup
- * instead, which self-heals correctly under Strict Mode's dev-only
- * double-invoke (the throwaway first instance is cancelled before its
- * first await resolves; the second runs forward normally) — the
- * correct idiom for a genuinely long-lived effect, as opposed to the
- * bounded one-shot sequence inside each conversation itself below.
+ * Rotates through `STORIES` for as long as the visitor is on the page.
+ * Deterministic on the first render on purpose — `Math.random()`
+ * inside a `useState` initializer runs once on the server and again
+ * on the client during hydration and the two will always disagree,
+ * which React correctly reports as a real content mismatch (caught
+ * the hard way, via a real hydration error, in the previous pass).
+ * The actual random pick happens in the effect below, client-only,
+ * after hydration is already done.
+ *
+ * Uses real `cancelled`-on-cleanup, deliberately the opposite
+ * convention from each individual conversation's own one-shot
+ * sequence below — the correct idiom for a genuinely long-lived
+ * effect, which self-heals correctly under React Strict Mode's
+ * dev-only double-invoke (the throwaway first instance is cancelled
+ * before its first await resolves; the second runs forward normally).
  */
 function useRotatingStoryIndex(): number {
-  // Deterministic for the first (SSR) render — Math.random() inside a
-  // useState initializer runs once on the server and again on the
-  // client during hydration, and the two will always disagree, which
-  // React reports as a real hydration mismatch (confirmed the hard
-  // way: caught via `console --errors` during Playwright verification,
-  // not assumed). The real random pick happens in the effect below,
-  // which only ever runs client-side, after hydration is already done.
   const [index, setIndex] = useState(0);
   const indexRef = useRef(0);
 
@@ -175,17 +184,20 @@ function TypedReply({ text }: { text: string }) {
   );
 }
 
-/** One story's own conversation, playing once from the top on mount —
- * unchanged from the previous pass, only ever given a different story
- * by its parent. */
+/** One story's own conversation, playing once from the top on mount.
+ * The phone frame itself is now a fixed size (`DeviceFrame`); this
+ * scrolls its own message thread inside that fixed frame rather than
+ * growing it, and keeps the thread scrolled to the newest message. */
 function StoryConversation({ story }: { story: ConversationStory }) {
   const [visibleCount, setVisibleCount] = useState(0);
   const startedRef = useRef(false);
+  const bodyRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    // No cleanup here, deliberately — see the previous pass's own note
-    // on why combining this ref guard with a cancellation flag breaks
-    // under Strict Mode for a short, bounded sequence like this one.
+    // No cleanup here, deliberately — combining this ref guard with a
+    // cancellation flag breaks under Strict Mode for a short, bounded
+    // sequence like this one (see `useRotatingStoryIndex` above for
+    // the opposite, correct convention for a genuinely long-lived one).
     if (startedRef.current) return;
     startedRef.current = true;
     const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
@@ -202,8 +214,17 @@ function StoryConversation({ story }: { story: ConversationStory }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  useEffect(() => {
+    bodyRef.current?.scrollTo({ top: bodyRef.current.scrollHeight, behavior: "smooth" });
+  }, [visibleCount]);
+
   return (
-    <PhoneFrame businessName={story.businessName} className="w-full rounded-none border-0 shadow-none">
+    <PhoneFrame
+      businessName={story.businessName}
+      scrollable
+      bodyRef={bodyRef}
+      className="h-full w-full rounded-none border-0 shadow-none"
+    >
       {story.exchanges.slice(0, visibleCount).map((exchange, i) => (
         <div key={i}>
           <Bubble from="customer">{exchange.customer}</Bubble>
@@ -214,13 +235,10 @@ function StoryConversation({ story }: { story: ConversationStory }) {
   );
 }
 
-function AutoConversation() {
-  const storyIndex = useRotatingStoryIndex();
-  const story = STORIES[storyIndex]!;
-
+function AutoConversation({ story, storyIndex }: { story: ConversationStory; storyIndex: number }) {
   return (
     <div>
-      <div className="relative mx-auto max-w-[420px]">
+      <div className="relative mx-auto max-w-[400px]">
         {/* The one focal glow — a single soft light source behind the
          * phone, static rather than animated (the phone's own slow
          * float below is already the one thing that moves here). */}
@@ -238,6 +256,7 @@ function AutoConversation() {
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.98 }}
                 transition={{ duration: 0.55, ease: EASE }}
+                className="h-full"
               >
                 <StoryConversation story={story} />
               </motion.div>
@@ -246,15 +265,54 @@ function AutoConversation() {
         </motion.div>
       </div>
 
+      {/* No pronoun, no "taught her" — quiet confidence rather than an
+       * explanation. Still honest that this is illustrative (Visual
+       * Language §0.1), just said once, plainly. */}
       <p className="mt-5 text-center text-[12px] text-muted-foreground/70">
-        A real example of how she replies — never invented, always checked against what you&apos;ve taught her.
+        How ReplyFlow replies — grounded in what&apos;s actually been taught, never guessed.
       </p>
     </div>
   );
 }
 
+/** The eyebrow line, with the trade matching whatever story is
+ * currently on screen quietly carrying more weight than the rest —
+ * ties the claim ("for plumbers, electricians...") to the real,
+ * specific example playing below it, without a new UI element. */
+function TradeEyebrow({ activeTrade }: { activeTrade: Trade | null }) {
+  return (
+    <motion.p
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.5, ease: EASE }}
+      className="mb-5 text-[13px] font-bold uppercase tracking-widest"
+    >
+      <span className="text-primary/60">For </span>
+      {EYEBROW_TRADES.map((trade, i) => (
+        <span key={trade}>
+          <span
+            className={cn(
+              "transition-colors duration-700",
+              trade === activeTrade ? "text-primary" : "text-primary/60"
+            )}
+          >
+            {trade}
+          </span>
+          {i < EYEBROW_TRADES.length - 1 && (
+            <span className="text-primary/60">{i === EYEBROW_TRADES.length - 2 ? " & " : ", "}</span>
+          )}
+        </span>
+      ))}
+    </motion.p>
+  );
+}
+
+const TRIAL_POINTS = ["7 days free", "No card needed", "No commitment"] as const;
+
 export function Hero() {
   const router = useRouter();
+  const storyIndex = useRotatingStoryIndex();
+  const story = STORIES[storyIndex]!;
 
   return (
     <section className="relative overflow-hidden">
@@ -267,14 +325,7 @@ export function Hero() {
       </div>
 
       <div className="relative mx-auto max-w-3xl px-6 pt-20 text-center sm:pt-28 lg:pt-32">
-        <motion.p
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, ease: EASE }}
-          className="mb-5 text-[13px] font-bold uppercase tracking-widest text-primary"
-        >
-          For plumbers, electricians, builders, roofers &amp; painters
-        </motion.p>
+        <TradeEyebrow activeTrade={story.trade} />
 
         <motion.h1
           initial={{ opacity: 0, y: 14 }}
@@ -292,7 +343,9 @@ export function Hero() {
           transition={{ duration: 0.6, ease: EASE, delay: 0.4 }}
           className="mx-auto mt-6 max-w-[46ch] text-[17px] leading-relaxed text-muted-foreground sm:text-[18px]"
         >
-          ReplyFlow answers your WhatsApp while you work — and actually knows your business, not just how to chat.
+          ReplyFlow answers your{" "}
+          <span className="font-semibold text-foreground">WhatsApp while you work</span> — and actually{" "}
+          <span className="font-semibold text-foreground">knows your business</span>, not just how to chat.
         </motion.p>
 
         <motion.div
@@ -303,9 +356,8 @@ export function Hero() {
         >
           {/* The same premium motion language onboarding's own primary
            * CTA uses (`components/onboarding/onboarding-cta.tsx`) — the
-           * identical spring and light-sweep values, not a lookalike,
-           * sized for the Hero rather than a full-width onboarding
-           * card. */}
+           * identical spring and light-sweep values, sized for the
+           * Hero rather than a full-width onboarding card. */}
           <motion.button
             type="button"
             onClick={() => router.push("/signup")}
@@ -326,9 +378,18 @@ export function Hero() {
               <ArrowRight className="h-4 w-4 transition-transform duration-300 ease-out group-hover:translate-x-1" />
             </span>
           </motion.button>
-          <p className="mt-3 text-[13.5px] font-medium text-muted-foreground">
-            7 days free. No card needed. No commitment.
-          </p>
+
+          {/* Reassurance, not small print — each point earns its own
+           * quiet checkmark rather than reading as one line of legal
+           * copy tacked under the button. */}
+          <div className="mt-4 flex flex-wrap items-center justify-center gap-x-4 gap-y-1.5">
+            {TRIAL_POINTS.map((point) => (
+              <span key={point} className="flex items-center gap-1.5 text-[13.5px] font-medium text-foreground/80">
+                <Check className="h-3.5 w-3.5 text-success" strokeWidth={3} />
+                {point}
+              </span>
+            ))}
+          </div>
         </motion.div>
       </div>
 
@@ -338,7 +399,7 @@ export function Hero() {
           animate={{ opacity: 1, scale: 1 }}
           transition={{ duration: 0.8, ease: EASE, delay: 0.9 }}
         >
-          <AutoConversation />
+          <AutoConversation story={story} storyIndex={storyIndex} />
         </motion.div>
       </div>
     </section>

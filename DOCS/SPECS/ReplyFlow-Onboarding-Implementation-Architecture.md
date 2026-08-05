@@ -1,93 +1,71 @@
 # ReplyFlow Onboarding Implementation Architecture
 
-**The concrete "how" for the redesigned onboarding flow.** Companion to `DOCS/CONSTITUTION/15-ReplyFlow-Onboarding-Experience-Architecture.md` (the "why," now partially stale against this document — see §7) and `DOCS/CONSTITUTION/16-ReplyFlow-Employment-Philosophy.md` (frozen, permanent — every decision below exists to satisfy it, not the other way round). Unlike those two, this is a spec: expected to move as building proceeds, not permanent.
+**The concrete "how" for the redesigned onboarding flow.** Companion to `DOCS/CONSTITUTION/15-ReplyFlow-Onboarding-Experience-Architecture.md` (the "why") and `DOCS/CONSTITUTION/16-ReplyFlow-Employment-Philosophy.md` (frozen, permanent — every decision below exists to satisfy it, not the other way round). Unlike those two, this is a spec: expected to move as building proceeds, not permanent.
 
-**Status: approved and frozen (2026-08-05).** All four open decisions from the original proposal are now settled — §3's three conflicts, §4's copy — and one new permanent rule was added during this review (§6). Nothing below is still open. Implementation begins from this document as written.
+**Status: V20 revision (2026-08-05).** The V19 build (this document's previous version) shipped a route-per-question flow with correct copy that still tested as a wizard — the founder's own words after using it live: *"I never once had the feeling I've just hired someone. I simply felt like I was filling out information."* This revision changes the interaction model itself, per doc 15's own §2 reversal of its earlier "keep discrete routes" conclusion. Sections 1, 3, and 4 below are rewritten; §2, §5, §6 carry forward with updates noted inline.
 
 ---
 
 ## 1. The flow
 
-Real screens, real order, what exists on each side of the account boundary:
-
-| Screen | Route (proposed) | Needs an account? | What she does |
+| Moment | Where it lives | Needs an account? | What happens |
 |---|---|---|---|
-| 1. Business name | new, pre-account (see §3.1) | No | Opens in her own voice, one question, reflects the name back specifically the moment it's valid (doc 16 §4.1–2) |
-| 2. Trade | same route group | No | Auto-advances on tap (doc 16 §3.4 — no button ceremony around an already-complete decision); reflects trade-specific vocabulary back |
-| 3. Service area | same route group | No | One real question (where); hours/days pre-filled with a stated, correctable default, never a three-field interrogation |
-| 4. Save this | `/signup`, repositioned | Creates the account | Framed as protecting what's already been said, not a gate before it — the only screen in the flow that is unavoidably a credential form, and named honestly as the one place that's true (doc 16 §1, §10) |
-| 5. Preparing | `/onboarding/preparing`, now genuinely protected | Yes | The real `POST /api/onboarding/prepare` call; facts already known settle into view while it resolves; ends with one CTA into the real handoff |
-| → | `/dashboard/receptionist/meet` | Yes | Doc 04's territory, untouched |
+| Name, trade, service area | One view, one route (`/hire`) — no navigation between them | No | Three real questions inside a single continuous encounter (doc 15 §3). Each answer commits live to the store, appends a permanent line to a visible acknowledgment stack, and triggers one micro-interaction (§4). Trade auto-advances on tap; name and area keep an explicit action stating the outcome, never "Continue." |
+| Account | `/signup`, a real route change | Creates the account | The one unavoidable credential form — a distinct, focused moment (password managers and autofill genuinely need this), reframed around continuity and ownership rather than security, and showing a condensed recap of what's already been learned so it reads as the same encounter continuing. |
+| Preparing | `/onboarding/preparing`, protected | Yes | The real `POST /api/onboarding/prepare` call; facts already known settle into view while it resolves; ends with one CTA into the real handoff. |
+| → | `/dashboard/receptionist/meet` | Yes | Doc 04's territory, untouched. |
 
-No progress bar, no step counter (doc 16 §3.3). No "Continue" — screen 1 and 3 keep a single action button, but it states the outcome, never the word "Continue" (doc 16 §3.4); screen 2 has no button at all.
+No progress bar, no step counter, no "Continue." No pronoun assigned anywhere in this copy (doc 16 §3.14) — first person or by name.
 
 ---
 
-## 2. Doc 16 compliance, mapped explicitly
+## 2. Doc 16 compliance — carried forward from V19, plus what's new
 
-Not asserted — checked, rule by rule, against what's actually being proposed:
+Everything checked in the V19 pass (§3.1 no institutional voice, §3.2 no labeled boxes, §3.3 no step counters, §3.4 no generic buttons, §3.5 no fabricated demos, §3.8 no document metaphors, §3.11 no upgrade framing, §3.12 no scale-revealing language, §4.1–2 acknowledge and reflect facts, §4.4 proof before permission) still holds structurally — none of those constraints are affected by collapsing routes into one view. Two additions this revision:
 
-- **§3.1 (no institutional voice)** — the failure states on screens 1–5 are written in her voice ("that didn't quite go through — let's try that again"), never a raw error or generic toast. Applies equally to the credential screen's own real failure modes (a taken email, a weak password) — those get rewritten in her voice too, not left as Supabase's default copy.
-- **§3.2 (no labeled boxes)** — one question per screen, no field captions, conversational framing throughout screens 1–3.
-- **§3.3 (no step counters)** — confirmed removed. Nothing replaces it; a three-question conversation doesn't need a fraction.
-- **§3.4 (no generic buttons)** — addressed per screen above.
-- **§3.5 (no fabricated demos)** — already decided (doc 15 §2); the real proof conversation lives entirely in the real handoff (doc 04 §2), not duplicated here.
-- **§3.8 (no document metaphors)** — "Save & exit" is retired; see §4 for the replacement.
-- **§3.11 (no upgrade/version framing)** — not directly applicable to first-run onboarding, but the failure-retry copy on screen 5 is written as her trying again, not "retry request."
-- **§3.12 (no scale-revealing language)** — nothing on any of these five screens references aggregate usage. Confirmed clean by construction, not by omission.
-- **§4.1–2 (acknowledge, reflect facts)** — the receptionist-presence reactions from doc 15 §3, unchanged in substance, now confirmed appropriate under doc 16 §5: this *is* day one, so full acknowledgment is the correct calibration, not a violation of the decay rule. The decay rule governs the *rest of the product* over months, not this five-minute window.
-- **§4.4 (proof before permission)** — she never asks for WhatsApp access or any real permission during this flow; the only thing asked for is the account itself, and that's framed honestly as what it is (§4 below).
+- **§3.14 (no hardcoded pronoun)** — every "she/her" instance found in the built V19 screens (preparing-receptionist, service-area-step, signup-form) rewritten to first person or name. Checked by grep against the actual customer-facing strings, not by inspection alone.
+- **§4.1, sharpened** — acknowledgment is no longer just "immediate and specific," it's now also *cumulative and visible*: each answer's acknowledgment line stays on screen as the next question appears, rather than disappearing when its screen would previously have unmounted. This is what makes "watching someone come to life" (doc 15 §0) literal rather than aspirational — the owner can see the record being built, not just trust that it happened.
 
 ---
 
-## 3. Real conflicts with existing technical structure — resolved
+## 3. The single-view architecture
 
-Three were found by checking the proposal against actual code rather than assuming it would fit. All three are now decided.
+**Route collapse.** `app/(hire)/hire/name/`, `/trade/`, `/area/` (three page routes from V19) are deleted. A single `app/(hire)/hire/page.tsx` renders one new component, `components/onboarding/hiring-conversation.tsx`, which owns local state (`step: "name" | "trade" | "area"`) and advances via `setStep()` — never `router.push()`. `(hire)/hire/layout.tsx` keeps its logo/aurora chrome but drops the per-route `AnimatePresence key={pathname}` transition, since there's only one path now. `middleware.ts` needs no changes — `/hire` falls outside its three protected prefixes exactly as `/hire/*` did.
 
-### 3.1 Middleware gates all of `/onboarding/*` behind authentication — decided: Option B
+**Retired components.** `business-name-step.tsx`, `trade-step.tsx`, `service-area-step.tsx`, and `receptionist-presence.tsx` are deleted. Their input mechanics (name validation, the trade-card grid, the area input) become internal render sections of `hiring-conversation.tsx`; `receptionist-presence.tsx`'s job (reacting to each answer) becomes local state in the same component, since its original reason for existing — surviving a route change via Next.js layout persistence — no longer applies once there's no route change to survive.
 
-`middleware.ts` redirects any unauthenticated request to `/onboarding/*` straight to `/login`. Screens 1–3 have no account yet by design.
+**Service area becomes a set.** `hooks/use-onboarding-store.ts`'s `serviceArea: string` becomes `serviceAreas: string[]`, with a dedicated `setServiceAreas` action matching the existing `setOpenDays` shape. The UI reuses the dashboard's own chip-editor pattern (`components/dashboard/business/business-memory.tsx`'s private `ChipEditor`, extracted to `components/shared/chip-editor.tsx` so both surfaces import the same component) rather than a free-text sentence — this also removes a real workaround: `/api/onboarding/prepare/route.ts` previously did `service_areas: serviceArea ? [serviceArea] : []`, wrapping a single string for a database column that has always been an array. The route now accepts `serviceAreas: string[]` directly.
 
-**Decided:** move screens 1–3 into a new, already-unauthenticated route group (sibling to the existing `(auth)` group, which already contains public routes like `/signup` and `/login`), leaving `/onboarding/*`'s existing protection completely untouched. The account boundary becomes the literal boundary between route groups: nothing protected is reachable until screen 4 creates a real session. Rejected explicitly: loosening middleware to exempt specific paths — approved instead as the option that doesn't touch the trust boundary of code that already works correctly.
-
-### 3.2 `/welcome` and the direct-session redirect already disagreed, today, before any of this was built — decided: retire `/welcome`
-
-`signup-form.tsx` sends a session granted immediately at signup straight to `/onboarding/business-name`; only the email-verification-required path (`emailRedirectTo`'s `next=/welcome`) ever reached `/welcome`. A real, pre-existing inconsistency, not introduced by this redesign.
-
-**Decided:** `/welcome` retires completely. Its purpose — she speaks first — merges into screen 1, which already opens in her voice before the first real question. Both entry paths land on screen 1 directly. There is no scenario left where a separate greeting screen exists before or after it.
-
-### 3.3 Email verification — verified, not assumed: not currently live
-
-Queried the actual Supabase project directly (`/auth/v1/settings`) rather than leaving this as a design assumption, per instruction. Result: **`mailer_autoconfirm: true`.** Every signup on this project grants an immediate session — `data.session` is never null in practice today, and the `/verify-email` path is not a live concern for this flow as it currently stands.
-
-The fallback code path (handling a null session gracefully, resuming at screen 5 rather than re-asking screens 1–3 if verification were ever required) stays in the implementation regardless — cheap to keep, consistent with this codebase's existing discipline of never assuming a Supabase setting stays fixed forever — but it is not the primary path being designed around, and testing effort should be weighted accordingly.
+**Hours stay collapsed by default**, same stated line as V19 ("Open weekdays, 8am till 5:30pm — tell me if that's wrong"). Disclosing now shows plain-language presets (current default / earlier start / every day / "set exact hours") before falling back to the existing day-grid-and-time-picker editor, kept only for genuinely custom schedules rather than shown immediately.
 
 ---
 
-## 4. Final copy — screens 4 and 5
+## 4. Micro-interactions
 
-"Launch ReplyFlow" is rejected outright, not softened — *launch* is what happens to software. "Let her answer," floated during review, was rejected too: correct in spirit, weak as a button (a status, not an action the owner is taking). Decided:
-
-- **Screen 5, settled state, heading line:** *"She's ready."* — a status, not an action, exactly as strong stated plainly.
-- **Screen 5, the CTA itself:** *"Let's put her to work."* — an action, phrased as something the owner and she do together, matching the trade-audience voice already established throughout this product (direct, warm, no corporate polish) rather than a solitary, software-flavoured command.
-- **Screen 5, the small caption shown while the real setup call is in flight:** *"Getting to know {business name}."* — specific to this business by construction, never a generic "Setting up your receptionist."
-- **Screen 4 (credentials), heading:** *"One more thing before she starts."* — honest about what this screen is (doc 16 §1's boundary: this is the one place the illusion doesn't need to hold, because nothing about account creation is pretending to be her) without resorting to document-metaphor language.
-- **Screen 4, the CTA:** *"Make it official."* — avoids "Save," which reads too close to the banned document metaphor (doc 16 §3.8) despite meaning something different here; "official" ties directly to the hiring frame instead (a hire being made official is real, ordinary language, not a metaphor borrowed from software).
+One shared "commit" motion, reused for every answer: the receptionist's identity mark does a brief scale-and-glow settle (built from the existing `GrowingCheck` primitive in `components/shared/motion.tsx`, not a new animation system). On mobile, the same moment fires a single `navigator.vibrate(10)`, feature-detected (`"vibrate" in navigator`) and silently absent on desktop or unsupported browsers — net-new to this codebase, deliberately minimal. Nothing else: no confetti, no progress counters, no gamification.
 
 ---
 
-## 5. What doesn't change
+## 5. Final copy — updated for de-gendering and reframing
 
-Doc 04's territory — Meet Your Receptionist, Test Conversations, Shadowing — untouched, exactly as doc 15 already scoped. The five real facts collected. `buildHandoverRecap`'s readiness logic (already correctly fires the moment a service area exists, confirmed against the live code this session). The visual language — cards, gradient, `EASE`, the existing motion primitives — all reused, none reinvented.
+Carried forward from V19 where unchanged; updated where doc 16 §3.14 or the founder's account-screen note applies:
+
+- **Preparing screen, settled state, heading line:** *"I know enough to get started."* (was "She's ready.")
+- **Preparing screen, CTA:** *"Let's get to work."* (was "Let's put her to work.")
+- **Preparing screen, in-flight caption:** *"Getting to know {business name}."* — unchanged, already first-person-safe.
+- **Signup, heading:** *"One more thing before I start."* (was "...before she starts.")
+- **Signup, subheading:** reframed from security language ("kept safe, and only ever yours") to continuity/ownership: *"So everything I've just learned stays with me, and only you can see it."*
+- **Signup, CTA:** *"Make it official."* — unchanged; addressed to the owner's action, not a pronoun assignment.
+- **Acknowledgment stack copy:** see doc 15 §3 for the three lines, each rewritten to explain why the fact matters, not just confirm it.
 
 ---
 
-## 6. One rule added during this review: the word "onboarding" is never customer-facing
+## 6. What doesn't change
 
-Added to doc 16 §3 as permanent item 13, applied here as its first concrete instance: the word "onboarding" (or any synonym — "setup," "getting started") never appears in copy the owner reads, on any of the five screens or the handoff beyond them. It stays exactly where it already lives today — code, routes (`/onboarding/*` as a URL is fine; nobody reads a URL as a sentence), comments, this document — and nowhere else. Checked against the current codebase before writing this: every existing user-facing string already satisfies this without having been told to; the only occurrences of the word anywhere in `components/onboarding/` are identifiers, imports, routes, and comments. The implementation's job is to keep it that way through every rewritten screen, not to fix a violation that doesn't currently exist.
+Doc 04's territory — Meet Your Receptionist, Test Conversations, Shadowing — untouched. The five real facts collected (now: name, trade, service area**s**, hours, days). `buildHandoverRecap`'s readiness logic. The visual language — cards, gradient, `EASE`, the existing motion primitives — all reused. `/api/onboarding/prepare`'s core responsibility (create the business row) and `ensureBusinessRow`'s idempotency, unchanged beyond accepting an array for service areas directly instead of wrapping a string.
 
 ---
 
 ## 7. Status
 
-All decisions closed. Doc 15 (`DOCS/CONSTITUTION/15-ReplyFlow-Onboarding-Experience-Architecture.md`) still reflects an earlier draft — its own progress bar, "Continue" buttons, and "Launch" CTA all predate this document and doc 16's final form — and needs a revision pass to stop disagreeing with what's actually being built, tracked as the first task of implementation, not a blocker to starting it.
+V20 revision complete as written above. Doc 15 has been revised in parallel to match (its own §2 now documents *why* the route-per-screen conclusion was reversed, on direct evidence from testing rather than desk research). Landing-page phone-preview aliveness and a real maps/radius picker for service area were both raised during review and are explicitly out of scope for this revision — flagged as follow-up candidates, not silently dropped.

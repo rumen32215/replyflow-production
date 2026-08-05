@@ -150,7 +150,7 @@ async function main() {
   console.log("not conversations, not WhatsApp connection, not Business/Receptionist knowledge.\n");
   console.log("Note: since the account already exists, logging in lands directly on");
   console.log("/onboarding/preparing (screen 5) — it won't re-ask the three pre-account");
-  console.log("questions. To retest those, visit /hire/name directly while signed out.\n");
+  console.log("questions. To retest those, visit /hire directly while signed out.\n");
 
   const confirmation = await ask(`Type the email address again to confirm: `);
   if (confirmation.trim().toLowerCase() !== email.toLowerCase()) {

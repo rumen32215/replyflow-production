@@ -135,7 +135,7 @@ export function PeaceOfMind() {
   const tickerIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
-    router.prefetch("/hire/name");
+    router.prefetch("/hire");
     return () => {
       if (tickerIntervalRef.current) clearInterval(tickerIntervalRef.current);
     };
@@ -154,7 +154,7 @@ export function PeaceOfMind() {
       x: ((rect.left + rect.width / 2) / window.innerWidth) * 100,
       y: ((rect.top + rect.height / 2) / window.innerHeight) * 100,
     });
-    setTimeout(() => router.push("/hire/name"), TRANSITION_NAVIGATE_MS);
+    setTimeout(() => router.push("/hire"), TRANSITION_NAVIGATE_MS);
   }
 
   const startChoreography = useCallback(() => {

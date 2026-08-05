@@ -137,7 +137,7 @@ export function LoginForm() {
          * onboarding store here; the destination is the first real
          * question now, not the credential screen. */}
         <Link
-          href="/hire/name"
+          href="/hire"
           onClick={() => useOnboardingStore.getState().reset()}
           className="font-semibold text-primary hover:underline"
         >

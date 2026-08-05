@@ -1,6 +1,6 @@
 /**
  * The one place a trade is recognised. ReplyFlow is a platform, not a
- * plumbing app — onboarding's trade-step already lets an owner pick
+ * plumbing app — onboarding's hiring conversation already lets an owner pick
  * any of these (or type their own), so anything trade-flavoured
  * elsewhere in the product (Receptionist's preview scenarios,
  * Business Knowledge's service suggestions) reads from here rather

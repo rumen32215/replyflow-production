@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
  * "Preparing your receptionist" — the moment the one-minute setup
  * completes. Called once from /onboarding/preparing with the five real
  * facts the V1 First-Run redesign collects: business name, trade,
- * service area, opening days, and opening hours
+ * service area(s), opening days, and opening hours
  * (DOCS/SPECS/ReplyFlow-V1-First-Run-Proposal.md).
  *
  * The businesses row already exists by this point (created in
@@ -57,7 +57,7 @@ export async function POST(request: Request) {
   let body: {
     businessName?: unknown;
     trade?: unknown;
-    serviceArea?: unknown;
+    serviceAreas?: unknown;
     openDays?: unknown;
     openingTime?: unknown;
     closingTime?: unknown;
@@ -95,7 +95,9 @@ export async function POST(request: Request) {
 
   const businessName = sanitize(body.businessName, 80) || business.business_name || "Your business";
   const trade = sanitize(body.trade, 60).toLowerCase() || business.trade || "plumbing";
-  const serviceArea = sanitize(body.serviceArea, 80);
+  const serviceAreas = Array.isArray(body.serviceAreas)
+    ? body.serviceAreas.map((a) => sanitize(a, 80)).filter(Boolean).slice(0, 20)
+    : [];
   const openingTime = isTimeString(body.openingTime) ? body.openingTime : "08:00";
   const closingTime = isTimeString(body.closingTime) ? body.closingTime : "17:30";
   const openDays = new Set(
@@ -114,7 +116,7 @@ export async function POST(request: Request) {
     .update({
       business_name: businessName,
       trade,
-      service_areas: serviceArea ? [serviceArea] : [],
+      service_areas: serviceAreas,
       opening_time: openingTime,
       closing_time: closingTime,
       availability,

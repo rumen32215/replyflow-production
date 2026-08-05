@@ -17,6 +17,8 @@ import { createClient } from "@/lib/supabase/client";
 import { signupSchema, type SignupInput } from "@/lib/validations/auth";
 import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import { useOnboardingStore } from "@/hooks/use-onboarding-store";
+import { ONBOARDING_TRADE_LABELS, type ONBOARDING_TRADES } from "@/lib/trades";
 
 const RULES = [
   { test: (v: string) => v.length >= 8, label: "At least 8 characters" },
@@ -60,6 +62,10 @@ export function SignupForm() {
   const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const reassuranceIndex = useRotatingIndex(REASSURANCE_LINES.length, 3200);
+  const businessName = useOnboardingStore((s) => s.businessName);
+  const trade = useOnboardingStore((s) => s.trade);
+  const serviceAreas = useOnboardingStore((s) => s.serviceAreas);
+  const tradeLabel = ONBOARDING_TRADE_LABELS[trade as (typeof ONBOARDING_TRADES)[number]] ?? trade;
 
   const {
     register,
@@ -101,9 +107,10 @@ export function SignupForm() {
     // out of `signUp()` (i.e. "Confirm email" is off). If a project
     // still requires confirmation first, this falls back to exactly
     // the previous behaviour — nobody gets stranded on a page their
-    // session can't actually reach. Either way she already knows the
-    // business name, trade and area from the three questions asked
-    // before this screen — nothing here needs re-asking.
+    // session can't actually reach. Either way the business name,
+    // trade, and service areas are already known from the three
+    // questions asked before this screen — nothing here needs
+    // re-asking.
     if (data.session) {
       router.push("/onboarding/preparing");
     } else {
@@ -114,11 +121,24 @@ export function SignupForm() {
   return (
     <AuthCard>
       <h1 className="mb-1.5 text-[25px] font-extrabold tracking-tight">
-        One more thing before <GradientText>she starts</GradientText>.
+        One more thing before <GradientText>I start</GradientText>.
       </h1>
       <p className="mb-4 text-[14.5px] text-muted-foreground">
-        An account so what she learns is kept safe, and only ever yours.
+        So everything I&apos;ve just learned stays with me, and only you can see it.
       </p>
+
+      {/* V20 — the same encounter continuing, not a new page: a
+       * condensed recap of what was just learned in hiring-
+       * conversation.tsx, carried across the one real route change
+       * this flow still has (doc 15 §6). Only renders what's actually
+       * there — nothing invented if a field is somehow still empty. */}
+      {(businessName || trade || serviceAreas.length > 0) && (
+        <p className="mb-5 rounded-xl border border-border/60 bg-background/60 px-3.5 py-2.5 text-[12.5px] font-medium text-muted-foreground">
+          I already know: {[businessName, trade && tradeLabel, serviceAreas.length > 0 && serviceAreas.join(", ")]
+            .filter(Boolean)
+            .join(" · ")}
+        </p>
+      )}
 
       {/* Rotating, not static — the same "the page feels alive"
        * principle as the Hero, continued into sign-up instead of

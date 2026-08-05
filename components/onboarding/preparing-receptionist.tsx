@@ -10,14 +10,14 @@ import { ONBOARDING_TRADE_LABELS, type ONBOARDING_TRADES } from "@/lib/trades";
 import { DAY_KEYS, DAY_LABELS } from "@/lib/availability";
 
 /**
- * Screen 5 — her first day starts. The real POST to
+ * Screen 5 — the first day starts. The real POST to
  * /api/onboarding/prepare creates the business row; this screen's
  * "Getting to know {businessName}" caption lasts exactly as long as
  * that real request takes, nothing scripted. There is no rehearsed
  * conversation here (Employment Philosophy v16 §3.5) — the first
- * exchange she has is a real one, on Meet Your Receptionist, with a
+ * exchange it has is a real one, on Meet Your Receptionist, with a
  * real customer message the owner types themselves. This screen's job
- * is only to show what she already has, then get out of the way.
+ * is only to show what's already known, then get out of the way.
  */
 
 const FACT_GROUP_DWELL_MS = 2100;
@@ -83,7 +83,7 @@ export function PreparingReceptionist() {
   const router = useRouter();
   const businessName = useOnboardingStore((s) => s.businessName);
   const trade = useOnboardingStore((s) => s.trade);
-  const serviceArea = useOnboardingStore((s) => s.serviceArea);
+  const serviceAreas = useOnboardingStore((s) => s.serviceAreas);
   const openDays = useOnboardingStore((s) => s.openDays);
   const openingTime = useOnboardingStore((s) => s.openingTime);
   const closingTime = useOnboardingStore((s) => s.closingTime);
@@ -98,7 +98,7 @@ export function PreparingReceptionist() {
   const facts = [
     { label: "Business name", value: businessName },
     { label: "Trade", value: tradeLabel },
-    { label: "Service area", value: serviceArea },
+    { label: "Service area", value: serviceAreas.join(", ") },
     { label: "Opening days", value: describeOpenDaysRange(openDays) },
     { label: "Opening hours", value: `${openingTime}–${closingTime}` },
   ];
@@ -123,7 +123,7 @@ export function PreparingReceptionist() {
         body: JSON.stringify({
           businessName: businessName.trim(),
           trade: trade.trim(),
-          serviceArea: serviceArea.trim(),
+          serviceAreas,
           openDays,
           openingTime,
           closingTime,
@@ -144,7 +144,7 @@ export function PreparingReceptionist() {
   }, []);
 
   function enterReceptionist() {
-    resetStore(); // her first day has started — clear the persisted draft
+    resetStore(); // the first day has started — clear the persisted draft
     router.replace("/dashboard/receptionist/meet");
   }
 
@@ -159,7 +159,7 @@ export function PreparingReceptionist() {
         <>
           <div className="mb-6">
             <GentleSwap swapKey={stage} className="mb-2 text-[12px] font-semibold text-muted-foreground/80">
-              {stage === "working" ? `Getting to know ${businessName || "your business"}` : "She's ready."}
+              {stage === "working" ? `Getting to know ${businessName || "your business"}` : "I know enough to get started."}
             </GentleSwap>
             <div className="h-1.5 w-full overflow-hidden rounded-full bg-border/60">
               <motion.div
@@ -254,9 +254,9 @@ export function PreparingReceptionist() {
               <span aria-hidden>
                 <GrowingCheck className="h-4 w-4" />
               </span>
-              She&apos;s ready.
+              I know enough to get started.
             </p>
-            <OnboardingCTA onClick={enterReceptionist}>Let&apos;s put her to work</OnboardingCTA>
+            <OnboardingCTA onClick={enterReceptionist}>Let&apos;s get to work</OnboardingCTA>
           </motion.div>
         )}
 

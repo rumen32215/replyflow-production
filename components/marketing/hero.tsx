@@ -172,7 +172,7 @@ export function Hero() {
   // mount could lag noticeably behind the overlay's own timing,
   // undermining the whole point of masking the swap.
   useEffect(() => {
-    router.prefetch("/hire/name");
+    router.prefetch("/hire");
   }, [router]);
 
   // V7 founder review (2026-08-04): the transition now expands from
@@ -185,11 +185,10 @@ export function Hero() {
   // V19 — this is the one genuine fresh-start point in the whole
   // product (`DOCS/CONSTITUTION/16...md` §0, `.../15...md` §7): nobody
   // clicks this CTA mid-flow, so it's the only safe place to reset the
-  // onboarding store. `/hire/name` itself just hydrates from whatever
-  // the store already holds — the same pattern `trade-step.tsx` and
-  // `service-area-step.tsx` already use — so browser-back from a later
-  // question never loses an answer the way resetting on every mount
-  // of the first screen would have.
+  // onboarding store. `hiring-conversation.tsx` itself just hydrates
+  // from whatever the store already holds, so leaving `/hire` and
+  // coming back never loses an answer the way resetting on every
+  // mount would have.
   function handleMeetReceptionist(e: React.MouseEvent<HTMLButtonElement>) {
     if (isNavigating) return;
     setIsNavigating(true);
@@ -199,7 +198,7 @@ export function Hero() {
       x: ((rect.left + rect.width / 2) / window.innerWidth) * 100,
       y: ((rect.top + rect.height / 2) / window.innerHeight) * 100,
     });
-    setTimeout(() => router.push("/hire/name"), TRANSITION_NAVIGATE_MS);
+    setTimeout(() => router.push("/hire"), TRANSITION_NAVIGATE_MS);
   }
 
   return (

@@ -1,71 +1,80 @@
 # ReplyFlow Onboarding Implementation Architecture
 
-**The concrete "how" for the redesigned onboarding flow.** Companion to `DOCS/CONSTITUTION/15-ReplyFlow-Onboarding-Experience-Architecture.md` (the "why") and `DOCS/CONSTITUTION/16-ReplyFlow-Employment-Philosophy.md` (frozen, permanent — every decision below exists to satisfy it, not the other way round). Unlike those two, this is a spec: expected to move as building proceeds, not permanent.
+**The concrete "how" for V21.6 — the locked experience.** Companion to `DOCS/CONSTITUTION/15-ReplyFlow-Onboarding-Experience-Architecture.md` (the "why," which this document translates line by line) and `DOCS/CONSTITUTION/16-ReplyFlow-Employment-Philosophy.md` (frozen, permanent). This is a spec, not permanent — expected to move as building proceeds.
 
-**Status: V20 revision (2026-08-05).** The V19 build (this document's previous version) shipped a route-per-question flow with correct copy that still tested as a wizard — the founder's own words after using it live: *"I never once had the feeling I've just hired someone. I simply felt like I was filling out information."* This revision changes the interaction model itself, per doc 15's own §2 reversal of its earlier "keep discrete routes" conclusion. Sections 1, 3, and 4 below are rewritten; §2, §5, §6 carry forward with updates noted inline.
+**Status: drafted (2026-08-05), presented for approval before any code is written.** V20's own SPECS document described a generic acknowledgment-stack with a pulsing identity mark; that mechanism is fully retired below in favour of a scripted, per-trade, pacing-driven encounter. Nothing here has been implemented yet.
 
 ---
 
-## 1. The flow
+## 1. Sequence
 
-| Moment | Where it lives | Needs an account? | What happens |
+One persistent view, one URL, no route changes between beats — unchanged from V20's own architectural finding. What changes is what happens inside it.
+
+| Beat | Asks / says | Pause before responding | Writes |
 |---|---|---|---|
-| Name, trade, service area | One view, one route (`/hire`) — no navigation between them | No | Three real questions inside a single continuous encounter (doc 15 §3). Each answer commits live to the store, appends a permanent line to a visible acknowledgment stack, and triggers one micro-interaction (§4). Trade auto-advances on tap; name and area keep an explicit action stating the outcome, never "Continue." |
-| Account | `/signup`, a real route change | Creates the account | The one unavoidable credential form — a distinct, focused moment (password managers and autofill genuinely need this), reframed around continuity and ownership rather than security, and showing a condensed recap of what's already been learned so it reads as the same encounter continuing. |
-| Preparing | `/onboarding/preparing`, protected | Yes | The real `POST /api/onboarding/prepare` call; facts already known settle into view while it resolves; ends with one CTA into the real handoff. |
-| → | `/dashboard/receptionist/meet` | Yes | Doc 04's territory, untouched. |
+| Meet | *"I don't know anything about you yet — let's fix that."* → asks name | none (nothing to think about yet) | — |
+| | On name given | short (~700ms) | `businessName` |
+| Learn | Trade, tapped from the existing icon grid | none (recognition) → held (~1200ms) for the vocabulary line | `trade` |
+| Understand | Domestic or commercial, asked directly because it changes tone and quoting | short | new field — see §3 |
+| | Consequence line stated | short | — |
+| Widen | Area — permission-asking guess first, correction still available via the existing chip editor | held (~1400ms) before the guess | `serviceAreas` |
+| | Consequence line stated | short | — |
+| Prepare | Hours — permission-asking guess first, existing day/time editor as fallback if corrected | held (~1400ms) | `openingTime`, `closingTime`, `openDays` |
+| | Consequence line stated (the after-hours baseline) | short | — |
+| Discover | The one long pause in the whole encounter, then the trade-specific discovery line (§2) | long (2000–2500ms), never repeated elsewhere | see §2 |
+| Close | *"I think I've got a real picture of you now."* → the momentum line | held | — → navigates to `/signup` |
 
-No progress bar, no step counter, no "Continue." No pronoun assigned anywhere in this copy (doc 16 §3.14) — first person or by name.
-
----
-
-## 2. Doc 16 compliance — carried forward from V19, plus what's new
-
-Everything checked in the V19 pass (§3.1 no institutional voice, §3.2 no labeled boxes, §3.3 no step counters, §3.4 no generic buttons, §3.5 no fabricated demos, §3.8 no document metaphors, §3.11 no upgrade framing, §3.12 no scale-revealing language, §4.1–2 acknowledge and reflect facts, §4.4 proof before permission) still holds structurally — none of those constraints are affected by collapsing routes into one view. Two additions this revision:
-
-- **§3.14 (no hardcoded pronoun)** — every "she/her" instance found in the built V19 screens (preparing-receptionist, service-area-step, signup-form) rewritten to first person or name. Checked by grep against the actual customer-facing strings, not by inspection alone.
-- **§4.1, sharpened** — acknowledgment is no longer just "immediate and specific," it's now also *cumulative and visible*: each answer's acknowledgment line stays on screen as the next question appears, rather than disappearing when its screen would previously have unmounted. This is what makes "watching someone come to life" (doc 15 §0) literal rather than aspirational — the owner can see the record being built, not just trust that it happened.
+Timing bands, translated from doc 15 §3's taxonomy into real numbers: **none** (<100ms, effectively immediate), **short** (600–900ms), **held** (1200–1600ms), **long** (2000–2500ms, Discover only). These are fixed constants, not random jitter — variation in *feel* comes from which band is used when, not from randomising within a band.
 
 ---
 
-## 3. The single-view architecture
+## 2. The discovery moment, per trade — the one place accuracy matters most
 
-**Route collapse.** `app/(hire)/hire/name/`, `/trade/`, `/area/` (three page routes from V19) are deleted. A single `app/(hire)/hire/page.tsx` renders one new component, `components/onboarding/hiring-conversation.tsx`, which owns local state (`step: "name" | "trade" | "area"`) and advances via `setStep()` — never `router.push()`. `(hire)/hire/layout.tsx` keeps its logo/aurora chrome but drops the per-route `AnimatePresence key={pathname}` transition, since there's only one path now. `middleware.ts` needs no changes — `/hire` falls outside its three protected prefixes exactly as `/hire/*` did.
+Doc 15 §4 already established that three trades share a real "most of this can wait, some of it can't" shape, and two don't. Exact content, and what each produces:
 
-**Retired components.** `business-name-step.tsx`, `trade-step.tsx`, `service-area-step.tsx`, and `receptionist-presence.tsx` are deleted. Their input mechanics (name validation, the trade-card grid, the area input) become internal render sections of `hiring-conversation.tsx`; `receptionist-presence.tsx`'s job (reacting to each answer) becomes local state in the same component, since its original reason for existing — surviving a route change via Next.js layout persistence — no longer applies once there's no route change to survive.
+| Trade | Vocabulary line (Learn beat) | Discovery line | On "yes," writes |
+|---|---|---|---|
+| Plumbing | *"...someone says they've got a leak or no hot water, I'll know exactly what that means."* | *"...a burst pipe doesn't know that. Want me to treat anything that sounds genuinely urgent differently, even outside your hours?"* | `business_knowledge.emergencyNotes` — a real sentence, e.g. "Treats burst pipes and no hot water as urgent, even outside normal hours." |
+| Electrical | *"...someone says their consumer unit's tripping, I'll know exactly what that means."* | *"...no power at all, or a burning smell, isn't a 'wait till Monday' problem. Want me to flag anything that sounds like that straight away?"* | `business_knowledge.emergencyNotes` |
+| Roofing | *"...someone says water's coming through the ceiling, I'll know that's not routine."* | *"...weather doesn't wait for office hours. Want me to flag anything that sounds like an active leak, even outside your hours?"* | `business_knowledge.emergencyNotes` |
+| Building | *"...someone mentions an extension or a loft conversion, I'll know that's a proper job, not a quick fix."* | *"Most of what you do is booked weeks out, not same-day. Want me to say that upfront, so nobody's expecting you tomorrow morning for a job that needs planning?"* | `business_knowledge.personality` — appends a chip, e.g. "Books several weeks ahead." |
+| Painting & Decorating | *"...someone says their lounge needs doing, I'll know that's a room, not a whole house, unless they say otherwise."* | *"You're usually working inside people's homes — want me to always check about pets or which rooms need to stay clear before confirming?"* | `business_knowledge.personality` — appends a chip, e.g. "Always checks access before booking." |
 
-**Service area becomes a set.** `hooks/use-onboarding-store.ts`'s `serviceArea: string` becomes `serviceAreas: string[]`, with a dedicated `setServiceAreas` action matching the existing `setOpenDays` shape. The UI reuses the dashboard's own chip-editor pattern (`components/dashboard/business/business-memory.tsx`'s private `ChipEditor`, extracted to `components/shared/chip-editor.tsx` so both surfaces import the same component) rather than a free-text sentence — this also removes a real workaround: `/api/onboarding/prepare/route.ts` previously did `service_areas: serviceArea ? [serviceArea] : []`, wrapping a single string for a database column that has always been an array. The route now accepts `serviceAreas: string[]` directly.
+Both target fields already exist and already do real work — `emergencyNotes` and `personality` are read by the same reasoning pipeline every other real fact goes through (`lib/knowledge.ts`, `lib/intelligence.ts`), the same fields the dashboard's own Business Knowledge editor already writes to. Nothing new is being invented here technically; onboarding is simply the first surface allowed to write to them. One real correction from an earlier draft: `availability.rules.emergency` was initially proposed as the target field, until checking `lib/availability.ts`'s own `defaultAvailability()` showed it's already `true` for every business by default — writing "true" to an already-true field would have been a discovery moment that discovered nothing. Caught before it shipped, not after.
 
-**Hours stay collapsed by default**, same stated line as V19 ("Open weekdays, 8am till 5:30pm — tell me if that's wrong"). Disclosing now shows plain-language presets (current default / earlier start / every day / "set exact hours") before falling back to the existing day-grid-and-time-picker editor, kept only for genuinely custom schedules rather than shown immediately.
-
----
-
-## 4. Micro-interactions
-
-One shared "commit" motion, reused for every answer: the receptionist's identity mark does a brief scale-and-glow settle (built from the existing `GrowingCheck` primitive in `components/shared/motion.tsx`, not a new animation system). On mobile, the same moment fires a single `navigator.vibrate(10)`, feature-detected (`"vibrate" in navigator`) and silently absent on desktop or unsupported browsers — net-new to this codebase, deliberately minimal. Nothing else: no confetti, no progress counters, no gamification.
-
----
-
-## 5. Final copy — updated for de-gendering and reframing
-
-Carried forward from V19 where unchanged; updated where doc 16 §3.14 or the founder's account-screen note applies:
-
-- **Preparing screen, settled state, heading line:** *"I know enough to get started."* (was "She's ready.")
-- **Preparing screen, CTA:** *"Let's get to work."* (was "Let's put her to work.")
-- **Preparing screen, in-flight caption:** *"Getting to know {business name}."* — unchanged, already first-person-safe.
-- **Signup, heading:** *"One more thing before I start."* (was "...before she starts.")
-- **Signup, subheading:** reframed from security language ("kept safe, and only ever yours") to continuity/ownership: *"So everything I've just learned stays with me, and only you can see it."*
-- **Signup, CTA:** *"Make it official."* — unchanged; addressed to the owner's action, not a pronoun assignment.
-- **Acknowledgment stack copy:** see doc 15 §3 for the three lines, each rewritten to explain why the fact matters, not just confirm it.
+"No" at the discovery moment writes nothing — declining isn't a fact, and nothing should be invented to fill the gap.
 
 ---
 
-## 6. What doesn't change
+## 3. Domestic/commercial — resolved, no schema change
 
-Doc 04's territory — Meet Your Receptionist, Test Conversations, Shadowing — untouched. The five real facts collected (now: name, trade, service area**s**, hours, days). `buildHandoverRecap`'s readiness logic. The visual language — cards, gradient, `EASE`, the existing motion primitives — all reused. `/api/onboarding/prepare`'s core responsibility (create the business row) and `ensureBusinessRow`'s idempotency, unchanged beyond accepting an array for service areas directly instead of wrapping a string.
+Checked against the real schema rather than assumed. `BusinessKnowledge.jobsDeclined` (`lib/knowledge.ts`) already exists, is already read by the live reasoning pipeline (`lib/reply-engine/prompt/facts.ts`, rendered as *"Does not take on: {value}."*), and **"Commercial jobs" is already one of its existing suggested chip values** in the dashboard's own Business Knowledge editor. No new column, no new source of truth:
+
+- Owner answers "domestic only" → onboarding appends `"Commercial jobs"` to `jobsDeclined`, exactly the value the dashboard already suggests for this. A real fact the receptionist will act on.
+- Owner answers "both" / "commercial too" → nothing is written. The absence of a declined entry already correctly represents "not declined" — there is no separate flag for this state to occupy.
+
+One consequence for the beat's own copy (doc 15 §0's reciprocal-learning line): the "flag a landlord/site manager mention to double-check" framing overstated what's actually persisted for the "both" branch, where nothing changes operationally. That branch's consequence line should say something true instead — e.g. *"Noted — I'll treat commercial and domestic enquiries the same unless you tell me otherwise."* The "domestic only" branch's line can be stronger, since it corresponds to a real written fact: *"Noted — if it's not domestic work, I'll let them know upfront rather than book something you don't do."*
+
+---
+
+## 4. Content is authored, not generated
+
+Every line above is fixed, reviewed copy, not a live model call — the input space (five trades, a handful of confirm/correct branches) is small and fully enumerable, so there's no reason to accept the inconsistency risk of generating it at runtime. This is the same discipline the trade grid's own labels and the previous hours-presets already used, just extended to cover the vocabulary and discovery lines too. Doc 16's "never invent a fact" rule is satisfied by construction: nothing above claims to know something about *this* business beyond what the owner just said — the trade-specific content is genuine domain knowledge (what a burst pipe is), not a claim about the specific business.
+
+---
+
+## 5. What's retired from the V20 architecture
+
+The identity-mark pulse-and-glow micro-interaction, the visible acknowledgment stack, and the generic "Mind if I guess — electricians round your size tend to..." aggregate-comparison framing are all gone, replaced by the scripted, pacing-driven sequence above. The chip-based service-area editor and the hours day/time editor both survive underneath, demoted from default-visible to correction-only, exactly as doc 15 §4 describes for the guesses that lead into them.
+
+---
+
+## 6. Meet Your Receptionist — continuity only, deliberately small
+
+Doc 15 §5 confirms "no reset" is a requirement: whatever presence carries the Meet/Learn/Understand/Widen/Prepare/Discover/Close sequence has to be the same one the owner meets on `/dashboard/receptionist/meet`, not a new instance sharing only a visual language. Scope is deliberately bounded, by direct instruction: this pass exists to preserve continuity, not to redesign that page. Concretely, that means whatever single presence element carries pacing and behaviour through the onboarding sequence needs to also render on that page in the same form — nothing about that page's existing layout, content, or the real handover it already performs (`lib/receptionist-handover.ts`, untouched) changes beyond making room for it. Any broader improvement to that page is explicitly out of scope for this pass, left for a future one.
 
 ---
 
 ## 7. Status
 
-V20 revision complete as written above. Doc 15 has been revised in parallel to match (its own §2 now documents *why* the route-per-screen conclusion was reversed, on direct evidence from testing rather than desk research). Landing-page phone-preview aliveness and a real maps/radius picker for service area were both raised during review and are explicitly out of scope for this revision — flagged as follow-up candidates, not silently dropped.
+Architecture settled. §3's schema question is resolved (no migration needed). §6's Meet Your Receptionist scope is confirmed and bounded. Next: the implementation plan.

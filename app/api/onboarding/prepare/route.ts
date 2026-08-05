@@ -4,6 +4,8 @@ import { ensureBusinessRow } from "@/lib/business";
 import { DAY_KEYS, defaultAvailability, type DayKey } from "@/lib/availability";
 import { recordProductEvent } from "@/lib/product-events";
 import { recordErrorEvent } from "@/lib/error-events";
+import { parseKnowledge } from "@/lib/knowledge";
+import { applyCustomerType, selectDiscovery } from "@/lib/onboarding-script";
 
 export const dynamic = "force-dynamic";
 
@@ -61,6 +63,8 @@ export async function POST(request: Request) {
     openDays?: unknown;
     openingTime?: unknown;
     closingTime?: unknown;
+    worksCommercial?: unknown;
+    discoveryAccepted?: unknown;
   } = {};
   try {
     body = await request.json();
@@ -111,6 +115,22 @@ export async function POST(request: Request) {
     availability.hours[day] = { ...availability.hours[day]!, closed: !openDays.has(day) };
   }
 
+  // V21.6 — genuine curiosity, not required configuration: both of
+  // these are `null` when skipped or dismissed, and that's a fully
+  // valid, expected value (doc 15 §0, `lib/onboarding-script.ts`).
+  // Onboarding is always the first writer to business_knowledge (the
+  // `onboarding_completed` guard above guarantees this code path only
+  // ever runs once per business), so building fresh from an empty base
+  // is correct, not a shortcut — there's nothing prior to merge with.
+  const worksCommercial = body.worksCommercial === "domestic" || body.worksCommercial === "both" ? body.worksCommercial : null;
+  const discoveryAccepted = typeof body.discoveryAccepted === "boolean" ? body.discoveryAccepted : null;
+
+  let knowledge = applyCustomerType(parseKnowledge(null), worksCommercial);
+  if (discoveryAccepted) {
+    const discovery = selectDiscovery({ trade, businessName, serviceAreas });
+    if (discovery) knowledge = discovery.onAccept(knowledge);
+  }
+
   const { error: updateError } = await supabase
     .from("businesses")
     .update({
@@ -120,6 +140,7 @@ export async function POST(request: Request) {
       opening_time: openingTime,
       closing_time: closingTime,
       availability,
+      business_knowledge: knowledge,
       onboarding_completed: true,
     })
     .eq("id", business.id);

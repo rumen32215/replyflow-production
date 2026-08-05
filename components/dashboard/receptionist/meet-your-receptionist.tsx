@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { Check, Pencil } from "lucide-react";
 import { SettleCard, press, EASE } from "@/components/shared/motion";
+import { Bubble } from "@/components/shared/bubble";
 import { Acknowledgement, useAcknowledgement } from "@/components/shared/acknowledgement";
 import { Button } from "@/components/ui/button";
 import { createClient } from "@/lib/supabase/client";
@@ -23,20 +24,13 @@ import { cn } from "@/lib/utils";
  * beyond fixed framing copy ("Have I understood you correctly?" etc.).
  * The one piece of real interaction: "actually, no" routes back to
  * teaching rather than pretending the recap was accepted.
+ *
+ * `Bubble` (V21.6) is shared with the hiring conversation that leads
+ * here (`components/onboarding/hiring-conversation.tsx`) — the same
+ * component, not a matching copy, so the voice the owner just spent
+ * ninety seconds with is provably the same one now, not a second
+ * instance that merely looks similar.
  */
-
-function Bubble({ children, delay = 0 }: { children: React.ReactNode; delay?: number }) {
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.4, ease: EASE, delay }}
-      className="max-w-[560px] rounded-2xl rounded-bl-md bg-card px-4 py-3 text-[14.5px] leading-relaxed text-foreground shadow-sm border border-border"
-    >
-      {children}
-    </motion.div>
-  );
-}
 
 export function MeetYourReceptionist({
   businessId,
@@ -113,7 +107,7 @@ export function MeetYourReceptionist({
       <div className="mb-6">
         <h1 className="text-[22px] font-extrabold tracking-tight md:text-[24px]">Meet {name}</h1>
         <p className="mt-1 text-[13.5px] text-muted-foreground">
-          Not a settings summary — this is her, telling you what she&apos;s actually understood.
+          Not a settings summary — this is {name}, telling you what it&apos;s actually understood.
         </p>
       </div>
 

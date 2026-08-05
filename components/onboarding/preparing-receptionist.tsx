@@ -6,6 +6,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useOnboardingStore } from "@/hooks/use-onboarding-store";
 import { OnboardingCTA } from "@/components/onboarding/onboarding-cta";
 import { EASE, GentleSwap, GrowingCheck } from "@/components/shared/motion";
+import { Bubble } from "@/components/shared/bubble";
 import { ONBOARDING_TRADE_LABELS, type ONBOARDING_TRADES } from "@/lib/trades";
 import { DAY_KEYS, DAY_LABELS } from "@/lib/availability";
 
@@ -87,6 +88,8 @@ export function PreparingReceptionist() {
   const openDays = useOnboardingStore((s) => s.openDays);
   const openingTime = useOnboardingStore((s) => s.openingTime);
   const closingTime = useOnboardingStore((s) => s.closingTime);
+  const worksCommercial = useOnboardingStore((s) => s.worksCommercial);
+  const discoveryAccepted = useOnboardingStore((s) => s.discoveryAccepted);
   const resetStore = useOnboardingStore((s) => s.reset);
 
   const [stage, setStage] = useState<"working" | "ready" | "failed">("working");
@@ -127,6 +130,8 @@ export function PreparingReceptionist() {
           openDays,
           openingTime,
           closingTime,
+          worksCommercial,
+          discoveryAccepted,
         }),
       });
       if (!res.ok) throw new Error("prepare_failed");
@@ -250,12 +255,9 @@ export function PreparingReceptionist() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4, ease: EASE }}
           >
-            <p className="mb-4 flex items-center gap-2 text-[17px] font-semibold tracking-tight text-foreground">
-              <span aria-hidden>
-                <GrowingCheck className="h-4 w-4" />
-              </span>
-              I know enough to get started.
-            </p>
+            <div className="mb-4">
+              <Bubble>I know enough to get started.</Bubble>
+            </div>
             <OnboardingCTA onClick={enterReceptionist}>Let&apos;s get to work</OnboardingCTA>
           </motion.div>
         )}

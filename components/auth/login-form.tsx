@@ -13,6 +13,7 @@ import { Label } from "@/components/ui/label";
 import { createClient } from "@/lib/supabase/client";
 import { loginSchema, type LoginInput } from "@/lib/validations/auth";
 import { toast } from "@/hooks/use-toast";
+import { useOnboardingStore } from "@/hooks/use-onboarding-store";
 
 function hasFragmentSession() {
   return typeof window !== "undefined" && window.location.hash.includes("access_token");
@@ -28,9 +29,10 @@ export function LoginForm() {
   // /auth/callback ?code= — a fragment only the browser ever sees, so
   // the server-side code exchange never fires. Rather than ask someone
   // who just proved ownership of their email to type a password too,
-  // complete that session client-side and carry them straight into
-  // onboarding. Lazily initialised so a normal login visit (no
-  // fragment) never renders this state at all, not even for one frame.
+  // complete that session client-side and send them to "/", which
+  // resolves to wherever they actually belong. Lazily initialised so a
+  // normal login visit (no fragment) never renders this state at all,
+  // not even for one frame.
   const [completingSignIn, setCompletingSignIn] = useState(hasFragmentSession);
 
   useEffect(() => {
@@ -48,7 +50,7 @@ export function LoginForm() {
         setCompletingSignIn(false);
         return;
       }
-      router.replace("/welcome");
+      router.replace("/");
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -130,7 +132,15 @@ export function LoginForm() {
 
       <p className="mt-6 text-center text-sm text-muted-foreground">
         Don&apos;t have an account?{" "}
-        <Link href="/signup" className="font-semibold text-primary hover:underline">
+        {/* V19 — same fresh-start reasoning as the landing page's own
+         * CTA: never clicked mid-flow, so it's safe to reset the
+         * onboarding store here; the destination is the first real
+         * question now, not the credential screen. */}
+        <Link
+          href="/hire/name"
+          onClick={() => useOnboardingStore.getState().reset()}
+          className="font-semibold text-primary hover:underline"
+        >
           Start free trial
         </Link>
       </p>

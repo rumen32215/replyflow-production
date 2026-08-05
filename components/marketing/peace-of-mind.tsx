@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { EASE } from "@/components/shared/motion";
 import { useLaunchTransition, TRANSITION_NAVIGATE_MS } from "@/components/shared/page-transition";
+import { useOnboardingStore } from "@/hooks/use-onboarding-store";
 import { cn } from "@/lib/utils";
 
 /**
@@ -134,21 +135,26 @@ export function PeaceOfMind() {
   const tickerIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
-    router.prefetch("/signup");
+    router.prefetch("/hire/name");
     return () => {
       if (tickerIntervalRef.current) clearInterval(tickerIntervalRef.current);
     };
   }, [router]);
 
+  // V19 — same fresh-start reasoning as hero.tsx's own CTA: this is
+  // never clicked mid-flow, so it's a safe place to reset the
+  // onboarding store, and the target moves to the first real question
+  // now that credentials are the last step, not the first.
   function handleMeetReceptionist(e: React.MouseEvent<HTMLButtonElement>) {
     if (isNavigating) return;
     setIsNavigating(true);
+    useOnboardingStore.getState().reset();
     const rect = e.currentTarget.getBoundingClientRect();
     launchTransition({
       x: ((rect.left + rect.width / 2) / window.innerWidth) * 100,
       y: ((rect.top + rect.height / 2) / window.innerHeight) * 100,
     });
-    setTimeout(() => router.push("/signup"), TRANSITION_NAVIGATE_MS);
+    setTimeout(() => router.push("/hire/name"), TRANSITION_NAVIGATE_MS);
   }
 
   const startChoreography = useCallback(() => {

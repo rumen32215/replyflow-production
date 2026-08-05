@@ -27,7 +27,7 @@ export default async function CustomersIndexPage() {
   if (!user) redirect("/login");
 
   const { data: business } = await supabase.from("businesses").select("id").eq("owner_id", user.id).maybeSingle();
-  if (!business) redirect("/welcome");
+  if (!business) redirect("/onboarding/preparing");
 
   const { count } = await supabase
     .from("conversations")

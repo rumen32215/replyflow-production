@@ -10,10 +10,10 @@ export const metadata: Metadata = { title: "Preparing your receptionist — Repl
 export const dynamic = "force-dynamic";
 
 /**
- * Final onboarding step. Middleware already guarantees a session on
- * /onboarding/*, but we re-check here (defence in depth, same pattern
- * as /welcome) and short-circuit users whose business is already fully
- * set up so revisiting this URL never replays onboarding.
+ * Screen 5 — her first day starts. Middleware already guarantees a
+ * session on /onboarding/*, but we re-check here (defence in depth)
+ * and short-circuit users whose business is already fully set up so
+ * revisiting this URL never replays onboarding.
  */
 export default async function PreparingPage() {
   const supabase = createClient();

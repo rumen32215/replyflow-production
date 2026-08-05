@@ -11,19 +11,41 @@ import { EASE, press } from "@/components/shared/motion";
 import { cn } from "@/lib/utils";
 
 /**
- * Screen 4 — opening days, opening hours, and service area, together on
- * one screen. These were two separate steps; merged so the last stretch
- * of the one-minute setup keeps its momentum instead of asking for one
- * more click. Kept genuinely simple for V1: a single free-text area and
- * one open/close time applied to whichever days are toggled on — the
- * fuller multi-area, per-day editor stays Booking Rules' job later.
+ * The last pre-account question — where do you work? Hours and days
+ * are real facts too, but asking for them as a third equal-weight
+ * field would make this feel like a form again (Employment Philosophy
+ * v16 §3.2). So they're stated as a default she'll assume ("Open
+ * weekdays, 8am till 5:30pm") with a plain-language correction, not a
+ * grid the owner has to fill in — the existing day-grid and time
+ * pickers still exist, just disclosed on request instead of always on
+ * screen. Area stays the one always-visible input.
  *
- * RC4: days now lead (the owner is teaching availability, and days
- * naturally come before hours), the heading is a quiet section label
- * rather than a dominant hero line so the controls read as the focus,
- * and the service area lives in its own bordered "slot" — no map
- * today, but a natural place for one later without restructuring.
+ * `openDays`/`openingTime`/`closingTime` already write to the store
+ * live (toggleDay and the time inputs' onChange), same as the area
+ * text — so `receptionist-presence.tsx`, which reads the store
+ * directly, always sees the true current state, default or corrected.
  */
+
+function formatTime12h(t: string): string {
+  const [hStr, mStr] = t.split(":");
+  const h = parseInt(hStr ?? "0", 10);
+  const period = h >= 12 ? "pm" : "am";
+  const h12 = h % 12 === 0 ? 12 : h % 12;
+  return mStr === "00" ? `${h12}${period}` : `${h12}:${mStr}${period}`;
+}
+
+function formatDaysLabel(days: string[]): string {
+  const set = new Set(days);
+  const weekdays: DayKey[] = ["mon", "tue", "wed", "thu", "fri"];
+  if (days.length === 5 && weekdays.every((d) => set.has(d))) return "weekdays";
+  if (days.length === 7) return "every day";
+  if (days.length === 0) return "no days yet";
+  return days
+    .slice()
+    .sort((a, b) => DAY_KEYS.indexOf(a as DayKey) - DAY_KEYS.indexOf(b as DayKey))
+    .map((d) => DAY_LABELS[d as DayKey])
+    .join(", ");
+}
 
 export function ServiceAreaStep() {
   const router = useRouter();
@@ -38,6 +60,7 @@ export function ServiceAreaStep() {
   const [days, setDays] = useState<string[]>(storedDays);
   const [opening, setOpening] = useState(storedOpening);
   const [closing, setClosing] = useState(storedClosing);
+  const [showHours, setShowHours] = useState(false);
 
   const hydratedRef = useRef(false);
   useEffect(() => {
@@ -64,11 +87,19 @@ export function ServiceAreaStep() {
     setOpenDays(next);
   }
 
+  function updateOpening(value: string) {
+    setOpening(value);
+    setField("openingTime", value);
+  }
+
+  function updateClosing(value: string) {
+    setClosing(value);
+    setField("closingTime", value);
+  }
+
   function next() {
     if (!canContinue) return;
-    setField("openingTime", opening);
-    setField("closingTime", closing);
-    router.push("/onboarding/preparing");
+    router.push("/signup");
   }
 
   return (
@@ -78,92 +109,16 @@ export function ServiceAreaStep() {
       transition={{ duration: 0.5, ease: EASE }}
       className="rounded-3xl border border-border bg-card p-9 shadow-elevated sm:p-10"
     >
-      <h1 className="mb-6 text-[16px] font-bold tracking-tight text-foreground/85">
-        A little about how you work
+      <h1 className="mb-8 text-[24px] font-extrabold leading-tight tracking-tight">
+        Where do you <span className="bg-gradient-to-r from-primary to-success bg-clip-text text-transparent">work</span>?
       </h1>
-
-      <div className="mb-6">
-        <span className="mb-2.5 block text-[12px] font-semibold uppercase tracking-wide text-muted-foreground/80">
-          Days open
-        </span>
-        <div className="grid grid-cols-4 gap-2 sm:grid-cols-7">
-          {DAY_KEYS.map((day, i) => {
-            const on = days.includes(day);
-            return (
-              <motion.button
-                key={day}
-                type="button"
-                onClick={() => toggleDay(day)}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.35, ease: EASE, delay: 0.05 + i * 0.04 }}
-                whileTap={{ ...press.whileTap, transition: press.transition }}
-                aria-pressed={on}
-                className={cn(
-                  "flex flex-col items-center gap-1 rounded-xl border-2 bg-background py-3 text-[12.5px] font-semibold transition-colors duration-300",
-                  on
-                    ? "border-success text-primary"
-                    : "border-border text-muted-foreground hover:border-muted-foreground/30"
-                )}
-              >
-                <AnimatePresence mode="wait" initial={false}>
-                  {on ? (
-                    <motion.span
-                      key="on"
-                      initial={{ scale: 0.4, opacity: 0 }}
-                      animate={{ scale: 1, opacity: 1 }}
-                      exit={{ scale: 0.4, opacity: 0 }}
-                      transition={{ type: "spring", stiffness: 500, damping: 26 }}
-                      className="text-success"
-                    >
-                      <Check className="h-3 w-3" strokeWidth={3} />
-                    </motion.span>
-                  ) : (
-                    <span className="h-3 w-3" aria-hidden />
-                  )}
-                </AnimatePresence>
-                {DAY_LABELS[day].slice(0, 3)}
-              </motion.button>
-            );
-          })}
-        </div>
-      </div>
-
-      <div className="mb-7">
-        <span className="mb-2.5 block text-[12px] font-semibold uppercase tracking-wide text-muted-foreground/80">
-          Hours
-        </span>
-        <div className="flex items-center gap-3">
-          <label className="flex-1">
-            <span className="mb-1.5 block text-[12px] font-semibold text-muted-foreground">Opens</span>
-            <input
-              type="time"
-              value={opening}
-              onChange={(e) => setOpening(e.target.value)}
-              aria-label="Opening time"
-              className="h-12 w-full rounded-xl border-2 border-border bg-background px-3.5 text-[15px] font-semibold outline-none transition-all duration-300 focus:border-success focus:shadow-[0_0_0_3px_rgba(34,197,94,0.10)]"
-            />
-          </label>
-          <span className="mt-5 text-muted-foreground">–</span>
-          <label className="flex-1">
-            <span className="mb-1.5 block text-[12px] font-semibold text-muted-foreground">Closes</span>
-            <input
-              type="time"
-              value={closing}
-              onChange={(e) => setClosing(e.target.value)}
-              aria-label="Closing time"
-              className="h-12 w-full rounded-xl border-2 border-border bg-background px-3.5 text-[15px] font-semibold outline-none transition-all duration-300 focus:border-success focus:shadow-[0_0_0_3px_rgba(34,197,94,0.10)]"
-            />
-          </label>
-        </div>
-      </div>
 
       {/* A self-contained "location slot" — an ambient, almost-imperceptible
           map feeling (soft breathing glow + layered contour lines, never a
           literal map) signals "this is where she learns where you work"
           — the same card is where an interactive one could land later
           without reshaping this screen. */}
-      <div className="relative mb-8 overflow-hidden rounded-2xl border border-border/70 bg-background/40 p-4">
+      <div className="relative mb-5 overflow-hidden rounded-2xl border border-border/70 bg-background/40 p-4">
         <motion.div
           aria-hidden
           className="pointer-events-none absolute -right-12 -top-14 h-44 w-44 rounded-full blur-2xl"
@@ -197,9 +152,108 @@ export function ServiceAreaStep() {
         </motion.div>
       </div>
 
-      <OnboardingCTA onClick={next} disabled={!canContinue}>
-        Continue
-      </OnboardingCTA>
+      <div className="mb-8 flex items-center justify-between gap-3 rounded-xl border border-border/60 bg-background/40 px-4 py-3">
+        <p className="text-[13.5px] font-medium text-muted-foreground">
+          Open {formatDaysLabel(days)}, {formatTime12h(opening)} till {formatTime12h(closing)} — tell me if that&apos;s wrong.
+        </p>
+        <button
+          type="button"
+          onClick={() => setShowHours((v) => !v)}
+          className="shrink-0 text-[13px] font-semibold text-primary hover:underline"
+        >
+          {showHours ? "Done" : "Change"}
+        </button>
+      </div>
+
+      <AnimatePresence initial={false}>
+        {showHours && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.35, ease: EASE }}
+            className="overflow-hidden"
+          >
+            <div className="mb-6">
+              <span className="mb-2.5 block text-[12px] font-semibold uppercase tracking-wide text-muted-foreground/80">
+                Days open
+              </span>
+              <div className="grid grid-cols-4 gap-2 sm:grid-cols-7">
+                {DAY_KEYS.map((day) => {
+                  const on = days.includes(day);
+                  return (
+                    <button
+                      key={day}
+                      type="button"
+                      onClick={() => toggleDay(day)}
+                      aria-pressed={on}
+                      className={cn(
+                        "flex flex-col items-center gap-1 rounded-xl border-2 bg-background py-3 text-[12.5px] font-semibold transition-colors duration-300",
+                        on
+                          ? "border-success text-primary"
+                          : "border-border text-muted-foreground hover:border-muted-foreground/30"
+                      )}
+                    >
+                      <AnimatePresence mode="wait" initial={false}>
+                        {on ? (
+                          <motion.span
+                            key="on"
+                            initial={{ scale: 0.4, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            exit={{ scale: 0.4, opacity: 0 }}
+                            transition={{ type: "spring", stiffness: 500, damping: 26 }}
+                            className="text-success"
+                          >
+                            <Check className="h-3 w-3" strokeWidth={3} />
+                          </motion.span>
+                        ) : (
+                          <span className="h-3 w-3" aria-hidden />
+                        )}
+                      </AnimatePresence>
+                      {DAY_LABELS[day].slice(0, 3)}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="mb-2">
+              <span className="mb-2.5 block text-[12px] font-semibold uppercase tracking-wide text-muted-foreground/80">
+                Hours
+              </span>
+              <div className="flex items-center gap-3">
+                <label className="flex-1">
+                  <span className="mb-1.5 block text-[12px] font-semibold text-muted-foreground">Opens</span>
+                  <input
+                    type="time"
+                    value={opening}
+                    onChange={(e) => updateOpening(e.target.value)}
+                    aria-label="Opening time"
+                    className="h-12 w-full rounded-xl border-2 border-border bg-background px-3.5 text-[15px] font-semibold outline-none transition-all duration-300 focus:border-success focus:shadow-[0_0_0_3px_rgba(34,197,94,0.10)]"
+                  />
+                </label>
+                <span className="mt-5 text-muted-foreground">–</span>
+                <label className="flex-1">
+                  <span className="mb-1.5 block text-[12px] font-semibold text-muted-foreground">Closes</span>
+                  <input
+                    type="time"
+                    value={closing}
+                    onChange={(e) => updateClosing(e.target.value)}
+                    aria-label="Closing time"
+                    className="h-12 w-full rounded-xl border-2 border-border bg-background px-3.5 text-[15px] font-semibold outline-none transition-all duration-300 focus:border-success focus:shadow-[0_0_0_3px_rgba(34,197,94,0.10)]"
+                  />
+                </label>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <div className={showHours ? "mt-6" : undefined}>
+        <OnboardingCTA onClick={next} disabled={!canContinue}>
+          She&apos;s got what she needs
+        </OnboardingCTA>
+      </div>
     </motion.div>
   );
 }

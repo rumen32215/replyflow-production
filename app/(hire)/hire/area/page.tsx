@@ -3,6 +3,6 @@ import { ServiceAreaStep } from "@/components/onboarding/service-area-step";
 
 export const metadata: Metadata = { title: "Service area & hours — ReplyFlow" };
 
-export default function ServiceAreaPage() {
+export default function HireAreaPage() {
   return <ServiceAreaStep />;
 }

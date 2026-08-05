@@ -22,6 +22,9 @@ A note on the name: the brief for this sprint suggested `/docs`. This folder is 
 | [11-ReplyFlow-Trust-Architecture.md](11-ReplyFlow-Trust-Architecture.md) | What does trust actually mean inside ReplyFlow, how is Business Understanding separate from Owner Trust, and how does the Trust Ladder relate to the Brain without becoming a fifth Business Brain memory type? Approved architecture, not yet implemented. |
 | [12-ReplyFlow-Learning-Memory-Architecture.md](12-ReplyFlow-Learning-Memory-Architecture.md) | How does a real correction become durable business knowledge — what counts as a learning opportunity, how is a lesson proposed and confirmed, and how does this prepare Brain Loop Stage 9 (Adaptation) without building it? Approved architecture, not yet implemented. |
 | [13-ReplyFlow-Adaptation-Architecture.md](13-ReplyFlow-Adaptation-Architecture.md) | What does Adaptation actually mean — how does it differ from Learning, what may it ever change, and why must every proposal include evidence the owner can understand? Completes all nine Brain Loop stages. Approved architecture, not yet implemented. |
+| [14-ReplyFlow-Owner-Attention-Architecture.md](14-ReplyFlow-Owner-Attention-Architecture.md) | How does ReplyFlow decide whether, when, and how loudly to reach the owner outside the app? Approved; V1 implemented. |
+| [15-ReplyFlow-Onboarding-Experience-Architecture.md](15-ReplyFlow-Onboarding-Experience-Architecture.md) | How should the signup wizard — welcome through "receptionist ready" — feel, and why? Approved; implementation follows. |
+| [16-ReplyFlow-Employment-Philosophy.md](16-ReplyFlow-Employment-Philosophy.md) | What must never happen, and what must always happen, for every future feature to feel like employing someone rather than operating software? The tactical elaboration of 00/01/02/05's shared thesis — read early, applies everywhere, not onboarding-specific. |
 
 ## Relationship to `DOCS/SPECS/`
 

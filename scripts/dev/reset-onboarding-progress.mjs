@@ -7,12 +7,12 @@
 //
 //   - `onboarding_completed` is one boolean on that account's own
 //     `businesses` row (unique per owner_id) — every route that
-//     decides "onboarding or dashboard" (app/page.tsx, /welcome,
+//     decides "onboarding or dashboard" (app/page.tsx,
 //     /onboarding/preparing) reads exactly this field, nothing else.
-//   - Logging back in already returns you to /welcome once it's
-//     false — app/page.tsx already redirects there for any signed-in
-//     user whose business isn't onboarding_completed yet. No new
-//     app code needed for that part.
+//   - Logging back in already returns you to /onboarding/preparing
+//     once it's false — app/page.tsx already redirects there for any
+//     signed-in user whose business isn't onboarding_completed yet.
+//     No new app code needed for that part.
 //   - Login never re-checks email verification (that's only ever
 //     checked at signup and at WhatsApp connection) — so once an
 //     account exists and is verified, every future reset-and-retry
@@ -140,7 +140,7 @@ async function main() {
   console.log(`  onboarding_completed: ${business.onboarding_completed}\n`);
 
   if (!business.onboarding_completed) {
-    console.log("onboarding_completed is already false — logging in will already return to /welcome. Nothing to do.");
+    console.log("onboarding_completed is already false — logging in will already return to /onboarding/preparing. Nothing to do.");
     return;
   }
 
@@ -148,6 +148,9 @@ async function main() {
   console.log("itself writes (business_name, trade, service_areas, hours, availability) back");
   console.log("to their defaults, on this ONE business row only. Nothing else is touched —");
   console.log("not conversations, not WhatsApp connection, not Business/Receptionist knowledge.\n");
+  console.log("Note: since the account already exists, logging in lands directly on");
+  console.log("/onboarding/preparing (screen 5) — it won't re-ask the three pre-account");
+  console.log("questions. To retest those, visit /hire/name directly while signed out.\n");
 
   const confirmation = await ask(`Type the email address again to confirm: `);
   if (confirmation.trim().toLowerCase() !== email.toLowerCase()) {
@@ -166,7 +169,7 @@ async function main() {
     process.exit(1);
   }
 
-  console.log(`\nDone. Log in as ${email} and you'll land back on /welcome, screen one.`);
+  console.log(`\nDone. Log in as ${email} and you'll land back on /onboarding/preparing.`);
 }
 
 main().catch((err) => {

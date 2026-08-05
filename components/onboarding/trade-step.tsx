@@ -6,18 +6,26 @@ import { motion } from "framer-motion";
 import { Wrench, Zap, Paintbrush, Hammer, Home, type LucideIcon } from "lucide-react";
 import { useOnboardingStore } from "@/hooks/use-onboarding-store";
 import { ONBOARDING_TRADES, ONBOARDING_TRADE_LABELS } from "@/lib/trades";
-import { OnboardingCTA } from "@/components/onboarding/onboarding-cta";
 import { EASE, press, GrowingCheck } from "@/components/shared/motion";
 import { GradientText } from "@/components/shared/gradient-text";
 import { TypingDots } from "@/components/shared/typed-message";
 
 /**
- * Screen 3 — "What kind of work do you do?" V1 First-Run decision:
- * five trades, not eight, and no "Other" — the best receptionist for
- * five trades beats an average one for fifty (DOCS/SPECS/ReplyFlow-V1-
- * First-Run-Proposal.md). Existing businesses on a trade outside this
- * five are completely unaffected; lib/trades.ts's normalizeTrade still
+ * "What kind of work do you do?" V1 First-Run decision: five trades,
+ * not eight, and no "Other" — the best receptionist for five trades
+ * beats an average one for fifty (DOCS/SPECS/ReplyFlow-V1-First-Run-
+ * Proposal.md). Existing businesses on a trade outside this five are
+ * completely unaffected; lib/trades.ts's normalizeTrade still
  * recognises all eight plus a generic fallback.
+ *
+ * No Continue button (Employment Philosophy v16 §3.4, `DOCS/CONSTITUTION/
+ * 15...md` §5) — a single tap is already a complete decision, so the
+ * card highlighting, the receptionist presence reacting, and the
+ * screen advancing all happen off the same tap rather than asking for
+ * a second click to confirm what's already been decided. The store
+ * write happens immediately on selection, not inside a `next()`
+ * handler that no longer exists — `receptionist-presence.tsx` reads
+ * the store directly and needs the value live to react in time.
  */
 
 const TRADE_ICONS: Record<(typeof ONBOARDING_TRADES)[number], LucideIcon> = {
@@ -34,12 +42,19 @@ const TRADE_CARDS = ONBOARDING_TRADES.map((value) => ({
   icon: TRADE_ICONS[value],
 }));
 
+/** Long enough for the selection highlight and the receptionist's
+ * reaction to both register before the screen moves on — not an
+ * arbitrary pause, the same "let the acknowledgment land before
+ * advancing" beat this codebase already uses elsewhere. */
+const ADVANCE_DELAY_MS = 550;
+
 export function TradeStep() {
   const router = useRouter();
   const setField = useOnboardingStore((s) => s.setField);
   const storedTrade = useOnboardingStore((s) => s.trade);
 
   const [selected, setSelected] = useState<string | null>(null);
+  const advancingRef = useRef(false);
 
   // Re-hydrate a previous choice if the user came back to this screen.
   const hydratedRef = useRef(false);
@@ -49,12 +64,12 @@ export function TradeStep() {
     if (TRADE_CARDS.some((t) => t.value === storedTrade)) setSelected(storedTrade);
   }, [storedTrade]);
 
-  const canContinue = selected !== null;
-
-  function next() {
-    if (!canContinue || !selected) return;
-    setField("trade", selected);
-    router.push("/onboarding/service-area");
+  function selectTrade(value: string) {
+    if (advancingRef.current) return;
+    advancingRef.current = true;
+    setSelected(value);
+    setField("trade", value);
+    setTimeout(() => router.push("/hire/area"), ADVANCE_DELAY_MS);
   }
 
   return (
@@ -75,7 +90,7 @@ export function TradeStep() {
             <motion.button
               key={card.value}
               type="button"
-              onClick={() => setSelected(card.value)}
+              onClick={() => selectTrade(card.value)}
               initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.4, ease: EASE, delay: 0.08 + i * 0.05 }}
@@ -119,10 +134,6 @@ export function TradeStep() {
           </span>
         </motion.div>
       </div>
-
-      <OnboardingCTA onClick={next} disabled={!canContinue}>
-        Continue
-      </OnboardingCTA>
     </motion.div>
   );
 }

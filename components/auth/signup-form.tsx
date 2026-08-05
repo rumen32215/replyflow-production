@@ -79,7 +79,7 @@ export function SignupForm() {
     const { data, error } = await supabase.auth.signUp({
       email: values.email,
       password: values.password,
-      options: { emailRedirectTo: `${window.location.origin}/auth/callback?next=/welcome` },
+      options: { emailRedirectTo: `${window.location.origin}/auth/callback?next=/onboarding/preparing` },
     });
     setSubmitting(false);
 
@@ -101,9 +101,11 @@ export function SignupForm() {
     // out of `signUp()` (i.e. "Confirm email" is off). If a project
     // still requires confirmation first, this falls back to exactly
     // the previous behaviour — nobody gets stranded on a page their
-    // session can't actually reach.
+    // session can't actually reach. Either way she already knows the
+    // business name, trade and area from the three questions asked
+    // before this screen — nothing here needs re-asking.
     if (data.session) {
-      router.push("/onboarding/business-name");
+      router.push("/onboarding/preparing");
     } else {
       router.push(`/verify-email?email=${encodeURIComponent(values.email)}`);
     }
@@ -112,10 +114,10 @@ export function SignupForm() {
   return (
     <AuthCard>
       <h1 className="mb-1.5 text-[25px] font-extrabold tracking-tight">
-        Let&apos;s meet your <GradientText>receptionist</GradientText>.
+        One more thing before <GradientText>she starts</GradientText>.
       </h1>
       <p className="mb-4 text-[14.5px] text-muted-foreground">
-        In the next minute, you&apos;ll have someone answering your customers — even when your hands are full.
+        An account so what she learns is kept safe, and only ever yours.
       </p>
 
       {/* Rotating, not static — the same "the page feels alive"
@@ -242,7 +244,7 @@ export function SignupForm() {
          * valid the instant it's made. */}
         <OnboardingCTA type="submit" disabled={submitting || !isValid}>
           {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
-          Continue
+          Make it official
         </OnboardingCTA>
       </form>
 

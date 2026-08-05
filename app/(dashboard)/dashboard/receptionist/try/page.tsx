@@ -26,7 +26,7 @@ export default async function TryReceptionistPage() {
     .eq("owner_id", user.id)
     .maybeSingle();
   if (businessError) throw new Error(`Failed to load business: ${businessError.message}`);
-  if (!business) redirect("/welcome");
+  if (!business) redirect("/onboarding/preparing");
 
   return (
     <TestConversation

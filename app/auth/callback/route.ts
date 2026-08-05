@@ -28,8 +28,8 @@ export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url);
   const code = searchParams.get("code");
   // Only ever forward to a same-origin path — never a full URL.
-  const nextParam = searchParams.get("next") ?? "/welcome";
-  const next = nextParam.startsWith("/") ? nextParam : "/welcome";
+  const nextParam = searchParams.get("next") ?? "/onboarding/preparing";
+  const next = nextParam.startsWith("/") ? nextParam : "/onboarding/preparing";
 
   if (code) {
     const supabase = createClient();

@@ -36,7 +36,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
   // bounce the whole app into the onboarding wizard on any transient
   // failure. See the identical fix in dashboard/receptionist/page.tsx.
   if (businessError) throw new Error(`Failed to load business: ${businessError.message}`);
-  if (!business?.onboarding_completed) redirect("/welcome");
+  if (!business?.onboarding_completed) redirect("/onboarding/preparing");
 
   const approvalsCount = await getApprovalsCount(supabase, business.id);
 

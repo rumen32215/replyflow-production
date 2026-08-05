@@ -9,12 +9,22 @@ import { EASE } from "@/components/shared/motion";
 import { GradientText } from "@/components/shared/gradient-text";
 
 /**
- * Screen 2 — one question, nothing else. The title reacts to typing:
- * the moment a name exists it becomes "Nice to meet you, {name}." so
- * the screen feels like a conversation, not a form field.
+ * The real first question — no separate greeting screen before it
+ * (Employment Philosophy v16 §0; `DOCS/CONSTITUTION/15...md` §7). The
+ * title reacts to typing: the moment a name exists it becomes "Nice
+ * to meet you, {name}." so the screen feels like a conversation, not
+ * a form field.
+ *
+ * The store is reset once, at the one genuine fresh-start point in
+ * the product — the landing page's own CTA (`hero.tsx`,
+ * `peace-of-mind.tsx`), and the login page's "Start free trial" link —
+ * never here. This screen just hydrates from whatever the store
+ * already holds, the same pattern `trade-step.tsx` and
+ * `service-area-step.tsx` already use, so browser-back from a later
+ * question never loses an answer.
  *
  * The name lives in the onboarding store (persisted to localStorage),
- * picked up again by the preparing step when the businesses row is
+ * picked up again by the setup step when the businesses row is
  * created.
  */
 
@@ -43,7 +53,7 @@ export function BusinessNameStep() {
 
   function next() {
     if (!hasName) return;
-    router.push("/onboarding/trade");
+    router.push("/hire/trade");
   }
 
   return (
@@ -98,7 +108,7 @@ export function BusinessNameStep() {
       </motion.div>
 
       <OnboardingCTA onClick={next} disabled={!hasName}>
-        Continue
+        On to your trade
       </OnboardingCTA>
     </motion.div>
   );

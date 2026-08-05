@@ -8,6 +8,7 @@ import { EASE } from "@/components/shared/motion";
 import { GradientText } from "@/components/shared/gradient-text";
 import { useLaunchTransition, TRANSITION_NAVIGATE_MS } from "@/components/shared/page-transition";
 import { HeroPhone, HERO_PHONE_INITIAL_TRADE, type Trade } from "@/components/marketing/hero-phone";
+import { useOnboardingStore } from "@/hooks/use-onboarding-store";
 import { cn } from "@/lib/utils";
 
 /**
@@ -168,27 +169,37 @@ export function Hero() {
   // Prefetched as soon as the Hero mounts, not on click — a
   // `router.push` from a plain button (unlike `<Link>`) never
   // prefetches on its own. Confirmed live: without this, the eventual
-  // `/signup` mount could lag noticeably behind the overlay's own
-  // timing, undermining the whole point of masking the swap.
+  // mount could lag noticeably behind the overlay's own timing,
+  // undermining the whole point of masking the swap.
   useEffect(() => {
-    router.prefetch("/signup");
+    router.prefetch("/hire/name");
   }, [router]);
 
   // V7 founder review (2026-08-04): the transition now expands from
   // wherever the CTA actually sits on screen — a literal "CTA
   // expansion" — rather than always from the viewport's bottom
   // centre, and lives in the shared, cross-route `PageTransitionProvider`
-  // (root layout) so it survives the `/signup` navigation instead of
-  // unmounting with Hero and cutting hard to the new page.
+  // (root layout) so it survives the navigation instead of unmounting
+  // with Hero and cutting hard to the new page.
+  //
+  // V19 — this is the one genuine fresh-start point in the whole
+  // product (`DOCS/CONSTITUTION/16...md` §0, `.../15...md` §7): nobody
+  // clicks this CTA mid-flow, so it's the only safe place to reset the
+  // onboarding store. `/hire/name` itself just hydrates from whatever
+  // the store already holds — the same pattern `trade-step.tsx` and
+  // `service-area-step.tsx` already use — so browser-back from a later
+  // question never loses an answer the way resetting on every mount
+  // of the first screen would have.
   function handleMeetReceptionist(e: React.MouseEvent<HTMLButtonElement>) {
     if (isNavigating) return;
     setIsNavigating(true);
+    useOnboardingStore.getState().reset();
     const rect = e.currentTarget.getBoundingClientRect();
     launchTransition({
       x: ((rect.left + rect.width / 2) / window.innerWidth) * 100,
       y: ((rect.top + rect.height / 2) / window.innerHeight) * 100,
     });
-    setTimeout(() => router.push("/signup"), TRANSITION_NAVIGATE_MS);
+    setTimeout(() => router.push("/hire/name"), TRANSITION_NAVIGATE_MS);
   }
 
   return (

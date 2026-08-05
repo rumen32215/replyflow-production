@@ -37,7 +37,7 @@ export default async function AvailabilityPage() {
     .select("id, availability, opening_time, closing_time")
     .eq("owner_id", user.id)
     .maybeSingle();
-  if (!business) redirect("/welcome");
+  if (!business) redirect("/onboarding/preparing");
 
   const startOfToday = new Date();
   startOfToday.setHours(0, 0, 0, 0);

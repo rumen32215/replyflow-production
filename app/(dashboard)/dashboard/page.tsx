@@ -64,7 +64,7 @@ export default async function HomePage() {
     )
     .eq("owner_id", user.id)
     .maybeSingle();
-  if (!business) redirect("/welcome");
+  if (!business) redirect("/onboarding/preparing");
 
   const businessId = business.id;
   // Test Conversations ("Try to break me") writes real reply_drafts

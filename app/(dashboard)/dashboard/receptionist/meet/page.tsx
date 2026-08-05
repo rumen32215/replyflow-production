@@ -30,7 +30,7 @@ export default async function MeetYourReceptionistPage() {
     .eq("owner_id", user.id)
     .maybeSingle();
   if (businessError) throw new Error(`Failed to load business: ${businessError.message}`);
-  if (!business) redirect("/welcome");
+  if (!business) redirect("/onboarding/preparing");
 
   const { data: config } = await supabase
     .from("ai_configurations")

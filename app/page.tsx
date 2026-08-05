@@ -21,17 +21,19 @@ export const dynamic = "force-dynamic";
  * ReplyFlow-Landing-Experience-Design.md` §10) — the real landing page
  * too. Routes the visitor to wherever they actually belong:
  *   no session            -> the Landing Experience, rendered directly
- *   onboarding unfinished -> /welcome (Screen 1 of onboarding)
+ *   onboarding unfinished -> /onboarding/preparing (screen 5)
  *   onboarding complete   -> /dashboard
  *
  * /login is no longer the de facto front door — it still exists,
  * reached only by an explicit "Log in" action, never as the default
  * unauthenticated experience.
  *
- * A verified account with no businesses row shouldn't exist any more
- * (the row is created in /auth/callback), but if one does, /welcome ->
- * onboarding -> preparing repairs it — so both "no row" and "row, not
- * completed" resolve to the same place.
+ * The three real questions (`(hire)/hire/*`) now come before an
+ * account exists, and the account itself is created only at signup —
+ * so the only way to hold a session without onboarding_completed is
+ * to have already answered them and created the account, meaning
+ * screen 5 is genuinely where they left off (`DOCS/SPECS/ReplyFlow-
+ * Onboarding-Implementation-Architecture.md` §1, §3.2).
  */
 export default async function RootPage() {
   const supabase = createClient();
@@ -47,7 +49,7 @@ export default async function RootPage() {
     .eq("owner_id", user.id)
     .maybeSingle();
 
-  if (!business?.onboarding_completed) redirect("/welcome");
+  if (!business?.onboarding_completed) redirect("/onboarding/preparing");
 
   redirect("/dashboard");
 }

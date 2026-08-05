@@ -28,7 +28,7 @@ export default async function CustomersLayout({ children }: { children: React.Re
     .eq("owner_id", user.id)
     .maybeSingle();
   if (businessError) throw new Error(`Failed to load business: ${businessError.message}`);
-  if (!business) redirect("/welcome");
+  if (!business) redirect("/onboarding/preparing");
 
   const [{ data: conversations }, { data: jobs }] = await Promise.all([
     // Test Conversations ("Try to break me") never appears in

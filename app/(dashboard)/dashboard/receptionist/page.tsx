@@ -68,10 +68,10 @@ export default async function TeachYourReceptionistPage({
     .maybeSingle();
   // A real query error (e.g. a stale PostgREST schema cache right
   // after a migration) is not "onboarding incomplete" — redirecting
-  // to /welcome would silently bounce an existing owner in a loop.
-  // Surface it instead of guessing.
+  // to /onboarding/preparing would silently bounce an existing owner
+  // in a loop. Surface it instead of guessing.
   if (businessError) throw new Error(`Failed to load business: ${businessError.message}`);
-  if (!business) redirect("/welcome");
+  if (!business) redirect("/onboarding/preparing");
 
   const { data: config } = await supabase
     .from("ai_configurations")

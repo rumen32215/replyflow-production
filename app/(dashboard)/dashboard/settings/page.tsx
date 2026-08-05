@@ -27,7 +27,7 @@ export default async function SettingsPage() {
   // identical fix and explanation in dashboard/receptionist/page.tsx.
   if (businessError) throw new Error(`Failed to load business: ${businessError.message}`);
   if (!business) {
-    redirect("/welcome");
+    redirect("/onboarding/preparing");
   }
 
   const supportEmail = process.env.SUPPORT_EMAIL || null;

@@ -66,6 +66,7 @@ export function collectFacts(context: ReplyContext, understanding: Understanding
     p.knowledge.certifications.forEach((t, i) => facts.push({ id: `profile.certification.${i}`, text: t }));
     if (p.knowledge.parkingAccess) facts.push({ id: "profile.parking", text: p.knowledge.parkingAccess });
     if (p.knowledge.emergencyNotes) facts.push({ id: "profile.emergency_notes", text: p.knowledge.emergencyNotes });
+    p.knowledge.memories.forEach((t, i) => facts.push({ id: `profile.memory.${i}`, text: t }));
   }
 
   if (context.receptionist) {

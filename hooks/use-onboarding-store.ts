@@ -20,9 +20,13 @@ import { persist } from "zustand/middleware";
  *
  * `worksCommercial` and `discoveryAccepted` (V21.6) are genuine
  * curiosity, not required configuration — both default to `null` and
- * stay `null` if the owner skips or dismisses the question, and the
- * rest of the encounter works naturally either way (`lib/onboarding-
- * script.ts` treats `null` as "nothing to note," not an error state).
+ * stay `null` if the owner skips or dismisses the question.
+ *
+ * `firstMemoryAnswer` (V22) is the one memory onboarding itself
+ * collects — the receptionist's own accumulating `business_knowledge.
+ * memories` array (`lib/knowledge.ts`) starts here, then grows through
+ * later teaching; the store only ever holds this single seed answer,
+ * never the array itself.
  */
 interface OnboardingState {
   businessName: string;
@@ -33,12 +37,14 @@ interface OnboardingState {
   closingTime: string;
   worksCommercial: "domestic" | "both" | null;
   discoveryAccepted: boolean | null;
+  firstMemoryAnswer: string | null;
 
   setField: <K extends "businessName" | "trade" | "openingTime" | "closingTime">(key: K, value: string) => void;
   setServiceAreas: (areas: string[]) => void;
   setOpenDays: (days: string[]) => void;
   setWorksCommercial: (value: "domestic" | "both" | null) => void;
   setDiscoveryAccepted: (value: boolean | null) => void;
+  setFirstMemoryAnswer: (value: string | null) => void;
   reset: () => void;
 }
 
@@ -51,6 +57,7 @@ const initialState = {
   closingTime: "17:30",
   worksCommercial: null as "domestic" | "both" | null,
   discoveryAccepted: null as boolean | null,
+  firstMemoryAnswer: null as string | null,
 };
 
 export const useOnboardingStore = create<OnboardingState>()(
@@ -62,6 +69,7 @@ export const useOnboardingStore = create<OnboardingState>()(
       setOpenDays: (days) => set({ openDays: days }),
       setWorksCommercial: (value) => set({ worksCommercial: value }),
       setDiscoveryAccepted: (value) => set({ discoveryAccepted: value }),
+      setFirstMemoryAnswer: (value) => set({ firstMemoryAnswer: value }),
       reset: () => set(initialState),
     }),
     { name: "replyflow-onboarding" }

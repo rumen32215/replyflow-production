@@ -90,6 +90,7 @@ export function PreparingReceptionist() {
   const closingTime = useOnboardingStore((s) => s.closingTime);
   const worksCommercial = useOnboardingStore((s) => s.worksCommercial);
   const discoveryAccepted = useOnboardingStore((s) => s.discoveryAccepted);
+  const firstMemoryAnswer = useOnboardingStore((s) => s.firstMemoryAnswer);
   const resetStore = useOnboardingStore((s) => s.reset);
 
   const [stage, setStage] = useState<"working" | "ready" | "failed">("working");
@@ -132,6 +133,7 @@ export function PreparingReceptionist() {
           closingTime,
           worksCommercial,
           discoveryAccepted,
+          firstMemoryAnswer,
         }),
       });
       if (!res.ok) throw new Error("prepare_failed");

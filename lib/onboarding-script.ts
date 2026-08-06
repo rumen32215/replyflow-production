@@ -177,3 +177,31 @@ export function selectDiscovery(ctx: DiscoveryContext): Discovery | null {
 export function closingLine(businessName: string): string {
   return `I think I've got a real picture of ${businessName} now.`;
 }
+
+/**
+ * V22 — cards replace the spoken transcript (doc: "environment
+ * primary, conversation secondary"). `CARD_META` centralises each
+ * card's category label and real-completion status copy, exactly as
+ * specified, so `hiring-conversation.tsx` never hardcodes copy inline.
+ * `KNOWLEDGE_PROMPT` replaces the old "Teach it one thing" — this is
+ * the one question that becomes the receptionist's first entry in
+ * `business_knowledge.memories`, not a demo.
+ */
+export const CARD_META = {
+  identity: { label: "Business Identity", status: "Created" },
+  trade: { label: "Trade", status: "Learned" },
+  coverage: { label: "Coverage", status: "Added" },
+  hours: { label: "Working Hours", status: "Ready" },
+  knowledge: { label: "Knowledge", status: "Memory Added" },
+} as const;
+
+export const KNOWLEDGE_PROMPT = "What makes your business different?";
+
+/** Close beat headline — activation energy, not a status report, and
+ * honest about what actually happens next (doc 04's own sequencing:
+ * WhatsApp connects later, after Meet Your Receptionist proves
+ * itself, never here). */
+export function activationLine(businessName: string): string {
+  return `${businessName || "Your receptionist"} is ready.`;
+}
+export const ACTIVATION_SUBLINE = "Send a real message and see how it answers.";

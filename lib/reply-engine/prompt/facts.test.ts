@@ -34,6 +34,7 @@ const BASE_PROFILE: BusinessProfileContext = {
     certifications: [],
     parkingAccess: "",
     emergencyNotes: "",
+    memories: [],
   },
 };
 

@@ -65,6 +65,7 @@ export async function POST(request: Request) {
     closingTime?: unknown;
     worksCommercial?: unknown;
     discoveryAccepted?: unknown;
+    firstMemoryAnswer?: unknown;
   } = {};
   try {
     body = await request.json();
@@ -124,12 +125,17 @@ export async function POST(request: Request) {
   // is correct, not a shortcut — there's nothing prior to merge with.
   const worksCommercial = body.worksCommercial === "domestic" || body.worksCommercial === "both" ? body.worksCommercial : null;
   const discoveryAccepted = typeof body.discoveryAccepted === "boolean" ? body.discoveryAccepted : null;
+  const firstMemoryAnswer = sanitize(body.firstMemoryAnswer, 140);
 
   let knowledge = applyCustomerType(parseKnowledge(null), worksCommercial);
   if (discoveryAccepted) {
     const discovery = selectDiscovery({ trade, businessName, serviceAreas });
     if (discovery) knowledge = discovery.onAccept(knowledge);
   }
+  // V22 — the receptionist's own accumulating memory (doc: distinct
+  // from `personality`), seeded here with onboarding's own single
+  // question; future teaching appends to this same array later.
+  if (firstMemoryAnswer) knowledge = { ...knowledge, memories: [firstMemoryAnswer] };
 
   const { error: updateError } = await supabase
     .from("businesses")

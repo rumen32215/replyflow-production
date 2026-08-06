@@ -14,6 +14,13 @@ export interface BusinessKnowledge {
   certifications: string[];
   parkingAccess: string;
   emergencyNotes: string;
+  /** The receptionist's own accumulating memory — distinct from
+   * `personality` (which describes the business, not what the
+   * receptionist has been told to remember). Seeded by onboarding's
+   * own "what makes your business different" question, then grown
+   * indefinitely by future teaching — onboarding only ever writes the
+   * first entry, never the whole array. */
+  memories: string[];
 }
 
 export function parseKnowledge(stored: unknown): BusinessKnowledge {
@@ -25,6 +32,7 @@ export function parseKnowledge(stored: unknown): BusinessKnowledge {
     certifications: [],
     parkingAccess: "",
     emergencyNotes: "",
+    memories: [],
   };
   if (!stored || typeof stored !== "object") return base;
   const s = stored as Partial<BusinessKnowledge>;
@@ -36,6 +44,7 @@ export function parseKnowledge(stored: unknown): BusinessKnowledge {
     certifications: Array.isArray(s.certifications) ? s.certifications : [],
     parkingAccess: typeof s.parkingAccess === "string" ? s.parkingAccess : "",
     emergencyNotes: typeof s.emergencyNotes === "string" ? s.emergencyNotes : "",
+    memories: Array.isArray(s.memories) ? s.memories : [],
   };
 }
 

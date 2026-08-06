@@ -11,6 +11,7 @@ const EMPTY_KNOWLEDGE = {
   certifications: [],
   parkingAccess: "",
   emergencyNotes: "",
+  memories: [],
 };
 
 function baseInput(overrides: Partial<HandoverInput> = {}): HandoverInput {

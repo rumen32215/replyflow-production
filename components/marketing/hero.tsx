@@ -27,6 +27,15 @@ import { cn } from "@/lib/utils";
  * and a product-demo engine); now two files each doing one.
  */
 
+// PROTOTYPE PREVIEW ONLY — flips both "Meet your receptionist" CTAs on
+// the landing page to the static receptionist-journey.html prototype
+// instead of the real /hire onboarding, so the redesigned experience
+// can be reviewed end-to-end on a real device before implementation.
+// This exists only on the prototype/receptionist-journey branch, never
+// merged to main — revert (delete this constant and both usages) if
+// this file is ever ported anywhere else.
+const PROTOTYPE_PREVIEW = true;
+
 const EYEBROW_TRADES: readonly Trade[] = ["plumbers", "electricians", "builders", "roofers", "painters"] as const;
 
 /** The eyebrow line, with the trade matching whatever the phone is
@@ -172,7 +181,9 @@ export function Hero() {
   // mount could lag noticeably behind the overlay's own timing,
   // undermining the whole point of masking the swap.
   useEffect(() => {
-    router.prefetch("/hire");
+    // PROTOTYPE PREVIEW ONLY — prefetch removed, target is a static
+    // file, not an app route. Revert this whole block before merging.
+    if (!PROTOTYPE_PREVIEW) router.prefetch("/hire");
   }, [router]);
 
   // V7 founder review (2026-08-04): the transition now expands from
@@ -198,7 +209,20 @@ export function Hero() {
       x: ((rect.left + rect.width / 2) / window.innerWidth) * 100,
       y: ((rect.top + rect.height / 2) / window.innerHeight) * 100,
     });
-    setTimeout(() => router.push("/hire"), TRANSITION_NAVIGATE_MS);
+    setTimeout(() => {
+      // PROTOTYPE PREVIEW ONLY — sends this CTA to the static
+      // receptionist-journey.html prototype instead of the real /hire
+      // onboarding, so the full landing-page-to-journey experience can
+      // be reviewed on a real device. Hard navigation (not router.push)
+      // because the target is a static public/ file, not an app route.
+      // This entire branch exists only to produce that preview build —
+      // revert before merging to main.
+      if (PROTOTYPE_PREVIEW) {
+        window.location.href = "/receptionist-journey.html";
+      } else {
+        router.push("/hire");
+      }
+    }, TRANSITION_NAVIGATE_MS);
   }
 
   return (

@@ -50,6 +50,10 @@ import { cn } from "@/lib/utils";
  * status line is dropped; the action is the only message left.
  */
 
+// PROTOTYPE PREVIEW ONLY — see hero.tsx's PROTOTYPE_PREVIEW comment.
+// Exists only on the prototype/receptionist-journey branch.
+const PROTOTYPE_PREVIEW = true;
+
 interface StatusItem {
   icon: typeof AlertTriangle;
   text: string;
@@ -135,7 +139,8 @@ export function PeaceOfMind() {
   const tickerIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
-    router.prefetch("/hire");
+    // PROTOTYPE PREVIEW ONLY — see hero.tsx's PROTOTYPE_PREVIEW comment.
+    if (!PROTOTYPE_PREVIEW) router.prefetch("/hire");
     return () => {
       if (tickerIntervalRef.current) clearInterval(tickerIntervalRef.current);
     };
@@ -154,7 +159,14 @@ export function PeaceOfMind() {
       x: ((rect.left + rect.width / 2) / window.innerWidth) * 100,
       y: ((rect.top + rect.height / 2) / window.innerHeight) * 100,
     });
-    setTimeout(() => router.push("/hire"), TRANSITION_NAVIGATE_MS);
+    setTimeout(() => {
+      // PROTOTYPE PREVIEW ONLY — see hero.tsx's PROTOTYPE_PREVIEW comment.
+      if (PROTOTYPE_PREVIEW) {
+        window.location.href = "/receptionist-journey.html";
+      } else {
+        router.push("/hire");
+      }
+    }, TRANSITION_NAVIGATE_MS);
   }
 
   const startChoreography = useCallback(() => {

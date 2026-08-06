@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   AlertTriangle,
@@ -16,8 +15,7 @@ import {
   FileText,
 } from "lucide-react";
 import { EASE } from "@/components/shared/motion";
-import { useLaunchTransition, TRANSITION_NAVIGATE_MS } from "@/components/shared/page-transition";
-import { useOnboardingStore } from "@/hooks/use-onboarding-store";
+import { ReceptionistPanel } from "@/components/marketing/receptionist-panel";
 import { cn } from "@/lib/utils";
 
 /**
@@ -124,37 +122,54 @@ function MicroAction({ pulsing, kind, icon: Icon, styles }: { pulsing: boolean; 
   );
 }
 
+type Phase = "idle" | "absorbing" | "active";
+
+/** How far each illustrative tile has to travel to reach the CTA, in
+ * plain pixels captured at the moment of the click — not guessed, not
+ * a fixed direction, so the "breathing in" always converges on
+ * wherever the CTA actually is at whatever viewport width the visitor
+ * is on. */
+interface AbsorbDelta {
+  dx: number;
+  dy: number;
+}
+
 export function PeaceOfMind() {
-  const router = useRouter();
-  const launchTransition = useLaunchTransition();
-  const [isNavigating, setIsNavigating] = useState(false);
   const [pulseIndex, setPulseIndex] = useState(-1);
   const [settled, setSettled] = useState(false);
   const [tickerIndex, setTickerIndex] = useState(0);
+  const [phase, setPhase] = useState<Phase>("idle");
+  const [absorbDeltas, setAbsorbDeltas] = useState<AbsorbDelta[] | null>(null);
   const startedRef = useRef(false);
   const tickerIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const tileRefs = useRef<Array<HTMLDivElement | null>>([]);
+  const ctaRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
-    router.prefetch("/hire");
     return () => {
       if (tickerIntervalRef.current) clearInterval(tickerIntervalRef.current);
     };
-  }, [router]);
+  }, []);
 
-  // V19 — same fresh-start reasoning as hero.tsx's own CTA: this is
-  // never clicked mid-flow, so it's a safe place to reset the
-  // onboarding store, and the target moves to the first real question
-  // now that credentials are the last step, not the first.
-  function handleMeetReceptionist(e: React.MouseEvent<HTMLButtonElement>) {
-    if (isNavigating) return;
-    setIsNavigating(true);
-    useOnboardingStore.getState().reset();
-    const rect = e.currentTarget.getBoundingClientRect();
-    launchTransition({
-      x: ((rect.left + rect.width / 2) / window.innerWidth) * 100,
-      y: ((rect.top + rect.height / 2) / window.innerHeight) * 100,
+  // V8 architectural reset — pressing this never navigates anywhere.
+  // The illustrative tiles above (never true for this specific
+  // visitor's business) breathe inward into the tile that was
+  // pressed, then the same surface becomes the real receptionist
+  // creation experience — no route change, no redirect, no new page.
+  function handleMeetReceptionist() {
+    if (phase !== "idle" || !ctaRef.current) return;
+    if (tickerIntervalRef.current) clearInterval(tickerIntervalRef.current);
+    const ctaRect = ctaRef.current.getBoundingClientRect();
+    const ctaCenter = { x: ctaRect.left + ctaRect.width / 2, y: ctaRect.top + ctaRect.height / 2 };
+    const deltas = tileRefs.current.map((el) => {
+      if (!el) return { dx: 0, dy: 0 };
+      const r = el.getBoundingClientRect();
+      const center = { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+      return { dx: ctaCenter.x - center.x, dy: ctaCenter.y - center.y };
     });
-    setTimeout(() => router.push("/hire"), TRANSITION_NAVIGATE_MS);
+    setAbsorbDeltas(deltas);
+    setPhase("absorbing");
+    setTimeout(() => setPhase("active"), 750);
   }
 
   const startChoreography = useCallback(() => {
@@ -199,15 +214,20 @@ export function PeaceOfMind() {
           How your business stays organised
         </motion.p>
 
-        <motion.p
-          initial={{ opacity: 0, y: 10 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true, margin: "0px 0px -100px 0px" }}
-          transition={{ duration: 0.5, ease: EASE, delay: 0.08 }}
-          className="mx-auto mt-4 max-w-[36ch] text-[19px] leading-relaxed text-foreground/80 sm:text-[21px]"
-        >
-          Everything that happened above, quietly running underneath.
-        </motion.p>
+        <motion.div initial={{ opacity: 0, y: 10 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, margin: "0px 0px -100px 0px" }} transition={{ duration: 0.5, ease: EASE, delay: 0.08 }}>
+          <AnimatePresence mode="wait">
+            <motion.p
+              key={phase === "idle" ? "idle" : "live"}
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -6 }}
+              transition={{ duration: 0.4, ease: EASE }}
+              className="mx-auto mt-4 max-w-[36ch] text-[19px] leading-relaxed text-foreground/80 sm:text-[21px]"
+            >
+              {phase === "idle" ? "Everything that happened above, quietly running underneath." : "Now let's build yours, for real."}
+            </motion.p>
+          </AnimatePresence>
+        </motion.div>
 
         <motion.div
           initial={{ opacity: 0, y: 20, scale: 0.98 }}
@@ -240,75 +260,95 @@ export function PeaceOfMind() {
               <div className="relative h-[17px] overflow-hidden">
                 <AnimatePresence mode="wait">
                   <motion.p
-                    key={tickerIndex}
+                    key={phase === "idle" ? tickerIndex : "live"}
                     initial={{ opacity: 0, y: 6 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -6 }}
                     transition={{ duration: 0.4, ease: EASE }}
                     className="truncate text-[11.5px] leading-tight text-white"
                   >
-                    {STATUS_TICKER[tickerIndex]}
+                    {phase === "idle" ? STATUS_TICKER[tickerIndex] : "Getting to know your business"}
                   </motion.p>
                 </AnimatePresence>
               </div>
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3 p-5 sm:p-7 lg:grid-cols-4">
-            {STATUS_ITEMS.map((item, i) => {
-              const styles = STATUS_STYLES[item.tone];
-              return (
-                <motion.div
-                  key={item.text}
-                  initial={{ opacity: 0, y: 12, scale: 0.94 }}
-                  whileInView={{ opacity: 1, y: 0, scale: 1 }}
-                  viewport={{ once: true, margin: "0px 0px -60px 0px" }}
-                  transition={{ type: "spring", stiffness: 340, damping: 24, delay: i * 0.07 }}
-                  className={cn(
-                    "relative flex flex-col items-start gap-2 rounded-xl border p-3 transition-colors duration-500",
-                    settled ? "border-success/30 bg-success/[0.05]" : "border-border/50 bg-white/60"
-                  )}
-                >
-                  <span className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-lg" aria-hidden>
-                    <span className={cn("absolute inset-0 rounded-lg", styles.badge)} />
-                    <item.icon className={cn("relative h-4 w-4", styles.icon_)} strokeWidth={2.5} />
-                    <MicroAction pulsing={pulseIndex === i} kind={item.micro.kind} icon={item.micro.icon} styles={styles} />
-                  </span>
-                  <span className="text-[12.5px] font-semibold leading-snug text-foreground">{item.text}</span>
-                </motion.div>
-              );
-            })}
+          {phase === "active" ? (
+            <div className="p-5 sm:p-7">
+              <ReceptionistPanel />
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 gap-3 p-5 sm:p-7 lg:grid-cols-4">
+              {STATUS_ITEMS.map((item, i) => {
+                const styles = STATUS_STYLES[item.tone];
+                const delta = absorbDeltas?.[i];
+                return (
+                  <motion.div
+                    key={item.text}
+                    ref={(el) => {
+                      tileRefs.current[i] = el;
+                    }}
+                    initial={{ opacity: 0, y: 12, scale: 0.94 }}
+                    whileInView={phase === "idle" ? { opacity: 1, y: 0, scale: 1 } : undefined}
+                    animate={
+                      phase === "absorbing" && delta
+                        ? { x: delta.dx, y: delta.dy, scale: 0.12, opacity: 0 }
+                        : undefined
+                    }
+                    viewport={{ once: true, margin: "0px 0px -60px 0px" }}
+                    transition={
+                      phase === "absorbing"
+                        ? { duration: 0.55, ease: EASE, delay: i * 0.03 }
+                        : { type: "spring", stiffness: 340, damping: 24, delay: i * 0.07 }
+                    }
+                    className={cn(
+                      "relative flex flex-col items-start gap-2 rounded-xl border p-3 transition-colors duration-500",
+                      settled ? "border-success/30 bg-success/[0.05]" : "border-border/50 bg-white/60"
+                    )}
+                  >
+                    <span className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-lg" aria-hidden>
+                      <span className={cn("absolute inset-0 rounded-lg", styles.badge)} />
+                      <item.icon className={cn("relative h-4 w-4", styles.icon_)} strokeWidth={2.5} />
+                      <MicroAction pulsing={pulseIndex === i} kind={item.micro.kind} icon={item.micro.icon} styles={styles} />
+                    </span>
+                    <span className="text-[12.5px] font-semibold leading-snug text-foreground">{item.text}</span>
+                  </motion.div>
+                );
+              })}
 
-            {/* The eighth position — a real CTA, one message only.
-             * V15 paired it with "Nothing waiting for you" as a small
-             * supporting line; the founder named that as repeating the
-             * same emotional beat the tiles above it already resolve
-             * into (`settled`) — dropped, so the only thing this card
-             * says is what to do next. */}
-            <motion.button
-              type="button"
-              onClick={handleMeetReceptionist}
-              initial={{ opacity: 0, y: 12, scale: 0.94 }}
-              whileInView={{ opacity: 1, y: 0, scale: 1 }}
-              viewport={{ once: true, margin: "0px 0px -60px 0px" }}
-              whileHover={isNavigating ? undefined : { y: -2 }}
-              whileTap={isNavigating ? undefined : { scale: 0.97 }}
-              transition={{ type: "spring", stiffness: 340, damping: 24, delay: STATUS_ITEMS.length * 0.07 }}
-              className="group relative flex flex-col items-start justify-center gap-1 overflow-hidden rounded-xl bg-gradient-to-br from-primary to-success p-3 text-left shadow-sm transition-shadow duration-300 hover:shadow-[0_10px_26px_-8px_rgba(37,99,235,0.5)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-2"
-            >
-              <motion.span
-                aria-hidden
-                className="pointer-events-none absolute inset-y-0 left-0 w-1/3 -skew-x-[20deg] bg-gradient-to-r from-transparent via-white/25 to-transparent"
-                initial={{ x: "-160%" }}
-                animate={{ x: "460%" }}
-                transition={{ duration: 1.4, ease: "easeInOut", repeat: Infinity, repeatDelay: 3 }}
-              />
-              <span className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/20" aria-hidden>
-                <ArrowRight className="h-4 w-4 text-white transition-transform duration-300 ease-out group-hover:translate-x-0.5" strokeWidth={2.5} />
-              </span>
-              <span className="relative text-[13px] font-semibold leading-snug text-white">Meet your receptionist</span>
-            </motion.button>
-          </div>
+              {/* The eighth position — a real CTA, one message only.
+               * V8 reset: pressing this never navigates. Every tile
+               * above breathes inward into this exact position, then
+               * this same surface becomes the real creation
+               * experience — no route change, ever. */}
+              <motion.button
+                type="button"
+                ref={ctaRef}
+                onClick={handleMeetReceptionist}
+                initial={{ opacity: 0, y: 12, scale: 0.94 }}
+                whileInView={phase === "idle" ? { opacity: 1, y: 0, scale: 1 } : undefined}
+                animate={phase === "absorbing" ? { scale: [1, 1.08, 0.98], transition: { duration: 0.5, ease: EASE } } : undefined}
+                viewport={{ once: true, margin: "0px 0px -60px 0px" }}
+                whileHover={phase === "idle" ? { y: -2 } : undefined}
+                whileTap={phase === "idle" ? { scale: 0.97 } : undefined}
+                transition={{ type: "spring", stiffness: 340, damping: 24, delay: STATUS_ITEMS.length * 0.07 }}
+                className="group relative flex flex-col items-start justify-center gap-1 overflow-hidden rounded-xl bg-gradient-to-br from-primary to-success p-3 text-left shadow-sm transition-shadow duration-300 hover:shadow-[0_10px_26px_-8px_rgba(37,99,235,0.5)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-2"
+              >
+                <motion.span
+                  aria-hidden
+                  className="pointer-events-none absolute inset-y-0 left-0 w-1/3 -skew-x-[20deg] bg-gradient-to-r from-transparent via-white/25 to-transparent"
+                  initial={{ x: "-160%" }}
+                  animate={{ x: "460%" }}
+                  transition={{ duration: 1.4, ease: "easeInOut", repeat: Infinity, repeatDelay: 3 }}
+                />
+                <span className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/20" aria-hidden>
+                  <ArrowRight className="h-4 w-4 text-white transition-transform duration-300 ease-out group-hover:translate-x-0.5" strokeWidth={2.5} />
+                </span>
+                <span className="relative text-[13px] font-semibold leading-snug text-white">Meet your receptionist</span>
+              </motion.button>
+            </div>
+          )}
         </motion.div>
       </div>
     </section>

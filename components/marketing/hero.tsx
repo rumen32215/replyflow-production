@@ -1,14 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { ArrowRight, Check } from "lucide-react";
+import { Check } from "lucide-react";
 import { EASE } from "@/components/shared/motion";
 import { GradientText } from "@/components/shared/gradient-text";
-import { useLaunchTransition, TRANSITION_NAVIGATE_MS } from "@/components/shared/page-transition";
 import { HeroPhone, HERO_PHONE_INITIAL_TRADE, type Trade } from "@/components/marketing/hero-phone";
-import { useOnboardingStore } from "@/hooks/use-onboarding-store";
 import { cn } from "@/lib/utils";
 
 /**
@@ -159,47 +156,9 @@ function HeadlineText({ headline }: { headline: Headline }) {
 }
 
 export function Hero() {
-  const router = useRouter();
   const [activeTrade, setActiveTrade] = useState<Trade>(HERO_PHONE_INITIAL_TRADE);
   const headlineIndex = useRotatingHeadlineIndex();
   const headline = HEADLINES[headlineIndex]!;
-  const launchTransition = useLaunchTransition();
-  const [isNavigating, setIsNavigating] = useState(false);
-
-  // Prefetched as soon as the Hero mounts, not on click — a
-  // `router.push` from a plain button (unlike `<Link>`) never
-  // prefetches on its own. Confirmed live: without this, the eventual
-  // mount could lag noticeably behind the overlay's own timing,
-  // undermining the whole point of masking the swap.
-  useEffect(() => {
-    router.prefetch("/hire");
-  }, [router]);
-
-  // V7 founder review (2026-08-04): the transition now expands from
-  // wherever the CTA actually sits on screen — a literal "CTA
-  // expansion" — rather than always from the viewport's bottom
-  // centre, and lives in the shared, cross-route `PageTransitionProvider`
-  // (root layout) so it survives the navigation instead of unmounting
-  // with Hero and cutting hard to the new page.
-  //
-  // V19 — this is the one genuine fresh-start point in the whole
-  // product (`DOCS/CONSTITUTION/16...md` §0, `.../15...md` §7): nobody
-  // clicks this CTA mid-flow, so it's the only safe place to reset the
-  // onboarding store. `hiring-conversation.tsx` itself just hydrates
-  // from whatever the store already holds, so leaving `/hire` and
-  // coming back never loses an answer the way resetting on every
-  // mount would have.
-  function handleMeetReceptionist(e: React.MouseEvent<HTMLButtonElement>) {
-    if (isNavigating) return;
-    setIsNavigating(true);
-    useOnboardingStore.getState().reset();
-    const rect = e.currentTarget.getBoundingClientRect();
-    launchTransition({
-      x: ((rect.left + rect.width / 2) / window.innerWidth) * 100,
-      y: ((rect.top + rect.height / 2) / window.innerHeight) * 100,
-    });
-    setTimeout(() => router.push("/hire"), TRANSITION_NAVIGATE_MS);
-  }
 
   return (
     <section className="relative overflow-hidden">
@@ -239,46 +198,17 @@ export function Hero() {
           <span className="font-semibold text-foreground">you&apos;d actually send</span>.
         </motion.p>
 
-        {/* V10 founder review (2026-08-04): explicitly asked as a
-         * design judgement, not an instruction — "is 'Meet your
-         * receptionist' appearing at the moment a visitor naturally
-         * wants to act?" Reviewed and left exactly where it is —
-         * already sits at the first natural decision point, matching
-         * the standard high-converting shape (Linear, Stripe, Apple
-         * product pages all keep a primary CTA in the hero, with
-         * supporting proof below). */}
+        {/* V8 architectural reset (2026-08-06): the hero CTA is removed
+         * entirely — the receptionist creation experience now begins
+         * lower on the page, inside "How your business stays organised"
+         * (`peace-of-mind.tsx`), not here. Trust points stay exactly
+         * where they were; only the button above them is gone. */}
         <motion.div
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, ease: EASE, delay: 0.65 }}
           className="mt-9"
         >
-          {/* The same premium motion language onboarding's own primary
-           * CTA uses (`components/onboarding/onboarding-cta.tsx`) — the
-           * identical spring and light-sweep values, sized for the
-           * Hero rather than a full-width onboarding card. */}
-          <motion.button
-            type="button"
-            onClick={handleMeetReceptionist}
-            whileHover={isNavigating ? undefined : { y: -2 }}
-            whileTap={isNavigating ? undefined : { scale: 0.985 }}
-            animate={{ scale: isNavigating ? 1.06 : 1 }}
-            transition={{ type: "spring", stiffness: 400, damping: 24 }}
-            className="group relative inline-flex items-center gap-2 overflow-hidden rounded-xl bg-primary px-7 py-3.5 text-[15px] font-semibold text-primary-foreground shadow-sm transition-shadow duration-300 hover:shadow-[0_10px_30px_-8px_rgba(37,99,235,0.55)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-2"
-          >
-            <motion.span
-              aria-hidden
-              className="pointer-events-none absolute inset-y-0 left-0 w-1/4 -skew-x-[20deg] bg-gradient-to-r from-transparent via-white/25 to-transparent"
-              initial={{ x: "-140%" }}
-              animate={{ x: "440%" }}
-              transition={{ duration: 1.5, ease: "easeInOut", repeat: Infinity, repeatDelay: 3.2 }}
-            />
-            <span className="relative z-10 flex items-center gap-2">
-              Meet your receptionist
-              <ArrowRight aria-hidden className="h-4 w-4 transition-transform duration-300 ease-out group-hover:translate-x-1" />
-            </span>
-          </motion.button>
-
           {/* One row at every breakpoint, never `flex-wrap` — mobile
            * earns that by getting its own tighter type/badge/gap sizing
            * rather than by giving up the single line; `sm:` and up

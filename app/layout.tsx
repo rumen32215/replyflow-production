@@ -3,6 +3,7 @@ import { Inter } from "next/font/google";
 import { MotionConfig } from "framer-motion";
 import { Toaster } from "@/components/ui/toaster";
 import { PageTransitionProvider } from "@/components/shared/page-transition";
+import { ReceptionistRevealProvider } from "@/components/shared/receptionist-reveal";
 import "./globals.css";
 
 const inter = Inter({
@@ -59,7 +60,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
          * content still reveals, nothing breaks, one change instead of
          * touching every animate prop in every file. */}
         <MotionConfig reducedMotion="user">
-          <PageTransitionProvider>{children}</PageTransitionProvider>
+          <PageTransitionProvider>
+            <ReceptionistRevealProvider>{children}</ReceptionistRevealProvider>
+          </PageTransitionProvider>
           <Toaster />
         </MotionConfig>
       </body>

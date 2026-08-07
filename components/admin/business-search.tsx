@@ -21,6 +21,7 @@ const CONNECTION_LABEL: Record<ConnectionHealthStatus, { label: string; classNam
   connected: { label: "Connected", className: "bg-emerald-500/15 text-emerald-400" },
   expiring_soon: { label: "Expiring soon", className: "bg-amber-500/15 text-amber-400" },
   expired: { label: "Expired", className: "bg-red-500/15 text-red-400" },
+  revoked: { label: "Revoked", className: "bg-red-500/15 text-red-400" },
   not_connected: { label: "Not connected", className: "bg-slate-700 text-slate-400" },
 };
 

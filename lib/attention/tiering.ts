@@ -35,7 +35,7 @@ export type AttentionTier = "now" | "today" | "none";
  * is still "today," not "now").
  */
 export function classifyAttentionTier(snapshot: AttentionSnapshot): AttentionTier {
-  if (snapshot.hasEscalatedPendingReply || snapshot.connectionStatus === "expired") return "now";
+  if (snapshot.hasEscalatedPendingReply || snapshot.connectionStatus === "expired" || snapshot.connectionStatus === "revoked") return "now";
   if (snapshot.pendingReplyCount > 0 || snapshot.connectionStatus === "expiring_soon") return "today";
   return "none";
 }

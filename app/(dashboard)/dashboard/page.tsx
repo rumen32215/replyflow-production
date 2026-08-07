@@ -201,7 +201,7 @@ export default async function HomePage() {
     // never reflects a token going bad later.
     supabase
       .from("whatsapp_connections")
-      .select("token_expires_at")
+      .select("token_expires_at, revoked_at")
       .eq("business_id", businessId)
       .maybeSingle(),
     // V1 First-Run redesign — the new "Test your receptionist" journey
@@ -432,6 +432,7 @@ export default async function HomePage() {
   const connectionHealth = describeConnectionHealth({
     connected: whatsappConnected,
     tokenExpiresAt: whatsappConnection?.token_expires_at ?? null,
+    revokedAt: whatsappConnection?.revoked_at ?? null,
     now,
   });
   const noActivityYet = (conversationCount ?? 0) === 0 && (completedEver ?? 0) === 0;

@@ -61,13 +61,14 @@ export async function notifyBusiness(input: NotifyBusinessInput): Promise<Notify
 
     const { data: whatsappConnection } = await supabase
       .from("whatsapp_connections")
-      .select("token_expires_at")
+      .select("token_expires_at, revoked_at")
       .eq("business_id", business.id)
       .maybeSingle();
 
     const connectionHealth = describeConnectionHealth({
       connected: business.whatsappConnected,
       tokenExpiresAt: whatsappConnection?.token_expires_at ?? null,
+      revokedAt: whatsappConnection?.revoked_at ?? null,
       now,
     });
 

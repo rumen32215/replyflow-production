@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
-import { CheckCircle2, MessageCircle } from "lucide-react";
+import { AlertTriangle, CheckCircle2, MessageCircle } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { WhatsAppEmbeddedSignup } from "@/components/dashboard/whatsapp-embedded-signup";
 import { Badge } from "@/components/ui/badge";
@@ -23,10 +23,11 @@ export default async function WhatsAppConnectionPage() {
   const { data: connection } = business
     ? await supabase
         .from("whatsapp_connections")
-        .select("display_phone_number, waba_id, connected_at")
+        .select("display_phone_number, waba_id, connected_at, revoked_at")
         .eq("business_id", business.id)
         .maybeSingle()
     : { data: null };
+  const isRevoked = Boolean(connection?.revoked_at);
 
   // RC2-M1 (Proof Before Ask, Principle 6), re-pointed for the V1
   // First-Run redesign: Meet now happens right after the one-minute
@@ -92,13 +93,31 @@ export default async function WhatsAppConnectionPage() {
       <SettleCard className="mb-8">
         <h1 className="text-[26px] font-extrabold tracking-tight">Connect WhatsApp</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          {connection
+          {connection && !isRevoked
             ? "This is the number I answer on."
+            : isRevoked
+            ? "This connection needs to be reconnected before I can see customer messages again."
             : "Once this is connected, I'll start watching for real customer messages."}
         </p>
       </SettleCard>
 
-      {connection ? (
+      {connection && isRevoked ? (
+        <>
+          <SettleCard delay={0.05} className="mb-5 rounded-2xl border border-destructive/20 bg-destructive/5 p-8 text-center">
+            <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-destructive text-white">
+              <AlertTriangle className="h-6 w-6" strokeWidth={2.5} />
+            </div>
+            <p className="mb-1 text-[16px] font-bold">{connection.display_phone_number}</p>
+            <p className="mb-4 text-[13px] text-muted-foreground">
+              Meta disconnected this number from ReplyFlow — customer messages may not be reaching me until you reconnect.
+            </p>
+            <Badge variant="destructive">
+              <AlertTriangle className="h-3 w-3" /> Reconnect needed
+            </Badge>
+          </SettleCard>
+          <WhatsAppEmbeddedSignup />
+        </>
+      ) : connection ? (
         <SettleCard delay={0.05} className="rounded-2xl border border-success/20 bg-success/5 p-8 text-center">
           <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-success text-white">
             <CheckCircle2 className="h-6 w-6" strokeWidth={2.5} />

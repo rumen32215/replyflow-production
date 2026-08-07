@@ -20,9 +20,21 @@ export interface ConnectionHealthAlert {
  * *whether* something is wrong and how urgent it is, matching every
  * other pure-logic-extraction convention in this codebase.
  */
-export function buildConnectionHealthAlert(input: { tokenExpiresAt: string | null; now: Date }): ConnectionHealthAlert | null {
-  const health = describeConnectionHealth({ connected: true, tokenExpiresAt: input.tokenExpiresAt, now: input.now });
+export function buildConnectionHealthAlert(input: {
+  tokenExpiresAt: string | null;
+  revokedAt?: string | null;
+  now: Date;
+}): ConnectionHealthAlert | null {
+  const health = describeConnectionHealth({
+    connected: true,
+    tokenExpiresAt: input.tokenExpiresAt,
+    revokedAt: input.revokedAt,
+    now: input.now,
+  });
 
+  if (health.status === "revoked" && health.message) {
+    return { severity: "critical", source: "webhook.whatsapp_connection_revoked", message: health.message };
+  }
   if (health.status === "expired" && health.message) {
     return { severity: "critical", source: "webhook.whatsapp_token_expired", message: health.message };
   }

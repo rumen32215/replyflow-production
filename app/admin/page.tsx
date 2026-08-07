@@ -26,13 +26,14 @@ export default async function AdminPage() {
     .order("created_at", { ascending: false });
   if (error) throw new Error(`Failed to load businesses: ${error.message}`);
 
-  const { data: connections } = await service.from("whatsapp_connections").select("business_id, token_expires_at");
-  const connectionByBusiness = new Map((connections ?? []).map((c) => [c.business_id, c.token_expires_at]));
+  const { data: connections } = await service.from("whatsapp_connections").select("business_id, token_expires_at, revoked_at");
+  const connectionByBusiness = new Map((connections ?? []).map((c) => [c.business_id, c]));
 
   const rows: AdminBusinessRow[] = (businesses ?? []).map((b) => {
     const connectionHealth = describeConnectionHealth({
       connected: b.whatsapp_connected ?? false,
-      tokenExpiresAt: connectionByBusiness.get(b.id) ?? null,
+      tokenExpiresAt: connectionByBusiness.get(b.id)?.token_expires_at ?? null,
+      revokedAt: connectionByBusiness.get(b.id)?.revoked_at ?? null,
       now,
     });
     const subscriptionGate = describeSubscriptionGate({

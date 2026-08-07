@@ -29,7 +29,7 @@ export default async function AdminBusinessPage({ params }: { params: { id: stri
   if (!business) notFound();
 
   const [{ data: connection }, { data: conversations }, { data: errors }, { data: events }] = await Promise.all([
-    service.from("whatsapp_connections").select("token_expires_at").eq("business_id", params.id).maybeSingle(),
+    service.from("whatsapp_connections").select("token_expires_at, revoked_at").eq("business_id", params.id).maybeSingle(),
     service
       .from("conversations")
       .select("id, customer_name, customer_phone, status, last_message_at, last_message_preview")
@@ -53,6 +53,7 @@ export default async function AdminBusinessPage({ params }: { params: { id: stri
   const connectionHealth = describeConnectionHealth({
     connected: business.whatsapp_connected ?? false,
     tokenExpiresAt: connection?.token_expires_at ?? null,
+    revokedAt: connection?.revoked_at ?? null,
     now,
   });
   const subscriptionGate = describeSubscriptionGate({

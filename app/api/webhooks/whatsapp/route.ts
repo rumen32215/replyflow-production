@@ -4,9 +4,10 @@ import { verifyWebhookSignature } from "@/lib/whatsapp/verify-signature";
 import { createServiceClient } from "@/lib/supabase/service";
 import { generateReplyForMessage } from "@/lib/reply-engine/generate-reply";
 import { markMessageAsRead } from "@/lib/whatsapp/graph";
-import type { WhatsAppWebhookPayload } from "@/lib/whatsapp/types";
+import type { WhatsAppWebhookPayload, WhatsAppInboundMessage } from "@/lib/whatsapp/types";
 import { recordErrorEvent } from "@/lib/error-events";
 import { buildConnectionHealthAlert } from "@/lib/whatsapp/connection-health-alert";
+import { markConnectionRevoked } from "@/lib/whatsapp/connection-revoke";
 
 // Needs the Node.js runtime (not Edge) for node:crypto in verify-signature.ts.
 export const runtime = "nodejs";
@@ -129,6 +130,11 @@ export async function POST(request: NextRequest) {
   return NextResponse.json({ received: true }, { status: 200 });
 }
 
+type ServiceClient = ReturnType<typeof createServiceClient>;
+type WebhookMetadata = { display_phone_number: string; phone_number_id: string };
+type WebhookContacts = Array<{ profile: { name: string }; wa_id: string }> | undefined;
+type WebhookMessage = WhatsAppInboundMessage;
+
 async function processWebhookPayload(payload: WhatsAppWebhookPayload) {
   if (payload.object !== "whatsapp_business_account") return;
 
@@ -143,7 +149,7 @@ async function processWebhookPayload(payload: WhatsAppWebhookPayload) {
 
       const { data: connection } = await supabase
         .from("whatsapp_connections")
-        .select("business_id, access_token, token_expires_at")
+        .select("business_id, access_token, token_expires_at, revoked_at")
         .eq("phone_number_id", metadata.phone_number_id)
         .maybeSingle();
 
@@ -160,86 +166,138 @@ async function processWebhookPayload(payload: WhatsAppWebhookPayload) {
       // infrastructure. Best-effort and never blocking (mirrors every
       // other observability call in this handler) — a failed check
       // here must never affect a real customer's message.
-      await maybeRecordConnectionHealthAlert(supabase, connection.business_id, connection.token_expires_at);
+      await maybeRecordConnectionHealthAlert(supabase, connection.business_id, connection.token_expires_at, connection.revoked_at);
 
       for (const message of messages) {
-        const customerName = contacts?.find((c) => c.wa_id === message.from)?.profile.name ?? null;
-        const body = message.type === "text" ? message.text?.body ?? "" : `[${message.type} message]`;
-        const receivedAt = new Date(Number(message.timestamp) * 1000).toISOString();
-
-        const { data: conversation } = await supabase
-          .from("conversations")
-          .upsert(
-            {
-              business_id: connection.business_id,
-              customer_phone: message.from,
-              customer_name: customerName,
-              last_message_at: receivedAt,
-              last_message_preview: body.slice(0, 140),
-              status: "open",
-            },
-            { onConflict: "business_id,customer_phone" }
-          )
-          .select("id")
-          .single();
-
-        if (!conversation) continue;
-
-        // whatsapp_message_id is unique — Meta retries webhook delivery,
-        // so this upsert (rather than insert) makes re-delivery a no-op
-        // instead of a duplicate message.
-        const { data: insertedMessage } = await supabase
-          .from("messages")
-          .upsert(
-            {
-              conversation_id: conversation.id,
-              business_id: connection.business_id,
-              direction: "inbound",
-              whatsapp_message_id: message.id,
-              from_number: message.from,
-              to_number: metadata.phone_number_id,
-              message_type: message.type,
-              body,
-            },
-            { onConflict: "whatsapp_message_id" }
-          )
-          .select("id")
-          .single();
-
-        // Conversation Experience Review §7 — mark it read (and request
-        // WhatsApp's typing indicator) the moment it arrives, regardless
-        // of message type, rather than leaving the customer at
-        // "delivered" with no acknowledgement until the full reply
-        // eventually lands. Best-effort and never blocking: a failed
-        // read receipt must never hold up the actual reply pipeline.
-        if (insertedMessage) {
-          waitUntil(markMessageAsRead(metadata.phone_number_id, connection.access_token, message.id));
-        }
-
-        // Reply Engine trigger (Sprint 10A) — deferred via waitUntil so
-        // the LLM call never delays this handler's ACK to Meta. Real
-        // understanding/generation is still text-only (Sprint 9.1 §8) —
-        // generateReplyForMessage's own messageType check routes any
-        // other type straight to a fixed, honest acknowledgment instead
-        // of the LLM pipeline, closing a real, evidenced gap (a
-        // non-text message used to get no reply drafted at all).
-        if (insertedMessage) {
-          waitUntil(
-            generateReplyForMessage({
-              businessId: connection.business_id,
-              conversationId: conversation.id,
-              customerMessageId: insertedMessage.id,
-              messageBody: body,
-              messageType: message.type,
-            })
-          );
+        // Per-message isolation (Phase A — Production Foundation): one
+        // malformed/failing message must never stop the rest of this
+        // batch. Ack behavior is unaffected — the outer handler in
+        // POST() already always returns 200 regardless of what happens
+        // in here; this only stops one bad iteration from skipping
+        // every message after it in the same webhook delivery.
+        try {
+          await processOneMessage({ supabase, connection, metadata, contacts, message });
+        } catch (err) {
+          console.error("[whatsapp webhook] failed to process one message:", err);
+          await recordErrorEvent({
+            severity: "error",
+            source: "webhook.message_processing_failed",
+            businessId: connection.business_id,
+            message: "One inbound message in a webhook batch failed to process — other messages in the same batch were unaffected.",
+            error: err,
+            context: { whatsappMessageId: message.id },
+          });
         }
       }
     }
   }
 }
 
-type ServiceClient = ReturnType<typeof createServiceClient>;
+async function processOneMessage(input: {
+  supabase: ServiceClient;
+  connection: { business_id: string; access_token: string };
+  metadata: WebhookMetadata;
+  contacts: WebhookContacts;
+  message: WebhookMessage;
+}) {
+  const { supabase, connection, metadata, contacts, message } = input;
+
+  const customerName = contacts?.find((c) => c.wa_id === message.from)?.profile.name ?? null;
+  const body =
+    message.type === "text"
+      ? message.text?.body ?? ""
+      : message.type === "image" && message.image?.caption
+      ? message.image.caption
+      : `[${message.type} message]`;
+  const receivedAt = new Date(Number(message.timestamp) * 1000).toISOString();
+
+  const { data: conversation } = await supabase
+    .from("conversations")
+    .upsert(
+      {
+        business_id: connection.business_id,
+        customer_phone: message.from,
+        customer_name: customerName,
+        last_message_at: receivedAt,
+        last_message_preview: body.slice(0, 140),
+        status: "open",
+      },
+      { onConflict: "business_id,customer_phone" }
+    )
+    .select("id")
+    .single();
+
+  if (!conversation) return;
+
+  // whatsapp_message_id is unique — Meta retries webhook delivery,
+  // so this upsert (rather than insert) makes re-delivery a no-op
+  // instead of a duplicate message.
+  const { data: insertedMessage } = await supabase
+    .from("messages")
+    .upsert(
+      {
+        conversation_id: conversation.id,
+        business_id: connection.business_id,
+        direction: "inbound",
+        whatsapp_message_id: message.id,
+        from_number: message.from,
+        to_number: metadata.phone_number_id,
+        message_type: message.type,
+        body,
+        // Phase B — the raw reference the reply engine needs to
+        // actually download the photo (lib/whatsapp/graph.ts's
+        // getMediaUrl). storage_path/media_mime_type get filled in
+        // later, once lib/reply-engine/media-intake.ts has actually
+        // fetched and stored it — not set here, since nothing has been
+        // downloaded yet at this point.
+        media_id: message.type === "image" ? message.image?.id ?? null : null,
+      },
+      { onConflict: "whatsapp_message_id" }
+    )
+    .select("id")
+    .single();
+
+  if (!insertedMessage) return;
+
+  // Conversation Experience Review §7 — mark it read (and request
+  // WhatsApp's typing indicator) the moment it arrives, regardless of
+  // message type, rather than leaving the customer at "delivered" with
+  // no acknowledgement until the full reply eventually lands.
+  // Best-effort and never blocking: a failed read receipt must never
+  // hold up the actual reply pipeline. Also the fastest real signal
+  // available that a connection was revoked (Phase A) — it fires on
+  // every single inbound message, well before a reply might send.
+  waitUntil(
+    (async () => {
+      const result = await markMessageAsRead(metadata.phone_number_id, connection.access_token, message.id);
+      if (result.authError) {
+        await markConnectionRevoked(supabase, connection.business_id, "webhook.mark_read_auth_error");
+      }
+    })()
+  );
+
+  // Reply Engine trigger (Sprint 10A) — deferred via waitUntil so the
+  // LLM call never delays this handler's ACK to Meta. Text and images
+  // (Phase B) both reach real understanding; every other type still
+  // routes to a fixed, honest acknowledgment instead of the LLM
+  // pipeline (generateReplyForMessage's own messageType check), closing
+  // a real, evidenced gap (a non-text message used to get no reply
+  // drafted at all). The actual photo download/storage/analysis also
+  // happens inside this deferred call, not synchronously here — keeps
+  // this handler's own ack to Meta fast regardless of how long that
+  // takes (same reasoning as deferring the LLM call itself).
+  waitUntil(
+    generateReplyForMessage({
+      businessId: connection.business_id,
+      conversationId: conversation.id,
+      customerMessageId: insertedMessage.id,
+      messageBody: body,
+      messageType: message.type,
+      mediaId: message.type === "image" ? message.image?.id ?? null : null,
+      mediaCaption: message.type === "image" ? message.image?.caption ?? null : null,
+    })
+  );
+}
 
 /**
  * Dedup window: a broken connection stays broken across many inbound
@@ -260,9 +318,10 @@ const ALERT_DEDUP_WINDOW_MS: Record<"critical" | "warning" | "error", number> = 
 async function maybeRecordConnectionHealthAlert(
   supabase: ServiceClient,
   businessId: string,
-  tokenExpiresAt: string | null
+  tokenExpiresAt: string | null,
+  revokedAt: string | null
 ): Promise<void> {
-  const alert = buildConnectionHealthAlert({ tokenExpiresAt, now: new Date() });
+  const alert = buildConnectionHealthAlert({ tokenExpiresAt, revokedAt, now: new Date() });
   if (!alert) return;
 
   try {

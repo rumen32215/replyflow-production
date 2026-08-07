@@ -28,7 +28,12 @@ export interface WhatsAppInboundMessage {
   timestamp: string;
   type: "text" | "image" | "document" | "audio" | "video" | "location" | string;
   text?: { body: string };
-  [key: string]: unknown; // other message types (image/document/...) captured but not parsed yet
+  /** Present when type === "image" — id is the media id used with
+   * GET /{media-id} (lib/whatsapp/graph.ts's getMediaUrl) to resolve a
+   * short-lived download URL. Meta re-reports mime_type at that lookup
+   * too; the webhook-delivered value here is only used as a fallback. */
+  image?: { id: string; mime_type: string; sha256: string; caption?: string };
+  [key: string]: unknown; // other message types (document/audio/video/location) captured but not parsed yet
 }
 
 export interface TokenExchangeResponse {

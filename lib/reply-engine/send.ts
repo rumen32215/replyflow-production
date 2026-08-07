@@ -1,7 +1,8 @@
 import "server-only";
 import type { createServiceClient } from "@/lib/supabase/service";
-import { sendTextMessage } from "@/lib/whatsapp/graph";
+import { sendTextMessage, WhatsAppAuthError } from "@/lib/whatsapp/graph";
 import { recordErrorEvent } from "@/lib/error-events";
+import { markConnectionRevoked } from "@/lib/whatsapp/connection-revoke";
 
 type ServiceClient = ReturnType<typeof createServiceClient>;
 
@@ -77,17 +78,25 @@ export async function sendReplyToCustomer(params: {
 
     return { ok: true, whatsappMessageId };
   } catch (err) {
-    // A drafted reply that was approved (or auto-sent) failed to
-    // actually reach the customer — real, customer-visible impact,
-    // distinct from an internal LLM hiccup.
-    await recordErrorEvent({
-      severity: "error",
-      source: "reply-engine.send_failed",
-      businessId,
-      message: "sendReplyToCustomer failed — an approved/auto-sent reply did not reach the customer.",
-      error: err,
-      context: { conversationId },
-    });
+    if (err instanceof WhatsAppAuthError) {
+      // Distinct from an ordinary send failure: the connection itself
+      // is no longer valid, not just this one message. Recorded once
+      // (markConnectionRevoked is idempotent) so Front Desk stops
+      // reading "healthy" and the owner gets a clear reconnect path.
+      await markConnectionRevoked(supabase, businessId, "reply-engine.send_auth_error");
+    } else {
+      // A drafted reply that was approved (or auto-sent) failed to
+      // actually reach the customer — real, customer-visible impact,
+      // distinct from an internal LLM hiccup.
+      await recordErrorEvent({
+        severity: "error",
+        source: "reply-engine.send_failed",
+        businessId,
+        message: "sendReplyToCustomer failed — an approved/auto-sent reply did not reach the customer.",
+        error: err,
+        context: { conversationId },
+      });
+    }
     return { ok: false, error: err instanceof Error ? err.message : "Failed to send message." };
   }
 }

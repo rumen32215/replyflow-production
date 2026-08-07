@@ -95,6 +95,12 @@ export async function POST(request: Request) {
           : null,
         webhook_verified: true,
         connected_at: new Date().toISOString(),
+        // A fresh, successful Embedded Signup here is the correct
+        // "healthy again" signal (Phase A) — clears any earlier
+        // revoked_at from a previous connection to this business so
+        // Front Desk stops showing "reconnect needed" the moment it's
+        // actually fixed.
+        revoked_at: null,
       },
       { onConflict: "business_id" }
     );

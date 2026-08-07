@@ -24,6 +24,9 @@ export interface AttentionEmail {
 }
 
 function headline(input: AttentionCopyInput): string {
+  if (input.connectionStatus === "revoked") {
+    return "Your WhatsApp connection was disconnected — customers may not be reaching you";
+  }
   if (input.connectionStatus === "expired") {
     return "Your WhatsApp connection has expired — customers may not be reaching you";
   }

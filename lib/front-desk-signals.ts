@@ -242,14 +242,14 @@ function formatBookedTime(iso: string): string {
 
 /* ---------------------------- Connection health ---------------------------------- */
 
-export type ConnectionHealthStatus = "connected" | "expiring_soon" | "expired" | "not_connected";
+export type ConnectionHealthStatus = "connected" | "expiring_soon" | "expired" | "revoked" | "not_connected";
 
 export interface ConnectionHealth {
   status: ConnectionHealthStatus;
-  /** Only set for expiring_soon/expired — nothing to say when the
-   * connection is fine or was never made (Front Desk's Setup Journey
-   * already covers "not connected yet"; this is specifically about an
-   * existing connection going bad). */
+  /** Only set for expiring_soon/expired/revoked — nothing to say when
+   * the connection is fine or was never made (Front Desk's Setup
+   * Journey already covers "not connected yet"; this is specifically
+   * about an existing connection going bad). */
   message: string | null;
 }
 
@@ -263,8 +263,27 @@ const EXPIRY_WARNING_DAYS = 3;
  * forever (that boolean is only ever set once, at connect time; it's
  * never re-checked). This reads the real column instead of trusting
  * the stale flag.
+ *
+ * `revokedAt` (Phase A — Production Foundation) is a distinct,
+ * observed fact — a real Graph API call returned OAuth error 190 —
+ * and always wins over the expiry-based statuses: a connection can
+ * read "revoked" even while its stored token_expires_at is still
+ * comfortably in the future, because Meta/the merchant pulled access
+ * before it naturally expired.
  */
-export function describeConnectionHealth(input: { connected: boolean; tokenExpiresAt: string | null; now: Date }): ConnectionHealth {
+export function describeConnectionHealth(input: {
+  connected: boolean;
+  tokenExpiresAt: string | null;
+  revokedAt?: string | null;
+  now: Date;
+}): ConnectionHealth {
+  if (input.connected && input.revokedAt) {
+    return {
+      status: "revoked",
+      message: "Your WhatsApp connection was disconnected on Meta's side — customer messages may not be reaching me. Reconnect to fix this.",
+    };
+  }
+
   if (!input.connected || !input.tokenExpiresAt) {
     return { status: input.connected ? "connected" : "not_connected", message: null };
   }

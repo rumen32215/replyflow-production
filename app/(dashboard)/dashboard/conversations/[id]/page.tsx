@@ -3,6 +3,8 @@ import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/service";
+import { CUSTOMER_MEDIA_BUCKET } from "@/lib/reply-engine/media-storage";
 import { ConversationStory } from "@/components/dashboard/conversations/conversation-story";
 import { statusLabel, groupForStatus } from "@/lib/conversations";
 import { parseAvailability, nextAvailableSlot, toDateString } from "@/lib/availability";
@@ -40,7 +42,7 @@ export default async function ConversationDetailPage({ params }: { params: { id:
 
   if (!conversation) notFound();
 
-  const [{ data: existingWorkCards }, { data: allWorkCards }, { data: messages }, { data: business }, { data: pendingDrafts }] = await Promise.all([
+  const [{ data: existingWorkCards }, { data: allWorkCards }, { data: messages }, { data: business }, { data: pendingDrafts }, { data: conversationPhotos }] = await Promise.all([
     // A rejected draft can be followed by a fresh one on the same
     // conversation — most-recent-first + limit(1) so this never
     // breaks once more than one Work Card row exists here
@@ -67,7 +69,7 @@ export default async function ConversationDetailPage({ params }: { params: { id:
       .order("created_at", { ascending: true }),
     supabase
       .from("messages")
-      .select("id, direction, body, message_type, created_at")
+      .select("id, direction, body, message_type, storage_path, created_at")
       .eq("conversation_id", conversation.id)
       .order("created_at", { ascending: true }),
     supabase
@@ -87,10 +89,36 @@ export default async function ConversationDetailPage({ params }: { params: { id:
       .eq("status", "pending")
       .order("created_at", { ascending: false })
       .limit(1),
+    // Phase B — the already-computed VISIBLE/POSSIBLE analysis for any
+    // photo in this conversation, keyed by message_id below so it can
+    // render right under the photo it belongs to.
+    supabase
+      .from("conversation_photos")
+      .select("message_id, visible_summary, possible_summary")
+      .eq("conversation_id", conversation.id),
   ]);
 
   const allMessages = messages ?? [];
   const photoCount = allMessages.filter((m) => m.message_type !== "text").length;
+  const photoAnalysisByMessageId = new Map((conversationPhotos ?? []).map((p) => [p.message_id, p]));
+
+  // Signed URLs, generated server-side with the service role — the
+  // customer-media bucket is private with no policy granted to
+  // `authenticated` at all (0024_customer_photos.sql), so the only way
+  // in is here, after the RLS-scoped `conversations` select above has
+  // already proven this signed-in owner actually owns this conversation.
+  const imageMessages = allMessages.filter((m) => m.message_type === "image" && m.storage_path);
+  const signedUrlByMessageId = new Map<string, string>();
+  if (imageMessages.length > 0) {
+    const service = createServiceClient();
+    const signedResults = await Promise.all(
+      imageMessages.map((m) => service.storage.from(CUSTOMER_MEDIA_BUCKET).createSignedUrl(m.storage_path as string, 3600))
+    );
+    imageMessages.forEach((m, i) => {
+      const url = signedResults[i]?.data?.signedUrl;
+      if (url) signedUrlByMessageId.set(m.id, url);
+    });
+  }
   const group = groupForStatus(conversation.status);
   const latestCustomerMessage = [...allMessages].reverse().find((m) => m.direction === "inbound")?.body ?? null;
 
@@ -221,7 +249,31 @@ export default async function ConversationDetailPage({ params }: { params: { id:
                     : "rounded-br-sm bg-primary text-primary-foreground"
                 )}
               >
-                {m.body}
+                {m.message_type === "image" && signedUrlByMessageId.has(m.id) ? (
+                  <>
+                    {/* eslint-disable-next-line @next/next/no-img-element -- a per-conversation signed URL, not an optimizable static asset */}
+                    <img
+                      src={signedUrlByMessageId.get(m.id)}
+                      alt="Photo sent by the customer"
+                      className="mb-1.5 max-h-64 w-full rounded-lg object-cover"
+                    />
+                    {m.body && m.body !== "[image message]" && <p>{m.body}</p>}
+                    {photoAnalysisByMessageId.has(m.id) && (
+                      <div className="mt-1.5 rounded-lg bg-background/60 px-2.5 py-2 text-[12px] leading-snug text-muted-foreground">
+                        <p>
+                          <span className="font-semibold text-foreground">Visible: </span>
+                          {photoAnalysisByMessageId.get(m.id)!.visible_summary}
+                        </p>
+                        <p className="mt-1">
+                          <span className="font-semibold text-foreground">Possible: </span>
+                          {photoAnalysisByMessageId.get(m.id)!.possible_summary}
+                        </p>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  m.body
+                )}
                 <div
                   className={cn(
                     "mt-1 text-[10.5px]",

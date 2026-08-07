@@ -8,6 +8,8 @@ import { evaluateSafety } from "./safety/evaluate";
 import { sendReplyToCustomer } from "./send";
 import { recordErrorEvent } from "@/lib/error-events";
 import { buildAttachmentAcknowledgmentDraft } from "./attachment-acknowledgment";
+import { handleCustomerPhoto } from "./media-intake";
+import type { PhotoAnalysisContext } from "./context/types";
 
 const STATE_HISTORY_WINDOW = 4;
 
@@ -33,8 +35,12 @@ export async function generateReplyForMessage(params: {
    * (Test Conversations, the live-reply preview) — which only ever
    * send real typed text — need no changes. */
   messageType?: string;
+  /** Present only when messageType === "image" (Phase B) — the Graph
+   * API media id needed to actually download the photo. */
+  mediaId?: string | null;
+  mediaCaption?: string | null;
 }): Promise<void> {
-  const { businessId, conversationId, customerMessageId, messageBody, messageType = "text" } = params;
+  const { businessId, conversationId, customerMessageId, messageBody, messageType = "text", mediaId = null, mediaCaption = null } = params;
   const supabase = createServiceClient();
 
   try {
@@ -47,10 +53,12 @@ export async function generateReplyForMessage(params: {
       .maybeSingle();
     if (existingDraft) return;
 
-    // Non-text messages never reach Understanding/Generation — see
-    // attachment-acknowledgment.ts for why, and for what gets written
-    // instead of the silence this used to produce.
-    if (messageType !== "text") {
+    // Non-text, non-image messages never reach Understanding/Generation
+    // — see attachment-acknowledgment.ts for why, and for what gets
+    // written instead of the silence this used to produce. Images get
+    // their own real path (Phase B) below, once the conversation row
+    // this needs is available.
+    if (messageType !== "text" && messageType !== "image") {
       await supabase
         .from("reply_drafts")
         .upsert(buildAttachmentAcknowledgmentDraft({ businessId, conversationId, customerMessageId }), {
@@ -112,6 +120,45 @@ export async function generateReplyForMessage(params: {
     });
     if (!brain.thoughts.readyToActAlone) return;
 
+    // Photo intake (Phase B — the differentiating loop). Runs before
+    // Understanding so a successful analysis can be threaded into
+    // Context Assembly as ordinary, citable facts (prompt/facts.ts) —
+    // classification/generation downstream never know this message
+    // started life as an image, only that photo.* facts exist.
+    let photoAnalysis: PhotoAnalysisContext | null = null;
+    let effectiveMessageBody = messageBody;
+    if (messageType === "image") {
+      if (!mediaId) {
+        // Meta sent an image-type message with no media id at all —
+        // genuinely shouldn't happen, but falling back to the same
+        // honest stopgap is safer than pretending to understand it.
+        await supabase
+          .from("reply_drafts")
+          .upsert(buildAttachmentAcknowledgmentDraft({ businessId, conversationId, customerMessageId }), { onConflict: "customer_message_id" });
+        return;
+      }
+      const { data: businessRow } = await supabase.from("businesses").select("trade").eq("id", businessId).maybeSingle();
+      const analysis = await handleCustomerPhoto(supabase, {
+        businessId,
+        conversationId,
+        customerMessageId,
+        mediaId,
+        caption: mediaCaption,
+        trade: businessRow?.trade ?? "general",
+      });
+      if (!analysis) {
+        // Download, storage, or analysis failed somewhere — the photo
+        // may or may not be stored, but there's nothing safe to draft
+        // from. Same honest fallback as every other unsupported case.
+        await supabase
+          .from("reply_drafts")
+          .upsert(buildAttachmentAcknowledgmentDraft({ businessId, conversationId, customerMessageId }), { onConflict: "customer_message_id" });
+        return;
+      }
+      photoAnalysis = { visible: analysis.visible, possible: analysis.possible, unknown: analysis.unknown };
+      effectiveMessageBody = mediaCaption ? `[Customer sent a photo: "${mediaCaption}"]` : "[Customer sent a photo]";
+    }
+
     // Prior Conversation State (Conversation Intelligence Sprint) —
     // fetched as its own defensive, separate query rather than folded
     // into the `conversations` select above: a PostgREST select fails
@@ -152,7 +199,7 @@ export async function generateReplyForMessage(params: {
     // wrong — an opening message always deserves a reply, however vague.
     const isFirstMessage = recentHistory.length <= 1;
 
-    const understanding = await classifyMessage(businessId, messageBody, priorState, recentHistory);
+    const understanding = await classifyMessage(businessId, effectiveMessageBody, priorState, recentHistory);
 
     // Persist the updated state immediately, regardless of what happens
     // downstream (escalation, silence, auto-send, pending draft) — the
@@ -194,7 +241,8 @@ export async function generateReplyForMessage(params: {
       customerName: conversation.customer_name,
       conversationStartedAt: conversation.created_at,
       needs,
-      messageBody,
+      messageBody: effectiveMessageBody,
+      photoAnalysis,
     });
 
     const { generation, facts } = await generateReplyDraft(businessId, context, understanding, { isFirstMessage });
@@ -239,7 +287,7 @@ export async function generateReplyForMessage(params: {
     // come today instead?" once it judged the answer was "already
     // covered" — a real question always deserves an explicit answer,
     // even a one-word one, never silence on the model's own judgment.
-    const messageIsAQuestion = messageBody.includes("?");
+    const messageIsAQuestion = effectiveMessageBody.includes("?");
 
     // Deterministic backstop for exact-match acknowledgements — live
     // adversarial testing found the model inconsistently applying its
@@ -269,7 +317,7 @@ export async function generateReplyForMessage(params: {
       "👍🏻",
     ]);
     const isForcedSilence =
-      EXACT_ACKNOWLEDGEMENTS.has(messageBody.trim().toLowerCase()) && priorState.openQuestion === null && !isFirstMessage;
+      EXACT_ACKNOWLEDGEMENTS.has(effectiveMessageBody.trim().toLowerCase()) && priorState.openQuestion === null && !isFirstMessage;
 
     // The category==="general" gate exists to keep AUTO-SEND narrow (a
     // real send carries risk depending on category). It doesn't apply
@@ -280,8 +328,11 @@ export async function generateReplyForMessage(params: {
     // the deterministic override for exactly that reason ("ok" mid-
     // booking classifies as booking, not general) — only the
     // model-judgment path (generation.noReplyNeeded) still needs the
-    // narrower category restriction.
+    // narrower category restriction. A photo is never silenceable
+    // (Phase B) — it deserves at least an acknowledgement, regardless
+    // of what the model judges, every time.
     const canSkipReply =
+      !photoAnalysis &&
       !messageIsAQuestion &&
       !isFirstMessage &&
       !safety.requiresEscalation &&
@@ -324,9 +375,15 @@ export async function generateReplyForMessage(params: {
     // explicitly turned it on *and* every existing safety check
     // (confidence gate, fact-grounding, escalation) already passed.
     // Still writes a full reply_drafts row either way — auditable,
-    // reviewable after the fact, never silent.
+    // reviewable after the fact, never silent. Photo-derived drafts
+    // (Phase B) are never eligible for auto-send, full stop, regardless
+    // of category or confidence — a "possible" cause read from a photo
+    // always needs a human to actually hit send, at least until this
+    // path has real evidence behind it, the same "earns its place"
+    // discipline every other widening of auto-send in this codebase
+    // already follows.
     const canAutoSend =
-      Boolean(aiConfig?.auto_reply_general_enabled) && safety.category === "general" && safety.wouldAutoSend;
+      !photoAnalysis && Boolean(aiConfig?.auto_reply_general_enabled) && safety.category === "general" && safety.wouldAutoSend;
 
     if (canAutoSend) {
       const sendResult = await sendReplyToCustomer({ supabase, businessId, conversationId, text: draftText });

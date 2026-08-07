@@ -47,6 +47,7 @@ function contextWith(overrides: Partial<BusinessProfileContext>): ReplyContext {
     conversationHistory: null,
     customerJobs: null,
     currentBooking: null,
+    photoAnalysis: null,
     newMessage: { body: "test", customerName: null, customerPhone: "" },
   };
 }
@@ -97,4 +98,25 @@ test("unconfirmed call-out fee (null) is an honest gap, never a claim either way
 test("a real call-out fee amount is stated once genuinely taught", () => {
   const text = calloutFeeFactText(contextWith({ chargesCalloutFee: true, calloutFeeAmount: "£60" }));
   assert.ok(text.includes("£60"));
+});
+
+test("photo analysis produces no facts when the message wasn't a photo (Phase B)", () => {
+  const context = contextWith({});
+  const facts = collectFacts(context, UNDERSTANDING);
+  assert.ok(!facts.some((f) => f.id.startsWith("photo.")));
+});
+
+test("a photo's visible/possible/unknown analysis each become their own citable fact (Phase B)", () => {
+  const context: ReplyContext = {
+    ...contextWith({}),
+    photoAnalysis: { visible: "Water pooling under the sink", possible: "May be a loose pipe connection", unknown: "The exact cause without an in-person look" },
+  };
+  const facts = collectFacts(context, UNDERSTANDING);
+  const visible = facts.find((f) => f.id === "photo.visible");
+  const possible = facts.find((f) => f.id === "photo.possible");
+  const unknown = facts.find((f) => f.id === "photo.unknown");
+  assert.ok(visible?.text.includes("Water pooling under the sink"));
+  assert.ok(possible?.text.includes("May be a loose pipe connection"));
+  assert.ok(possible?.text.toLowerCase().includes("not certain"), "possible fact must be explicitly hedged");
+  assert.ok(unknown?.text.includes("The exact cause without an in-person look"));
 });

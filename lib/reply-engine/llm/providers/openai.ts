@@ -31,9 +31,21 @@ function modelFor(tier: ModelTier): string {
 export async function complete(request: CompletionRequest): Promise<CompletionResult> {
   const model = modelFor(request.tier);
 
+  // OpenAI's own types only allow array content (text + image parts)
+  // on a user message — a system message must stay a plain string.
+  // CompletionMessage's shared `content` type is deliberately looser
+  // than that (every real system-message caller only ever sends a
+  // string anyway), so this maps each role to exactly what the SDK
+  // expects rather than passing request.messages through untyped.
+  const messages: OpenAI.Chat.ChatCompletionMessageParam[] = request.messages.map((m) =>
+    m.role === "system"
+      ? { role: "system" as const, content: typeof m.content === "string" ? m.content : "" }
+      : { role: "user" as const, content: m.content }
+  );
+
   const response = await getClient().chat.completions.create({
     model,
-    messages: request.messages,
+    messages,
     max_tokens: request.maxOutputTokens ?? 700,
     temperature: 0.3,
     response_format: {

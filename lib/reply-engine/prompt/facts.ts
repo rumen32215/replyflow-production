@@ -94,6 +94,20 @@ export function collectFacts(context: ReplyContext, understanding: Understanding
     });
   }
 
+  // Photo facts (Phase B) — flow through the exact same citation and
+  // grounding machinery as every other fact, deliberately: the
+  // grounding backstops in safety/evaluate.ts (uncited price/instruction
+  // claims) apply to a photo-derived claim exactly as they would to any
+  // other, for free, rather than needing a parallel set of rules.
+  if (context.photoAnalysis) {
+    facts.push({ id: "photo.visible", text: `From the photo the customer just sent — visible: ${context.photoAnalysis.visible}` });
+    facts.push({ id: "photo.possible", text: `From the photo — possible, not certain: ${context.photoAnalysis.possible}` });
+    facts.push({
+      id: "photo.unknown",
+      text: `From the photo — cannot be determined without an in-person look: ${context.photoAnalysis.unknown}`,
+    });
+  }
+
   if (context.customerJobs) {
     context.customerJobs.jobs.forEach((j, i) =>
       facts.push({

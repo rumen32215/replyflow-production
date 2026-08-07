@@ -68,6 +68,16 @@ export interface CurrentBookingContext {
   scheduledFor: string | null;
 }
 
+/** Phase B — a photo's already-computed VISIBLE/POSSIBLE/UNKNOWN
+ * analysis (lib/reply-engine/vision/analyze-photo.ts), threaded in as
+ * ordinary context so it becomes citable facts (prompt/facts.ts)
+ * rather than a parallel system with its own grounding rules. */
+export interface PhotoAnalysisContext {
+  visible: string;
+  possible: string;
+  unknown: string;
+}
+
 /** Everything Context Assembly gathered for one message — each field
  * is null when its category wasn't in ContextNeeds, never fetched
  * speculatively (Sprint 10A: "Only retrieve the information actually
@@ -80,5 +90,6 @@ export interface ReplyContext {
   conversationHistory: ConversationHistoryContext | null;
   customerJobs: CustomerJobsContext | null;
   currentBooking: CurrentBookingContext | null;
+  photoAnalysis: PhotoAnalysisContext | null;
   newMessage: { body: string; customerName: string | null; customerPhone: string };
 }

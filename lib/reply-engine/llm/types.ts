@@ -11,9 +11,20 @@
  */
 export type ModelTier = "small" | "large";
 
+/** A user message's content part — plain text, or (Phase B) an image
+ * for a vision-capable model call. Kept minimal on purpose: only the
+ * two shapes actually used (lib/reply-engine/vision/analyze-photo.ts),
+ * not the full range OpenAI's API supports. */
+export type CompletionContentPart =
+  | { type: "text"; text: string }
+  | { type: "image_url"; image_url: { url: string } };
+
 export interface CompletionMessage {
   role: "system" | "user";
-  content: string;
+  /** System messages are always plain text. User messages are plain
+   * text for every existing call site, and (Phase B) an array of parts
+   * for the one vision call that sends an image alongside text. */
+  content: string | CompletionContentPart[];
 }
 
 /** Every call requests structured output, never prose (Sprint 9 §5) —

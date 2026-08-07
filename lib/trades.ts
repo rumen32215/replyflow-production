@@ -85,3 +85,26 @@ export function accessSuggestionsForTrade(trade: string | null | undefined): rea
   const extra = ACCESS_EXTRA_BY_TRADE[normalizeTrade(trade)];
   return extra ? [extra, ...BASE_ACCESS_SUGGESTIONS] : BASE_ACCESS_SUGGESTIONS;
 }
+
+/**
+ * Trade-specific diagnostic guidance for the reply engine's system
+ * prompt (Phase B — "trade should affect the intelligence, not merely
+ * the UI label"). Deliberately populated for plumbing only — plumber-
+ * first is the explicit product decision, not an oversight. The shape
+ * (a lookup by trade) is what lets a second trade be added later
+ * without restructuring anything that reads from it —
+ * lib/reply-engine/prompt/build.ts just looks up whatever's here for
+ * the business's own trade and says nothing extra when there's no
+ * entry, exactly like every other trade-keyed lookup in this file.
+ */
+export const TRADE_INTAKE_GUIDANCE: Partial<Record<TradeOrGeneral, string>> = {
+  plumbing:
+    "Where genuinely still unknown and relevant, prioritise finding out (one at a time, never all at once, only " +
+    "what's not already collected): what the issue actually is, where in the property it is, how urgent it is " +
+    "(can the customer isolate the water themselves? is there active flooding?), whether hot water or heating is " +
+    "affected, the property type where it's relevant, and roughly when they'd like it looked at.",
+};
+
+export function intakeGuidanceForTrade(trade: string | null | undefined): string | null {
+  return TRADE_INTAKE_GUIDANCE[normalizeTrade(trade)] ?? null;
+}

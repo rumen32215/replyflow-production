@@ -93,6 +93,7 @@ export async function generateLiveReply(
     conversationHistory: needs.conversationHistory && recentHistory.length > 0 ? { messages: recentHistory } : null,
     customerJobs: null,
     currentBooking: null,
+    photoAnalysis: null,
     newMessage: { body: scenarioMessage, customerName: null, customerPhone: "" },
   };
 

@@ -2,6 +2,7 @@ import type { CompletionMessage, JsonSchemaSpec } from "../llm/types";
 import type { UnderstandingResult } from "../understanding/types";
 import type { ReplyContext } from "../context/types";
 import { collectFacts, type Fact } from "./facts";
+import { intakeGuidanceForTrade } from "@/lib/trades";
 
 /**
  * Deterministic prompt construction (Sprint 9 §5) — four blocks, always
@@ -161,6 +162,30 @@ function buildSystemBlock(context: ReplyContext, facts: Fact[], options: { isFir
           "Always write a real, brief, natural reply to an opening message."
         : "")
   );
+
+  // Photo facts (Phase B) — only present when the customer sent a
+  // photo that was successfully analysed. This is the one place the
+  // model is told how to *treat* photo.* facts differently from every
+  // other fact — the citation/grounding mechanics are identical, but a
+  // "possible" cause carries real risk if it's read as certain.
+  if (facts.some((f) => f.id.startsWith("photo."))) {
+    lines.push(
+      "Photo facts (photo.visible / photo.possible / photo.unknown): the customer sent a photo, already looked at " +
+        "for you. State photo.visible as plain fact. Treat photo.possible strictly as a hedge — words like \"could " +
+        "be\" or \"might be\", never stated as the confirmed cause. Never turn any of this into a definitive " +
+        "diagnosis, a price, or a promised fix — someone still needs to see it in person to confirm anything. If " +
+        "asked exactly what's wrong, how much it'll cost, or whether it can be fixed, be honest that a proper look " +
+        "is needed first, using photo.unknown if it says why."
+    );
+  }
+
+  // Trade-specific intake guidance (Phase B — plumber-first). Silent
+  // for every trade with no entry in lib/trades.ts's registry — this
+  // is additive guidance, never a requirement the model can't meet.
+  const tradeGuidance = intakeGuidanceForTrade(context.businessProfile?.trade);
+  if (tradeGuidance) {
+    lines.push(`This is a ${context.businessProfile?.trade} enquiry. ${tradeGuidance} This still follows every writing rule above.`);
+  }
 
   if (facts.length === 0) {
     lines.push("No business facts are available for this message — do not invent any; escalate instead.");

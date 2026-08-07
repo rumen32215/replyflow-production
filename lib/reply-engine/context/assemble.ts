@@ -4,7 +4,7 @@ import { parseKnowledge } from "@/lib/knowledge";
 import { parseAvailability, describeBookingReply, nextAvailableSlot } from "@/lib/availability";
 import { buildRelationshipSummary, relationshipStrengthFor, type CustomerJob } from "@/lib/customer-memory-signals";
 import type { ContextNeeds } from "../understanding/types";
-import type { ReplyContext } from "./types";
+import type { PhotoAnalysisContext, ReplyContext } from "./types";
 
 type ServiceClient = ReturnType<typeof createServiceClient>;
 
@@ -19,6 +19,10 @@ export interface AssembleContextInput {
   conversationStartedAt: string;
   needs: ContextNeeds;
   messageBody: string;
+  /** Phase B — set only when this message's photo was already
+   * downloaded and analysed (lib/reply-engine/media-intake.ts) before
+   * assembleContext was called. */
+  photoAnalysis?: PhotoAnalysisContext | null;
 }
 
 /**
@@ -108,6 +112,7 @@ export async function assembleContext(input: AssembleContextInput): Promise<Repl
     currentBooking: currentJobRow
       ? { jobTitle: currentJobRow.issue, status: currentJobRow.status, scheduledFor: currentJobRow.scheduled_for }
       : null,
+    photoAnalysis: input.photoAnalysis ?? null,
     newMessage: { body: input.messageBody, customerName, customerPhone },
   };
 

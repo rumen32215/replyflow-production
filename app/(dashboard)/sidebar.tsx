@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { motion } from "framer-motion";
-import { Home, MessagesSquare, Users, Headset, ClipboardCheck, CalendarDays, Settings, type LucideIcon } from "lucide-react";
+import { Home, MessagesSquare, Users, Headset, ClipboardCheck, FileText, CalendarDays, Settings, type LucideIcon } from "lucide-react";
 import { Logo } from "@/components/shared/logo";
 import { DASHBOARD_NAV } from "@/lib/constants";
 import { cn } from "@/lib/utils";
@@ -22,6 +22,7 @@ const ICONS: Record<(typeof DASHBOARD_NAV)[number]["icon"], LucideIcon> = {
   Users,
   Headset,
   ClipboardCheck,
+  FileText,
   CalendarDays,
   Settings,
 };

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, Sparkles, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -59,6 +59,29 @@ export function JobReportDraft({
   const [summaryText, setSummaryText] = useState(jobSummary?.value ?? "");
   const [workText, setWorkText] = useState(workPerformed?.value ?? "");
   const [observationTexts, setObservationTexts] = useState(observations.map((o) => o.value));
+
+  // Bug fix (production, ReplyFlow 2.0 Phase 2): useState's initial value
+  // only ever applies on this component's first mount. Generate/Regenerate
+  // both finish by calling router.refresh() on the *same* mounted
+  // instance — that updates jobSummary/workPerformed/observations as
+  // props, but without this, the three text states above stay frozen at
+  // whatever they were (empty, the first time) even though ProvenanceTag
+  // below reads straight from the fresh props and correctly shows
+  // "AI-drafted." Keying on the values themselves (not the observations
+  // array reference, which is a new array every render) means this only
+  // re-syncs when the underlying content actually changes — never
+  // clobbering an in-progress edit the owner hasn't saved yet.
+  const observationsSnapshot = observations.map((o) => `${o.key}:${o.value}`).join("|");
+  useEffect(() => {
+    setSummaryText(jobSummary?.value ?? "");
+  }, [jobSummary?.value]);
+  useEffect(() => {
+    setWorkText(workPerformed?.value ?? "");
+  }, [workPerformed?.value]);
+  useEffect(() => {
+    setObservationTexts(observations.map((o) => o.value));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [observationsSnapshot]);
 
   const hasDraft = Boolean(jobSummary || workPerformed || observations.length > 0);
 

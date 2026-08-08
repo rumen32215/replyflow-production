@@ -2,13 +2,14 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Loader2, Sparkles, RefreshCw } from "lucide-react";
+import { Loader2, Sparkles, RefreshCw, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { toast } from "@/hooks/use-toast";
 import type { Provenance } from "@/lib/job-docs/fields";
+import { waitForJobDocPhotosSettled } from "@/hooks/use-job-doc-photos";
 
 export interface DraftFieldData {
   key: string;
@@ -47,14 +48,26 @@ export function JobReportDraft({
   jobSummary,
   workPerformed,
   observations,
+  divergenceNote,
+  hasPhotos,
 }: {
   jobDocId: string;
   jobSummary: DraftFieldData | null;
   workPerformed: DraftFieldData | null;
   observations: DraftFieldData[];
+  /** ReplyFlow 2.0, Phase 2A — set only when the notes and the photos
+   * appear to describe different things. Never auto-resolved; shown
+   * as a plain notice, not an editable field — the owner resolves it
+   * by editing Job Summary/Work Performed directly. */
+  divergenceNote?: string | null;
+  /** Whether this job record has any photos at all — if so, Generate
+   * Draft waits for still-analysing ones (bounded, same 60s budget)
+   * before drafting, rather than racing an in-progress analysis. */
+  hasPhotos?: boolean;
 }) {
   const router = useRouter();
   const [generating, setGenerating] = useState(false);
+  const [waitingForPhotos, setWaitingForPhotos] = useState(false);
   const [saving, setSaving] = useState(false);
   const [summaryText, setSummaryText] = useState(jobSummary?.value ?? "");
   const [workText, setWorkText] = useState(workPerformed?.value ?? "");
@@ -89,13 +102,35 @@ export function JobReportDraft({
     if (generating) return;
     setGenerating(true);
     try {
+      if (hasPhotos) {
+        setWaitingForPhotos(true);
+        await waitForJobDocPhotosSettled(jobDocId);
+        setWaitingForPhotos(false);
+      }
+
       const res = await fetch(`/api/job-docs/${jobDocId}/draft`, { method: "POST" });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || "Something went wrong.");
+
+      const excluded: { id: string; caption: string | null; reason: "pending" | "error" }[] = Array.isArray(data.excludedPhotos)
+        ? data.excludedPhotos
+        : [];
+      if (excluded.length > 0) {
+        const pendingCount = excluded.filter((p) => p.reason === "pending").length;
+        const erroredCount = excluded.filter((p) => p.reason === "error").length;
+        const parts: string[] = [];
+        if (pendingCount > 0) parts.push(`${pendingCount} still analysing`);
+        if (erroredCount > 0) parts.push(`${erroredCount} couldn't be analysed`);
+        toast({
+          title: `${excluded.length} photo${excluded.length === 1 ? "" : "s"} not included (${parts.join(", ")})`,
+          description: "This draft was generated without them — see the Photos section above to retry or regenerate.",
+        });
+      }
       router.refresh();
     } catch (err) {
       toast({ variant: "destructive", title: "Couldn't generate a draft", description: err instanceof Error ? err.message : undefined });
     } finally {
+      setWaitingForPhotos(false);
       setGenerating(false);
     }
   }
@@ -139,7 +174,7 @@ export function JobReportDraft({
         </div>
         <Button variant="primary" onClick={generate} disabled={generating} className="w-auto">
           {generating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-          {generating ? "Generating..." : "Generate Draft"}
+          {waitingForPhotos ? "Waiting for photo analysis..." : generating ? "Generating..." : "Generate Draft"}
         </Button>
       </div>
     );
@@ -147,6 +182,16 @@ export function JobReportDraft({
 
   return (
     <div className="space-y-5">
+      {divergenceNote && (
+        <div className="flex items-start gap-2.5 rounded-xl border border-attention/30 bg-attention/[0.06] px-4 py-3.5">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-attention" />
+          <div className="min-w-0">
+            <p className="text-[13px] font-semibold text-attention">Your notes and a photo don&apos;t seem to match — please check</p>
+            <p className="mt-1 text-[12.5px] leading-relaxed text-foreground">{divergenceNote}</p>
+          </div>
+        </div>
+      )}
+
       <div className="space-y-1.5">
         <div className="flex items-center justify-between gap-2">
           <Label htmlFor="jobSummary">Job Summary</Label>
@@ -193,7 +238,7 @@ export function JobReportDraft({
         </Button>
         <Button variant="outline" onClick={generate} disabled={generating || saving} className="w-auto">
           {generating ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-          Regenerate draft
+          {waitingForPhotos ? "Waiting for photo analysis..." : "Regenerate draft"}
         </Button>
       </div>
     </div>

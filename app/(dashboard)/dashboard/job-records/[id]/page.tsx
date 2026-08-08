@@ -3,11 +3,17 @@ import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/service";
 import { JobReportDraft, type DraftFieldData } from "@/components/dashboard/job-records/job-report-draft";
+import { PhotoSection } from "@/components/dashboard/job-records/photo-section";
+import type { JobDocPhoto } from "@/hooks/use-job-doc-photos";
+import { JOB_DOC_MEDIA_BUCKET } from "@/lib/job-docs/photo-storage";
+import { ANALYSIS_ERROR_MARKER } from "@/lib/job-docs/photo-schema";
 import {
   RAW_NOTES_FIELD_KEY,
   JOB_SUMMARY_FIELD_KEY,
   WORK_PERFORMED_FIELD_KEY,
+  DIVERGENCE_NOTE_FIELD_KEY,
   isObservationFieldKey,
   type JobDocFieldRow,
 } from "@/lib/job-docs/fields";
@@ -44,10 +50,44 @@ export default async function JobRecordDetailPage({ params }: { params: { id: st
   const rawNotes = allFields.find((f) => f.field_key === RAW_NOTES_FIELD_KEY)?.field_value ?? "";
   const jobSummary = toDraftField(allFields.find((f) => f.field_key === JOB_SUMMARY_FIELD_KEY));
   const workPerformed = toDraftField(allFields.find((f) => f.field_key === WORK_PERFORMED_FIELD_KEY));
+  const divergenceNote = allFields.find((f) => f.field_key === DIVERGENCE_NOTE_FIELD_KEY)?.field_value ?? null;
   const observations = allFields
     .filter((f) => isObservationFieldKey(f.field_key))
     .map((f) => toDraftField(f))
     .filter((f): f is DraftFieldData => f !== null);
+
+  // Photos (ReplyFlow 2.0, Phase 2A) — RLS already scopes the read to
+  // this owner's business; the service role is only needed afterward,
+  // for signed URLs into the private job-doc-media bucket. Same
+  // pattern already used for WhatsApp photos in
+  // app/(dashboard)/dashboard/conversations/[id]/page.tsx.
+  const { data: photoRows } = await supabase
+    .from("job_doc_photos")
+    .select("id, storage_path, caption, phase, sort_order, visible_summary, possible_summary, unknown_note, analysis_confidence, analyzed_at")
+    .eq("job_doc_id", jobDoc.id)
+    .order("sort_order", { ascending: true });
+
+  const rows = photoRows ?? [];
+  const service = createServiceClient();
+  const signedResults = rows.length
+    ? await Promise.all(rows.map((r) => service.storage.from(JOB_DOC_MEDIA_BUCKET).createSignedUrl(r.storage_path, 3600)))
+    : [];
+  const initialPhotos: JobDocPhoto[] = rows.map((r, i) => {
+    const analysisErrored = r.unknown_note === ANALYSIS_ERROR_MARKER;
+    return {
+      id: r.id,
+      url: signedResults[i]?.data?.signedUrl ?? null,
+      caption: r.caption,
+      phase: r.phase,
+      sortOrder: r.sort_order,
+      visibleSummary: r.visible_summary ?? "",
+      possibleSummary: r.possible_summary ?? "",
+      unknownNote: analysisErrored ? "" : r.unknown_note ?? "",
+      analysisErrored,
+      confidence: r.analysis_confidence,
+      analyzedAt: r.analyzed_at,
+    };
+  });
 
   return (
     <div className="mx-auto max-w-[760px] space-y-6">
@@ -98,8 +138,19 @@ export default async function JobRecordDetailPage({ params }: { params: { id: st
       )}
 
       <section className="rounded-2xl border border-border bg-card p-5">
+        <PhotoSection jobDocId={jobDoc.id} initialPhotos={initialPhotos} />
+      </section>
+
+      <section className="rounded-2xl border border-border bg-card p-5">
         <h2 className="mb-4 text-[13px] font-bold uppercase tracking-wide text-muted-foreground">Job Report</h2>
-        <JobReportDraft jobDocId={jobDoc.id} jobSummary={jobSummary} workPerformed={workPerformed} observations={observations} />
+        <JobReportDraft
+          jobDocId={jobDoc.id}
+          jobSummary={jobSummary}
+          workPerformed={workPerformed}
+          observations={observations}
+          divergenceNote={divergenceNote}
+          hasPhotos={initialPhotos.length > 0}
+        />
       </section>
     </div>
   );

@@ -7,11 +7,13 @@ import {
   RAW_NOTES_FIELD_KEY,
   JOB_SUMMARY_FIELD_KEY,
   WORK_PERFORMED_FIELD_KEY,
+  DIVERGENCE_NOTE_FIELD_KEY,
   OBSERVATION_FIELD_PREFIX,
   observationFieldKey,
   SECTION,
   type Provenance,
 } from "@/lib/job-docs/fields";
+import { ANALYSIS_ERROR_MARKER } from "@/lib/job-docs/photo-schema";
 
 export const runtime = "nodejs";
 
@@ -57,11 +59,40 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     return NextResponse.json({ error: "This job record has no notes to draft from yet." }, { status: 400 });
   }
 
+  // Photo context (ReplyFlow 2.0, Phase 2A) — a snapshot at the moment
+  // Generate Draft actually runs. The client is responsible for
+  // waiting on still-analysing photos beforehand (up to the same
+  // 60-second bounded-polling budget — see
+  // hooks/use-job-doc-photos.ts's waitForJobDocPhotosSettled), so this
+  // route itself never sleeps; it just reports which photos, if any,
+  // were still pending and therefore excluded.
+  const { data: photoRows } = await service
+    .from("job_doc_photos")
+    .select("id, caption, visible_summary, possible_summary, unknown_note, analyzed_at")
+    .eq("job_doc_id", jobDoc.id)
+    .order("sort_order", { ascending: true });
+
+  const allPhotos = photoRows ?? [];
+  const erroredPhotos = allPhotos.filter((p) => p.analyzed_at && p.unknown_note === ANALYSIS_ERROR_MARKER);
+  const settledPhotos = allPhotos.filter((p) => p.analyzed_at && p.unknown_note !== ANALYSIS_ERROR_MARKER);
+  const pendingExcluded = allPhotos
+    .filter((p) => !p.analyzed_at)
+    .map((p) => ({ id: p.id, caption: p.caption ?? null, reason: "pending" as const }));
+  const erroredExcluded = erroredPhotos.map((p) => ({ id: p.id, caption: p.caption ?? null, reason: "error" as const }));
+  const excludedPhotos = [...pendingExcluded, ...erroredExcluded];
+
   const draft = await generateJobReportDraft({
     businessId: business.id,
     customerName: jobDoc.customer_name ?? "",
     jobAddress: jobDoc.job_address,
     rawNotes,
+    photos: settledPhotos
+      .filter((p) => p.visible_summary || p.possible_summary || p.unknown_note)
+      .map((p) => ({
+        visibleSummary: p.visible_summary ?? "",
+        possibleSummary: p.possible_summary ?? "",
+        unknownNote: p.unknown_note ?? "",
+      })),
   });
 
   if (!draft) {
@@ -94,6 +125,11 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       fieldRow(SECTION.summary, 0, JOB_SUMMARY_FIELD_KEY, draft.jobSummary),
       fieldRow(SECTION.workPerformed, 0, WORK_PERFORMED_FIELD_KEY, draft.workPerformed),
       ...draft.observations.map((o, i) => fieldRow(SECTION.observations, i, observationFieldKey(i), o)),
+      // Never auto-resolved (spec) — confidence "low" forces this
+      // through fieldRow's own ai_suggestion branch whenever it's
+      // present, so it always reads as something to check, never as
+      // an asserted fact.
+      fieldRow(SECTION.divergence, 0, DIVERGENCE_NOTE_FIELD_KEY, { text: draft.divergenceNote, confidence: "low" }),
     ];
 
     // Regenerating can produce fewer observations than last time — clear
@@ -114,7 +150,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     const { error: statusError } = await service.from("job_docs").update({ status: "review" }).eq("id", jobDoc.id);
     if (statusError) throw statusError;
 
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({ ok: true, excludedPhotos });
   } catch (err) {
     console.error("[job-docs] draft write failed:", err);
     await recordErrorEvent({

@@ -27,6 +27,21 @@ export interface JobReportDraft {
   jobSummary: DraftField;
   workPerformed: DraftField;
   observations: DraftField[];
+  /** ReplyFlow 2.0, Phase 2A — set only when the photos and the notes
+   * appear to describe different things. Never auto-resolved; the
+   * caller writes this as its own field for the owner to read and
+   * decide. Empty string when nothing diverges. */
+  divergenceNote: string;
+}
+
+/** ReplyFlow 2.0, Phase 2A — analysed photo context threaded in
+ * alongside the raw notes. Only ever the already-validated, already-
+ * grounded output of lib/job-docs/analysis.ts — this function never
+ * sees a raw image or an unvalidated model response. */
+export interface PhotoContext {
+  visibleSummary: string;
+  possibleSummary: string;
+  unknownNote: string;
 }
 
 const RESPONSE_SCHEMA = {
@@ -49,27 +64,55 @@ const RESPONSE_SCHEMA = {
         required: ["text", "confidence"],
       },
     },
+    divergence_note: { type: "string" },
   },
-  required: ["job_summary", "job_summary_confidence", "work_performed", "work_performed_confidence", "observations"],
+  required: [
+    "job_summary",
+    "job_summary_confidence",
+    "work_performed",
+    "work_performed_confidence",
+    "observations",
+    "divergence_note",
+  ],
 } as const;
 
 const SYSTEM_PROMPT =
   "You are drafting a professional job report for a UK trade/service business, from the tradesperson's own raw " +
-  "notes about a job they just completed or visited. Produce exactly three things:\n" +
+  "notes about a job they just completed or visited, and (when provided) already-analysed context from photos " +
+  "they took. Produce exactly these things:\n" +
   "- job_summary: one or two plain sentences describing what the job was, in professional language.\n" +
   "- work_performed: a clear, factual account of what was actually done, in the notes' own terms — never add a " +
   "step, part, or action that wasn't mentioned.\n" +
-  "- observations: a short list (0-5) of specific, useful observations genuinely present in the notes (e.g. " +
-  "condition found, cause identified, anything the customer should know) — omit this entirely if the notes don't " +
-  "support any.\n\n" +
+  "- observations: a short list (0-5) of specific, useful observations genuinely present in the notes or photo " +
+  "context (e.g. condition found, cause identified, anything the customer should know) — omit this entirely if " +
+  "neither supports any.\n" +
+  "- divergence_note: empty unless the photo context and the notes appear to describe something genuinely " +
+  "different (e.g. the notes say a part was replaced but a photo context describes the old part still in place). " +
+  "If so, describe BOTH what the notes say and what the photo context shows, plainly and separately — never " +
+  "silently pick one as correct, never rewrite the notes to match the photo or vice versa, never state which one " +
+  "is right. That decision belongs to the owner, not you.\n\n" +
   "Absolute rules — never invent, guess, or estimate any of the following unless the notes state it explicitly:\n" +
   "measurements, quantities, test results, registration or certificate numbers, signatures or names of who signed " +
   "anything, compliance verdicts (pass/fail/satisfactory), or safety classifications. If the notes don't mention " +
-  "one of these, simply don't write it — do not write a placeholder, an estimate, or a plausible-sounding guess.\n\n" +
+  "one of these, simply don't write it — do not write a placeholder, an estimate, or a plausible-sounding guess. " +
+  "The same restriction applies to anything from the photo context — it has already been through its own " +
+  "grounding checks, but never add to it or treat a hedged 'possible' observation as a confirmed fact.\n\n" +
   "Mark your own confidence honestly for each field: high only when the notes directly and clearly support what " +
   "you wrote; low when you had to infer or organise loosely-stated information. If the notes genuinely don't " +
   "support a field at all, return an empty string for it rather than inventing content.\n\n" +
   "Write in plain, professional British English. No marketing language, no filler, no unnecessary adjectives.";
+
+function buildPhotoContextBlock(photos: PhotoContext[]): string {
+  if (photos.length === 0) return "";
+  const lines = photos.map((p, i) => {
+    const parts: string[] = [];
+    if (p.visibleSummary) parts.push(`visible: ${p.visibleSummary}`);
+    if (p.possibleSummary) parts.push(`possible (hedged, not certain): ${p.possibleSummary}`);
+    if (p.unknownNote) parts.push(`unknown: ${p.unknownNote}`);
+    return `Photo ${i + 1} — ${parts.length > 0 ? parts.join("; ") : "nothing useful found"}`;
+  });
+  return `\n\nAnalysed photo context (already grounded — treat "possible" as hedged, never certain):\n${lines.join("\n")}`;
+}
 
 /**
  * Returns null on any failure (never throws) — the caller falls back
@@ -82,13 +125,14 @@ export async function generateJobReportDraft(input: {
   customerName: string;
   jobAddress: string | null;
   rawNotes: string;
+  photos?: PhotoContext[];
 }): Promise<JobReportDraft | null> {
   try {
     const result = await getCompletion({
       tier: "large",
       businessId: input.businessId,
       callSite: "job-docs.generate_draft",
-      maxOutputTokens: 700,
+      maxOutputTokens: 800,
       jsonSchema: { name: "job_report_draft", schema: RESPONSE_SCHEMA },
       messages: [
         { role: "system", content: SYSTEM_PROMPT },
@@ -97,7 +141,8 @@ export async function generateJobReportDraft(input: {
           content:
             `Customer: ${input.customerName || "not given"}\n` +
             `Job address: ${input.jobAddress || "not given"}\n\n` +
-            `Raw notes from the tradesperson:\n"""\n${input.rawNotes}\n"""`,
+            `Raw notes from the tradesperson:\n"""\n${input.rawNotes}\n"""` +
+            buildPhotoContextBlock(input.photos ?? []),
         },
       ],
     });
@@ -135,6 +180,7 @@ function parseDraft(raw: unknown): JobReportDraft | null {
     jobSummary: { text: r.job_summary.trim(), confidence: jobSummaryConfidence },
     workPerformed: { text: r.work_performed.trim(), confidence: workPerformedConfidence },
     observations,
+    divergenceNote: typeof r.divergence_note === "string" ? r.divergence_note.trim() : "",
   };
 }
 

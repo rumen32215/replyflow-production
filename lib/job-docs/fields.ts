@@ -9,12 +9,18 @@ export const RAW_NOTES_FIELD_KEY = "raw_notes";
 export const JOB_SUMMARY_FIELD_KEY = "job_summary";
 export const WORK_PERFORMED_FIELD_KEY = "work_performed";
 export const OBSERVATION_FIELD_PREFIX = "observation_";
+/** ReplyFlow 2.0, Phase 2A — set only when Generate Draft finds the
+ * photos and the notes appear to describe different things. Never
+ * silently reconciled; surfaced for the owner to resolve (see
+ * lib/job-docs/generate-draft.ts). */
+export const DIVERGENCE_NOTE_FIELD_KEY = "divergence_note";
 
 export const SECTION = {
   intake: "intake",
   summary: "job_summary",
   workPerformed: "work_performed",
   observations: "observations",
+  divergence: "divergence",
 } as const;
 
 export function observationFieldKey(index: number): string {

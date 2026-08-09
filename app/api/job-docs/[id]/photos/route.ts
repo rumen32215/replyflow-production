@@ -5,8 +5,10 @@ import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { recordErrorEvent } from "@/lib/error-events";
 import { storeJobDocPhoto, JOB_DOC_MEDIA_BUCKET } from "@/lib/job-docs/photo-storage";
+import { compressJobDocPhoto } from "@/lib/job-docs/photo-compression";
 import { analyzeAndStoreJobDocPhoto } from "@/lib/job-docs/analysis";
 import { ANALYSIS_ERROR_MARKER } from "@/lib/job-docs/photo-schema";
+import { invalidateReportApproval } from "@/lib/job-docs/approval";
 
 export const runtime = "nodejs";
 
@@ -71,7 +73,29 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
   }
 
   const photoId = randomUUID();
-  const bytes = new Uint8Array(await file.arrayBuffer());
+  const originalBytes = new Uint8Array(await file.arrayBuffer());
+
+  // BUG-10 hardening: compress before storing — the same result then
+  // flows into storage, the AI analysis call built later in this same
+  // request, and (via retry, which just re-reads storage) any future
+  // re-analysis too. The user's photo takes priority over optimisation:
+  // a compression failure never rejects the upload or loses the photo,
+  // it just falls back to storing what was actually validated above.
+  let bytes: Uint8Array = originalBytes;
+  try {
+    const compressed = await compressJobDocPhoto(originalBytes, file.type);
+    bytes = compressed.bytes;
+  } catch (err) {
+    console.error("[job-docs] photo compression failed, storing original:", err);
+    await recordErrorEvent({
+      severity: "warning",
+      source: "job-docs.photo_compression_failed",
+      businessId: business.id,
+      message: "Compressing a job record photo failed — the original, validated photo was stored uncompressed instead.",
+      error: err,
+      context: { jobDocId: jobDoc.id },
+    });
+  }
 
   let storagePath: string;
   try {
@@ -114,11 +138,33 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     return NextResponse.json({ error: "Couldn't save that photo — please try again." }, { status: 500 });
   }
 
+  // Approval integrity (Stage 3): a newly added photo is new report
+  // content the moment its row exists, before analysis even runs — see
+  // lib/job-docs/approval.ts. Non-fatal, same discipline as the
+  // compression fallback above: the photo itself already uploaded and
+  // saved successfully, so a failure here is logged, never surfaced as
+  // an upload failure.
+  try {
+    await invalidateReportApproval(service, jobDoc.id);
+  } catch (err) {
+    console.error("[job-docs] approval invalidation failed after photo upload:", err);
+    await recordErrorEvent({
+      severity: "warning",
+      source: "job-docs.approval_invalidation_failed",
+      businessId: business.id,
+      message: "A new photo was uploaded but clearing an existing report approval failed.",
+      error: err,
+      context: { jobDocId: jobDoc.id },
+    });
+  }
+
   // "AI analyses quietly" (spec) — deferred via waitUntil so the
   // upload response returns immediately, same pattern the WhatsApp
   // webhook already uses for its own reply-generation call.
   const base64Image = Buffer.from(bytes).toString("base64");
-  waitUntil(analyzeAndStoreJobDocPhoto(service, { businessId: business.id, photoId, base64Image, mimeType: file.type }));
+  waitUntil(
+    analyzeAndStoreJobDocPhoto(service, { businessId: business.id, jobDocId: jobDoc.id, photoId, base64Image, mimeType: file.type })
+  );
 
   return NextResponse.json({ id: photoId });
 }

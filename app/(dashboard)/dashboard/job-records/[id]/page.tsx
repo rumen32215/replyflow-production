@@ -98,7 +98,15 @@ export default async function JobRecordDetailPage({ params }: { params: { id: st
         </Link>
         <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
           <h1 className="text-xl font-bold tracking-tight">{jobDoc.title}</h1>
-          <span className="shrink-0 rounded-full bg-muted px-2.5 py-1 text-[11.5px] font-semibold capitalize text-muted-foreground">{jobDoc.status}</span>
+          <div className="flex items-center gap-2">
+            <Link
+              href={`/dashboard/job-records/${jobDoc.id}/report`}
+              className="rounded-full border border-border bg-card px-3 py-1 text-[11.5px] font-semibold text-foreground hover:bg-muted"
+            >
+              Preview Report
+            </Link>
+            <span className="shrink-0 rounded-full bg-muted px-2.5 py-1 text-[11.5px] font-semibold capitalize text-muted-foreground">{jobDoc.status}</span>
+          </div>
         </div>
       </div>
 

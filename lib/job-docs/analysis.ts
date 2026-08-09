@@ -9,6 +9,7 @@ import {
   ANALYSIS_ERROR_MARKER,
 } from "./photo-schema";
 import { validateJobPhotoAnalysis, type JobPhotoAnalysis } from "./photo-validation";
+import { invalidateReportApproval } from "./approval";
 
 type ServiceClient = ReturnType<typeof createServiceClient>;
 
@@ -109,11 +110,16 @@ export async function analyzeJobDocPhoto(input: {
  */
 export async function analyzeAndStoreJobDocPhoto(
   supabase: ServiceClient,
-  input: { businessId: string; photoId: string; base64Image: string; mimeType: string }
+  input: { businessId: string; jobDocId: string; photoId: string; base64Image: string; mimeType: string }
 ): Promise<void> {
   const analysis = await analyzeJobDocPhoto({ businessId: input.businessId, base64Image: input.base64Image, mimeType: input.mimeType });
 
   if (!analysis) {
+    // Deliberately no approval-invalidation call on this branch (Stage
+    // 3, approval integrity): the error marker is never shown verbatim
+    // to the owner (mapped to "" client-side), and any prior successful
+    // analysis on a retried photo is left exactly as it was — nothing
+    // customer-facing actually changed here.
     await supabase
       .from("job_doc_photos")
       .update({ analyzed_at: new Date().toISOString(), unknown_note: ANALYSIS_ERROR_MARKER })
@@ -143,4 +149,21 @@ export async function analyzeAndStoreJobDocPhoto(
       caption: analysis.caption || null,
     })
     .eq("id", input.photoId);
+
+  // Approval integrity (Stage 3): real analysis text just replaced
+  // whatever was there before — genuine report content, unlike the
+  // error branch above. Non-fatal: the analysis itself already saved.
+  try {
+    await invalidateReportApproval(supabase, input.jobDocId);
+  } catch (err) {
+    console.error("[job-docs] approval invalidation failed after photo analysis:", err);
+    await recordErrorEvent({
+      severity: "warning",
+      source: "job-docs.approval_invalidation_failed",
+      businessId: input.businessId,
+      message: "A job record photo was analysed but clearing an existing report approval failed.",
+      error: err,
+      context: { jobDocId: input.jobDocId, photoId: input.photoId },
+    });
+  }
 }

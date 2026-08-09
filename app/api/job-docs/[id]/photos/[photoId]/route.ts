@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { recordErrorEvent } from "@/lib/error-events";
 import { deleteJobDocPhoto } from "@/lib/job-docs/photo-storage";
+import { invalidateReportApproval } from "@/lib/job-docs/approval";
 
 export const runtime = "nodejs";
 
@@ -74,6 +75,24 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     });
     return NextResponse.json({ error: "Couldn't save that change — please try again." }, { status: 500 });
   }
+
+  // Approval integrity (Stage 3): both caption and phase are shown as
+  // part of the photo's place in the report. Non-fatal — the edit
+  // itself already saved.
+  try {
+    await invalidateReportApproval(service, params.id);
+  } catch (err) {
+    console.error("[job-docs] approval invalidation failed after photo edit:", err);
+    await recordErrorEvent({
+      severity: "warning",
+      source: "job-docs.approval_invalidation_failed",
+      businessId: owned.business.id,
+      message: "A job record photo was edited but clearing an existing report approval failed.",
+      error: err,
+      context: { jobDocId: params.id, photoId: params.photoId },
+    });
+  }
+
   return NextResponse.json({ ok: true });
 }
 
@@ -111,5 +130,23 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
     });
     return NextResponse.json({ error: "Couldn't remove that photo — please try again." }, { status: 500 });
   }
+
+  // Approval integrity (Stage 3): a deleted photo removes documentation
+  // that may have been part of what was approved. Non-fatal — the
+  // delete itself already succeeded.
+  try {
+    await invalidateReportApproval(service, params.id);
+  } catch (err) {
+    console.error("[job-docs] approval invalidation failed after photo delete:", err);
+    await recordErrorEvent({
+      severity: "warning",
+      source: "job-docs.approval_invalidation_failed",
+      businessId: owned.business.id,
+      message: "A job record photo was deleted but clearing an existing report approval failed.",
+      error: err,
+      context: { jobDocId: params.id, photoId: params.photoId },
+    });
+  }
+
   return NextResponse.json({ ok: true });
 }

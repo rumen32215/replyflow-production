@@ -14,8 +14,43 @@ import {
   type Provenance,
 } from "@/lib/job-docs/fields";
 import { ANALYSIS_ERROR_MARKER } from "@/lib/job-docs/photo-schema";
+import { draftLockStaleThreshold } from "@/lib/job-docs/draft-lock";
+import { validateJobReportDraft } from "@/lib/job-docs/report-validation";
+import { APPROVAL_INVALIDATION_UPDATE } from "@/lib/job-docs/approval";
 
 export const runtime = "nodejs";
+
+/**
+ * Acquires the per-job-record draft-generation lock with a single
+ * atomic conditional UPDATE (Phase 2A hardening, BUG-14) — of two
+ * concurrent requests, exactly one UPDATE can affect the row, the
+ * other affects zero rows and gets rejected, with no read-then-write
+ * window for both to slip through. The staleness half of the WHERE
+ * clause (see lib/job-docs/draft-lock.ts) lets the lock self-expire if
+ * a request ever dies before reaching the route's own release step.
+ */
+async function acquireDraftLock(service: ReturnType<typeof createServiceClient>, jobDocId: string): Promise<boolean> {
+  const now = new Date();
+  const { data, error } = await service
+    .from("job_docs")
+    .update({ draft_generating_at: now.toISOString() })
+    .eq("id", jobDocId)
+    .or(`draft_generating_at.is.null,draft_generating_at.lt.${draftLockStaleThreshold(now)}`)
+    .select("id")
+    .maybeSingle();
+  if (error) {
+    console.error("[job-docs] draft lock acquisition failed:", error);
+    return false;
+  }
+  return Boolean(data);
+}
+
+/** Always called from a finally block so the lock never stays held
+ * past the request that acquired it, success or failure alike. */
+async function releaseDraftLock(service: ReturnType<typeof createServiceClient>, jobDocId: string): Promise<void> {
+  const { error } = await service.from("job_docs").update({ draft_generating_at: null }).eq("id", jobDocId);
+  if (error) console.error("[job-docs] draft lock release failed:", error);
+}
 
 /**
  * Runs AI drafting for one Job Record and writes the result into
@@ -59,47 +94,73 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     return NextResponse.json({ error: "This job record has no notes to draft from yet." }, { status: 400 });
   }
 
-  // Photo context (ReplyFlow 2.0, Phase 2A) — a snapshot at the moment
-  // Generate Draft actually runs. The client is responsible for
-  // waiting on still-analysing photos beforehand (up to the same
-  // 60-second bounded-polling budget — see
-  // hooks/use-job-doc-photos.ts's waitForJobDocPhotosSettled), so this
-  // route itself never sleeps; it just reports which photos, if any,
-  // were still pending and therefore excluded.
-  const { data: photoRows } = await service
-    .from("job_doc_photos")
-    .select("id, caption, visible_summary, possible_summary, unknown_note, analyzed_at")
-    .eq("job_doc_id", jobDoc.id)
-    .order("sort_order", { ascending: true });
-
-  const allPhotos = photoRows ?? [];
-  const erroredPhotos = allPhotos.filter((p) => p.analyzed_at && p.unknown_note === ANALYSIS_ERROR_MARKER);
-  const settledPhotos = allPhotos.filter((p) => p.analyzed_at && p.unknown_note !== ANALYSIS_ERROR_MARKER);
-  const pendingExcluded = allPhotos
-    .filter((p) => !p.analyzed_at)
-    .map((p) => ({ id: p.id, caption: p.caption ?? null, reason: "pending" as const }));
-  const erroredExcluded = erroredPhotos.map((p) => ({ id: p.id, caption: p.caption ?? null, reason: "error" as const }));
-  const excludedPhotos = [...pendingExcluded, ...erroredExcluded];
-
-  const draft = await generateJobReportDraft({
-    businessId: business.id,
-    customerName: jobDoc.customer_name ?? "",
-    jobAddress: jobDoc.job_address,
-    rawNotes,
-    photos: settledPhotos
-      .filter((p) => p.visible_summary || p.possible_summary || p.unknown_note)
-      .map((p) => ({
-        visibleSummary: p.visible_summary ?? "",
-        possibleSummary: p.possible_summary ?? "",
-        unknownNote: p.unknown_note ?? "",
-      })),
-  });
-
-  if (!draft) {
-    return NextResponse.json({ error: "Couldn't generate a draft right now — please try again." }, { status: 502 });
+  // BUG-14 hardening: only one Generate/Regenerate Draft may run at a
+  // time per job record — a second tab, a rapid double-request, or a
+  // client retry all hit this same atomic check and get rejected
+  // cleanly rather than racing the first request's writes.
+  if (!(await acquireDraftLock(service, jobDoc.id))) {
+    return NextResponse.json(
+      { error: "A draft is already being generated for this job record — please wait for it to finish." },
+      { status: 409 }
+    );
   }
 
   try {
+    // Photo context (ReplyFlow 2.0, Phase 2A) — a snapshot at the moment
+    // Generate Draft actually runs. The client is responsible for
+    // waiting on still-analysing photos beforehand (up to the same
+    // 60-second bounded-polling budget — see
+    // hooks/use-job-doc-photos.ts's waitForJobDocPhotosSettled), so this
+    // route itself never sleeps; it just reports which photos, if any,
+    // were still pending and therefore excluded.
+    const { data: photoRows } = await service
+      .from("job_doc_photos")
+      .select("id, caption, visible_summary, possible_summary, unknown_note, analyzed_at")
+      .eq("job_doc_id", jobDoc.id)
+      .order("sort_order", { ascending: true });
+
+    const allPhotos = photoRows ?? [];
+    const erroredPhotos = allPhotos.filter((p) => p.analyzed_at && p.unknown_note === ANALYSIS_ERROR_MARKER);
+    const settledPhotos = allPhotos.filter((p) => p.analyzed_at && p.unknown_note !== ANALYSIS_ERROR_MARKER);
+    const pendingExcluded = allPhotos
+      .filter((p) => !p.analyzed_at)
+      .map((p) => ({ id: p.id, caption: p.caption ?? null, reason: "pending" as const }));
+    const erroredExcluded = erroredPhotos.map((p) => ({ id: p.id, caption: p.caption ?? null, reason: "error" as const }));
+    const excludedPhotos = [...pendingExcluded, ...erroredExcluded];
+
+    const draft = await generateJobReportDraft({
+      businessId: business.id,
+      customerName: jobDoc.customer_name ?? "",
+      jobAddress: jobDoc.job_address,
+      rawNotes,
+      photos: settledPhotos
+        .filter((p) => p.visible_summary || p.possible_summary || p.unknown_note)
+        .map((p) => ({
+          visibleSummary: p.visible_summary ?? "",
+          possibleSummary: p.possible_summary ?? "",
+          unknownNote: p.unknown_note ?? "",
+        })),
+    });
+
+    if (!draft) {
+      return NextResponse.json({ error: "Couldn't generate a draft right now — please try again." }, { status: 502 });
+    }
+
+    // Layer 3 of the job-report-text safety boundary (same pattern as
+    // the photo analysis validator) — a deterministic backstop behind
+    // generate-draft.ts's own system prompt, run once here on the
+    // freshly-generated AI output, never against an owner's own edits.
+    const validated = validateJobReportDraft(draft);
+    if (validated.flagged) {
+      await recordErrorEvent({
+        severity: "warning",
+        source: "job-docs.report_draft_flagged",
+        businessId: business.id,
+        message: "A job report draft contained disallowed content and was redacted before storage.",
+        context: { jobDocId: jobDoc.id },
+      });
+    }
+
     const fieldRow = (
       sectionLabel: string,
       sortOrder: number,
@@ -122,14 +183,14 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     };
 
     const rows = [
-      fieldRow(SECTION.summary, 0, JOB_SUMMARY_FIELD_KEY, draft.jobSummary),
-      fieldRow(SECTION.workPerformed, 0, WORK_PERFORMED_FIELD_KEY, draft.workPerformed),
-      ...draft.observations.map((o, i) => fieldRow(SECTION.observations, i, observationFieldKey(i), o)),
+      fieldRow(SECTION.summary, 0, JOB_SUMMARY_FIELD_KEY, validated.jobSummary),
+      fieldRow(SECTION.workPerformed, 0, WORK_PERFORMED_FIELD_KEY, validated.workPerformed),
+      ...validated.observations.map((o, i) => fieldRow(SECTION.observations, i, observationFieldKey(i), o)),
       // Never auto-resolved (spec) — confidence "low" forces this
       // through fieldRow's own ai_suggestion branch whenever it's
       // present, so it always reads as something to check, never as
       // an asserted fact.
-      fieldRow(SECTION.divergence, 0, DIVERGENCE_NOTE_FIELD_KEY, { text: draft.divergenceNote, confidence: "low" }),
+      fieldRow(SECTION.divergence, 0, DIVERGENCE_NOTE_FIELD_KEY, { text: validated.divergenceNote, confidence: "low" }),
     ];
 
     // Regenerating can produce fewer observations than last time — clear
@@ -147,7 +208,15 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       .upsert(rows, { onConflict: "job_doc_id,field_key" });
     if (upsertError) throw upsertError;
 
-    const { error: statusError } = await service.from("job_docs").update({ status: "review" }).eq("id", jobDoc.id);
+    // Approval integrity (Stage 3): a fresh draft always rewrites the
+    // report's actual content, so any existing approval is voided in
+    // the same write — unconditionally, since this status transition
+    // to 'review' already runs regardless of the job_doc's prior
+    // status (draft, review, or approved alike). Reuses the exact
+    // shape lib/job-docs/approval.ts's invalidateReportApproval()
+    // applies elsewhere, so "cleared together" is one definition, not
+    // two independently-maintained ones.
+    const { error: statusError } = await service.from("job_docs").update(APPROVAL_INVALIDATION_UPDATE).eq("id", jobDoc.id);
     if (statusError) throw statusError;
 
     return NextResponse.json({ ok: true, excludedPhotos });
@@ -162,5 +231,11 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       context: { jobDocId: jobDoc.id },
     });
     return NextResponse.json({ error: "The draft was generated but couldn't be saved — please try again." }, { status: 500 });
+  } finally {
+    // BUG-14 hardening: release regardless of how the try block exited
+    // (success, the 502 "no draft" early return, or the write-failure
+    // catch above) — the lock must never outlive the request that
+    // acquired it.
+    await releaseDraftLock(service, jobDoc.id);
   }
 }

@@ -2,6 +2,8 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { recordErrorEvent } from "@/lib/error-events";
+import { isReportContentFieldKey } from "@/lib/job-docs/fields";
+import { invalidateReportApproval } from "@/lib/job-docs/approval";
 
 export const runtime = "nodejs";
 
@@ -73,6 +75,31 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
         .eq("field_key", fieldKey);
       if (error) throw error;
     }
+
+    // Approval integrity (Stage 3): an edit to report content
+    // (job_summary/work_performed/observation_N/divergence_note) voids
+    // an existing approval; an edit to raw_notes alone does not — see
+    // isReportContentFieldKey. Never fatal to the save itself, the
+    // same non-blocking discipline photo-upload's compression failure
+    // already uses: the owner's edit already saved successfully, a
+    // failure here is a bookkeeping gap to observe, not a reason to
+    // report the save as failed.
+    if (updates.some(([fieldKey]) => isReportContentFieldKey(fieldKey))) {
+      try {
+        await invalidateReportApproval(service, jobDoc.id);
+      } catch (err) {
+        console.error("[job-docs] approval invalidation failed after field edit:", err);
+        await recordErrorEvent({
+          severity: "warning",
+          source: "job-docs.approval_invalidation_failed",
+          businessId: business.id,
+          message: "A report field was edited but clearing an existing approval failed.",
+          error: err,
+          context: { jobDocId: jobDoc.id },
+        });
+      }
+    }
+
     return NextResponse.json({ ok: true });
   } catch (err) {
     console.error("[job-docs] field save failed:", err);

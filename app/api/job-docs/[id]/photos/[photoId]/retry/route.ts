@@ -86,7 +86,13 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
 
   const base64Image = Buffer.from(bytes).toString("base64");
   waitUntil(
-    analyzeAndStoreJobDocPhoto(service, { businessId: owned.business.id, photoId: params.photoId, base64Image, mimeType })
+    analyzeAndStoreJobDocPhoto(service, {
+      businessId: owned.business.id,
+      jobDocId: params.id,
+      photoId: params.photoId,
+      base64Image,
+      mimeType,
+    })
   );
 
   return NextResponse.json({ ok: true });

@@ -31,6 +31,25 @@ export function isObservationFieldKey(fieldKey: string): boolean {
   return fieldKey.startsWith(OBSERVATION_FIELD_PREFIX);
 }
 
+/**
+ * ReplyFlow 2.0, Phase 2B (approval integrity) — the field_keys whose
+ * value is actually part of the rendered Job Report, as distinct from
+ * RAW_NOTES_FIELD_KEY (the tradesperson's own source input, never
+ * itself shown as report output — only a regenerated draft turns it
+ * into report content, and that path already forces its own
+ * invalidation). Used to decide whether an edit via PATCH
+ * /api/job-docs/[id]/fields must invalidate an existing approval — see
+ * lib/job-docs/approval.ts.
+ */
+export function isReportContentFieldKey(fieldKey: string): boolean {
+  return (
+    fieldKey === JOB_SUMMARY_FIELD_KEY ||
+    fieldKey === WORK_PERFORMED_FIELD_KEY ||
+    fieldKey === DIVERGENCE_NOTE_FIELD_KEY ||
+    isObservationFieldKey(fieldKey)
+  );
+}
+
 export type Provenance = "user_fact" | "ai_structured" | "ai_suggestion" | "missing";
 export type FieldConfidence = "none" | "low" | "medium" | "high";
 export type UpdatedBy = "ai" | "engineer";

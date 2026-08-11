@@ -1,4 +1,5 @@
 import { ONBOARDING_TRADES, ONBOARDING_TRADE_LABELS } from "@/lib/trades";
+import type { TradeKey } from "@/lib/trades";
 import type { BusinessKnowledge } from "@/lib/knowledge";
 
 /**
@@ -26,8 +27,14 @@ function formatAreas(areas: string[]): string {
   return `${areas.slice(0, -1).join(", ")} and ${areas[areas.length - 1]}`;
 }
 
-/** Learn beat — what changes about what it listens for, per trade. */
-export const TRADE_VOCAB: Record<Trade, string> = {
+/** Learn beat — what changes about what it listens for, per trade.
+ * Typed against the full trade taxonomy (TradeKey), not the
+ * signup-restricted ONBOARDING_TRADES (ReplyFlow V4, P0.C) — this
+ * content isn't onboarding-only UI, it's dormant per-trade knowledge
+ * that stays correct (and unused, for now) for any business on a
+ * trade signup doesn't currently offer, same "safely dormant, not
+ * deleted" reasoning lib/trades.ts already applies to KNOWN_TRADES. */
+export const TRADE_VOCAB: Partial<Record<TradeKey, string>> = {
   plumbing: "someone says they've got a leak or no hot water, I'll know exactly what that means.",
   electrical: "someone says their consumer unit's tripping, I'll know exactly what that means.",
   roofing: "someone says water's coming through the ceiling, I'll know that's not routine.",
@@ -98,6 +105,10 @@ export interface Discovery {
   id: string;
   appliesTo: (ctx: DiscoveryContext) => boolean;
   question: (ctx: DiscoveryContext) => string;
+  /** The exact real thing accepting teaches her — shown back to the
+   * owner as confirmation once they say yes. Same string `onAccept`
+   * writes, never a second, separately-invented description of it. */
+  summary: string;
   /** Only ever called on acceptance — declining writes nothing, since
    * declining isn't a fact and nothing should be invented to fill the
    * gap. */
@@ -116,7 +127,7 @@ function appendPersonality(knowledge: BusinessKnowledge, trait: string): Busines
 
 const urgentDiscovery = (
   id: string,
-  trade: Trade,
+  trade: TradeKey,
   urgentExample: string,
   note: string
 ): Discovery => ({
@@ -126,6 +137,7 @@ const urgentDiscovery = (
     const where = ctx.serviceAreas.length > 0 ? ` around ${formatAreas(ctx.serviceAreas)}` : "";
     return `Can I flag something? You said mostly homes, and I said I'd hold things till morning by default — but ${urgentExample}${where}. Want me to treat anything that sounds genuinely urgent differently, even outside your hours?`;
   },
+  summary: note,
   onAccept: (k) => appendEmergencyNote(k, note),
 });
 
@@ -153,6 +165,7 @@ export const DISCOVERIES: Discovery[] = [
     appliesTo: (ctx) => ctx.trade === "building",
     question: () =>
       "Can I flag something? Most of what you do is booked weeks out, not same-day. Want me to say that upfront, so nobody's expecting you tomorrow morning for a job that needs planning?",
+    summary: "Books several weeks ahead.",
     onAccept: (k) => appendPersonality(k, "Books several weeks ahead."),
   },
   {
@@ -160,6 +173,7 @@ export const DISCOVERIES: Discovery[] = [
     appliesTo: (ctx) => ctx.trade === "painting",
     question: () =>
       "Can I flag something? You're usually working inside people's homes — want me to always check about pets or which rooms need to stay clear before confirming?",
+    summary: "Always checks access before booking.",
     onAccept: (k) => appendPersonality(k, "Always checks access before booking."),
   },
 ];

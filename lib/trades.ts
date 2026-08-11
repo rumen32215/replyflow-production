@@ -22,21 +22,24 @@ export type TradeKey = (typeof KNOWN_TRADES)[number];
 export type TradeOrGeneral = TradeKey | "general";
 
 /**
- * V1 First-Run product decision: focus beats breadth. New signups only
- * ever choose from these five — the best receptionist for five trades,
- * not an average one for eight. This is a signup-UI restriction only:
- * KNOWN_TRADES and normalizeTrade above are unchanged and still
- * recognise all eight, so any existing business on a trade outside
- * this five (e.g. "heating") keeps working exactly as it does today —
- * nothing here is retroactive.
+ * ReplyFlow V4 (P0.C): launching for UK plumbers only. This used to
+ * offer five trades at signup — plumbing, electrical, painting,
+ * building, roofing — while TRADE_INTAKE_GUIDANCE below was (and
+ * still is) populated for plumbing alone. That gap meant the product
+ * itself implicitly promised real AI intake intelligence it couldn't
+ * back up for four out of five people who picked a trade at signup —
+ * the same "never invent a commitment" boundary the reply engine
+ * enforces on every AI reply, broken one level up, before the AI is
+ * even involved. Narrowing this to one entry is the smallest change
+ * that makes the product honest; it is a signup-UI restriction only —
+ * KNOWN_TRADES and normalizeTrade above are unchanged, still recognise
+ * all eight, and any existing business on another trade keeps working
+ * exactly as it does today. Widen this again only once a second
+ * trade's real intake guidance is actually built, not before.
  */
-export const ONBOARDING_TRADES = ["plumbing", "electrical", "painting", "building", "roofing"] as const;
+export const ONBOARDING_TRADES = ["plumbing"] as const;
 export const ONBOARDING_TRADE_LABELS: Record<(typeof ONBOARDING_TRADES)[number], string> = {
   plumbing: "Plumber",
-  electrical: "Electrician",
-  painting: "Painter & Decorator",
-  building: "Builder",
-  roofing: "Roofer",
 };
 
 /** Free text ("Other") or anything unrecognised falls back to a

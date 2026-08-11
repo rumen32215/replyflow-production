@@ -5,6 +5,7 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { generateReplyForMessage } from "@/lib/reply-engine/generate-reply";
 import { markMessageAsRead } from "@/lib/whatsapp/graph";
 import type { WhatsAppWebhookPayload, WhatsAppInboundMessage } from "@/lib/whatsapp/types";
+import { deriveInboundMessage } from "@/lib/whatsapp/inbound-message";
 import { recordErrorEvent } from "@/lib/error-events";
 import { buildConnectionHealthAlert } from "@/lib/whatsapp/connection-health-alert";
 import { markConnectionRevoked } from "@/lib/whatsapp/connection-revoke";
@@ -203,13 +204,29 @@ async function processOneMessage(input: {
   const { supabase, connection, metadata, contacts, message } = input;
 
   const customerName = contacts?.find((c) => c.wa_id === message.from)?.profile.name ?? null;
-  const body =
-    message.type === "text"
-      ? message.text?.body ?? ""
-      : message.type === "image" && message.image?.caption
-      ? message.image.caption
-      : `[${message.type} message]`;
+  // ReplyFlow V4 (P1.E) — one derivation, reused below instead of the
+  // type checks that used to be repeated (and could drift) at both the
+  // messages upsert and the generateReplyForMessage call.
+  const derived = deriveInboundMessage(message);
+  const body = derived.body;
   const receivedAt = new Date(Number(message.timestamp) * 1000).toISOString();
+
+  // The actual fix: this used to fall through with zero trace anywhere
+  // — the customer still got an honest fallback reply, but nobody
+  // could ever tell it had happened. Warning, not error/critical: this
+  // is a known, gracefully-handled gap (Meta gives us nothing to
+  // download here), not a system failure.
+  if (derived.isUnsupported) {
+    await recordErrorEvent({
+      severity: "warning",
+      source: "webhook.unsupported_message_type",
+      businessId: connection.business_id,
+      message: derived.unsupportedDetail
+        ? `Meta reported an unsupported message it couldn't classify: ${derived.unsupportedDetail}`
+        : "Meta reported an unsupported message type with no further detail.",
+      context: { whatsappMessageId: message.id },
+    });
+  }
 
   const { data: conversation } = await supabase
     .from("conversations")
@@ -250,7 +267,7 @@ async function processOneMessage(input: {
         // later, once lib/reply-engine/media-intake.ts has actually
         // fetched and stored it — not set here, since nothing has been
         // downloaded yet at this point.
-        media_id: message.type === "image" ? message.image?.id ?? null : null,
+        media_id: derived.mediaId,
       },
       { onConflict: "whatsapp_message_id" }
     )
@@ -293,8 +310,8 @@ async function processOneMessage(input: {
       customerMessageId: insertedMessage.id,
       messageBody: body,
       messageType: message.type,
-      mediaId: message.type === "image" ? message.image?.id ?? null : null,
-      mediaCaption: message.type === "image" ? message.image?.caption ?? null : null,
+      mediaId: derived.mediaId,
+      mediaCaption: derived.mediaCaption,
     })
   );
 }

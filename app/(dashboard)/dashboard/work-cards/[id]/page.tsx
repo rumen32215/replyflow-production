@@ -46,7 +46,7 @@ export default async function WorkCardDetailPage({ params }: { params: { id: str
 
   if (!workCard) notFound();
 
-  const [{ data: conversation }, { data: siblingCards }, { data: conversationPhotos }] = await Promise.all([
+  const [{ data: conversation }, { data: siblingCards }, { data: conversationPhotos }, { data: linkedJobDoc }] = await Promise.all([
     workCard.conversation_id
       ? supabase
           .from("conversations")
@@ -75,6 +75,10 @@ export default async function WorkCardDetailPage({ params }: { params: { id: str
           .eq("conversation_id", workCard.conversation_id)
           .order("created_at", { ascending: true })
       : Promise.resolve({ data: [] }),
+    // ReplyFlow V4 — the Work Card → Job Record link
+    // (0030_link_job_docs_to_work_cards.sql). At most one, by the
+    // unique index on job_docs.work_card_id.
+    supabase.from("job_docs").select("id").eq("work_card_id", workCard.id).maybeSingle(),
   ]);
 
   // Signed URLs, generated server-side with the service role — same
@@ -160,6 +164,7 @@ export default async function WorkCardDetailPage({ params }: { params: { id: str
       communicationGuidance={communicationGuidance}
       photos={workCardPhotos}
       simplifiedStatus={simplifiedStatus}
+      linkedJobDocId={linkedJobDoc?.id ?? null}
     />
   );
 }

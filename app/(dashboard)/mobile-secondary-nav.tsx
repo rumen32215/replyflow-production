@@ -3,21 +3,23 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { motion } from "framer-motion";
-import { ClipboardCheck, FileText, CalendarDays, Settings, type LucideIcon } from "lucide-react";
+import { Headset, MessageCircle, ClipboardCheck, FileText, CalendarDays, Settings, type LucideIcon } from "lucide-react";
 import { DASHBOARD_NAV } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 
 /**
  * ReplyFlow v1 Product Blueprint, checklist 2.6 — mobile-only. The
  * desktop sidebar shows all destinations; a thumb-reachable bottom bar
- * tops out around four, so Approvals, Job Records, Hours, and Settings
- * (the non-`primary` DASHBOARD_NAV entries) live here instead — one tap
- * further, in the topbar, never competing for the bottom bar's limited
- * room. Was `TopbarNav` (Sprint 8.5) when it carried three
- * desktop-and-mobile secondary destinations; renamed now that its
- * whole reason to exist is mobile-only.
+ * tops out around four, so everything else (the non-`primary`
+ * DASHBOARD_NAV entries — Receptionist included, since ReplyFlow V4)
+ * lives here instead — one tap further, in the topbar, never competing
+ * for the bottom bar's limited room. Was `TopbarNav` (Sprint 8.5) when
+ * it carried three desktop-and-mobile secondary destinations; renamed
+ * now that its whole reason to exist is mobile-only.
  */
-const ICONS: Record<"ClipboardCheck" | "FileText" | "CalendarDays" | "Settings", LucideIcon> = {
+const ICONS: Record<"Headset" | "MessageCircle" | "ClipboardCheck" | "FileText" | "CalendarDays" | "Settings", LucideIcon> = {
+  Headset,
+  MessageCircle,
   ClipboardCheck,
   FileText,
   CalendarDays,
@@ -25,7 +27,11 @@ const ICONS: Record<"ClipboardCheck" | "FileText" | "CalendarDays" | "Settings",
 };
 
 const SECONDARY_NAV = DASHBOARD_NAV.filter(
-  (item): item is (typeof DASHBOARD_NAV)[number] & { icon: "ClipboardCheck" | "FileText" | "CalendarDays" | "Settings" } => !item.primary
+  (
+    item
+  ): item is (typeof DASHBOARD_NAV)[number] & {
+    icon: "Headset" | "MessageCircle" | "ClipboardCheck" | "FileText" | "CalendarDays" | "Settings";
+  } => !item.primary
 );
 
 function isActive(pathname: string, href: string) {

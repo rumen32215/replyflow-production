@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { Wrench, Zap, Paintbrush, Hammer, Home, Check, type LucideIcon } from "lucide-react";
+import { Wrench, Check, type LucideIcon } from "lucide-react";
 import { useOnboardingStore } from "@/hooks/use-onboarding-store";
 import { ONBOARDING_TRADES, ONBOARDING_TRADE_LABELS } from "@/lib/trades";
 import { DAY_KEYS, DAY_LABELS, type DayKey } from "@/lib/availability";
@@ -46,10 +46,6 @@ interface CardData {
 
 const TRADE_ICONS: Record<(typeof ONBOARDING_TRADES)[number], LucideIcon> = {
   plumbing: Wrench,
-  electrical: Zap,
-  painting: Paintbrush,
-  building: Hammer,
-  roofing: Home,
 };
 
 const TRADE_CARDS = ONBOARDING_TRADES.map((value) => ({
@@ -355,8 +351,12 @@ export function HiringConversation() {
 
               {step === "trade" && (
                 <GlowCard className="p-6">
-                  <h1 className="mb-4 text-[19px] font-bold tracking-tight">What&apos;s your trade?</h1>
-                  <div className="grid grid-cols-3 gap-2.5">
+                  {/* ReplyFlow V4 (P0.C) — one trade, one card: honest
+                   * about what ReplyFlow actually is right now rather
+                   * than presenting a choice that implies breadth the
+                   * AI can't back up (lib/trades.ts's own comment). */}
+                  <h1 className="mb-4 text-[19px] font-bold tracking-tight">ReplyFlow is built for UK plumbers</h1>
+                  <div className={cn("grid gap-2.5", TRADE_CARDS.length === 1 ? "max-w-[150px] grid-cols-1" : "grid-cols-3")}>
                     {TRADE_CARDS.map((card) => (
                       <motion.button
                         key={card.value}

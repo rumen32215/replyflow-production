@@ -3,7 +3,7 @@
 import { useState, useMemo } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   ChevronLeft,
   Phone,
@@ -15,6 +15,7 @@ import {
   CheckCircle2,
   XCircle,
   Navigation,
+  FileText,
 } from "lucide-react";
 import { press, SettleCard, Reveal, EASE } from "@/components/shared/motion";
 import { Acknowledgement, useAcknowledgement } from "@/components/shared/acknowledgement";
@@ -75,6 +76,7 @@ export function WorkCardDetail({
   communicationGuidance,
   photos = [],
   simplifiedStatus,
+  linkedJobDocId,
 }: {
   workCard: WorkCardDetailData;
   conversationGroup: ConversationGroup | null;
@@ -95,6 +97,12 @@ export function WorkCardDetail({
    * for address, Emergency); this answers the plainer "what stage is
    * it at" — deliberately kept as two separate signals, not merged. */
   simplifiedStatus: SimplifiedWorkCardStatus;
+  /** ReplyFlow V4 — the linked Job Record's id
+   * (0030_link_job_docs_to_work_cards.sql), or null if this Work Card
+   * hasn't generated one yet. Drives "Generate report" vs "View
+   * report" below; never re-fetched client-side, only set once here
+   * or by generateOrOpenReport's own response. */
+  linkedJobDocId: string | null;
 }) {
   const router = useRouter();
   const supabase = createClient();
@@ -104,6 +112,10 @@ export function WorkCardDetail({
   const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState(false);
   const [sendFailedReason, setSendFailedReason] = useState<string | null>(null);
+  const [showSentPreview, setShowSentPreview] = useState(false);
+  const [sentPreviewText, setSentPreviewText] = useState<string | null>(null);
+  const [jobDocId, setJobDocId] = useState(linkedJobDocId);
+  const [generatingReport, setGeneratingReport] = useState(false);
 
   const [issue, setIssue] = useState(card.issue);
   const [address, setAddress] = useState(card.address ?? "");
@@ -190,6 +202,7 @@ export function WorkCardDetail({
     if (busy) return;
     setBusy(true);
     setSendFailedReason(null);
+    setSentPreviewText(null);
     try {
       const res = await fetch(`/api/work-cards/${card.id}/approve`, { method: "POST" });
       const payload = await res.json();
@@ -199,11 +212,41 @@ export function WorkCardDetail({
         return;
       }
       setCard({ ...card, status: "booked" });
+      // ReplyFlow V4 (P1.D) — the same canonical behaviour as approving
+      // from a conversation thread: the owner always sees what was
+      // actually sent, not just a status flip. The API route
+      // (app/api/work-cards/[id]/approve/route.ts) already returned
+      // this for free; the bug was this screen throwing it away.
+      setSentPreviewText(payload.confirmationText);
       if (!payload.sent) setSendFailedReason(payload.sendError || "Couldn't send the confirmation.");
+      setShowSentPreview(true);
       acknowledge(payload.sent ? "Booked — confirmation sent." : "Booked — but the confirmation didn't send.");
       router.refresh();
     } catch {
       setBusy(false);
+      softError();
+    }
+  }
+
+  async function generateOrOpenReport() {
+    if (generatingReport) return;
+    if (jobDocId) {
+      router.push(`/dashboard/job-records/${jobDocId}`);
+      return;
+    }
+    setGeneratingReport(true);
+    try {
+      const res = await fetch(`/api/work-cards/${card.id}/job-doc`, { method: "POST" });
+      const payload = await res.json();
+      setGeneratingReport(false);
+      if (!res.ok) {
+        softError();
+        return;
+      }
+      setJobDocId(payload.id);
+      router.push(`/dashboard/job-records/${payload.id}`);
+    } catch {
+      setGeneratingReport(false);
       softError();
     }
   }
@@ -265,11 +308,42 @@ export function WorkCardDetail({
       <div className="flex-1 space-y-4 overflow-y-auto p-5 md:p-6">
         <Acknowledgement message={message} isError={isError} />
 
-        {sendFailedReason && (
-          <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-[13px] text-amber-800">
-            Booked, but the confirmation message didn&apos;t send: {sendFailedReason}
-          </div>
-        )}
+        {/* ReplyFlow V4 (P1.D) — the same canonical "what did I just send"
+         * preview as approving from a conversation thread
+         * (conversation-story.tsx), not a separate, plainer banner.
+         * Replaces the old sendFailedReason-only banner this screen used
+         * to show on its own — that was the actual behavioural gap: the
+         * API always returned confirmationText, only this screen never
+         * showed it. */}
+        <AnimatePresence initial={false}>
+          {showSentPreview && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: "auto", opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: 0.28, ease: EASE }}
+              className="overflow-hidden"
+            >
+              <div className="rounded-xl border border-border bg-card p-3.5">
+                <p className="mb-2 text-[11px] font-bold uppercase tracking-widest text-muted-foreground">
+                  {sendFailedReason ? "This is what I tried to send" : "Sent to the customer"}
+                </p>
+                <div className="flex justify-end">
+                  <div className="max-w-[85%] rounded-2xl rounded-br-sm bg-primary px-3.5 py-2.5 text-[13px] leading-relaxed text-primary-foreground">
+                    {sentPreviewText}
+                  </div>
+                </div>
+                {sendFailedReason ? (
+                  <p className="mt-2 rounded-lg bg-red-50 px-2.5 py-1.5 text-[11px] leading-relaxed text-red-700">
+                    The booking is confirmed, but the WhatsApp message didn&apos;t send: {sendFailedReason}
+                  </p>
+                ) : (
+                  <p className="mt-2 text-[11px] text-muted-foreground">Delivered over WhatsApp.</p>
+                )}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* Status actions — what this card needs from the owner right now, first. */}
         {!isTerminal && (
@@ -340,6 +414,33 @@ export function WorkCardDetail({
                 <span className="text-[13px] text-muted-foreground">Needs a decision — see Conversations for the pending enquiry.</span>
               )}
             </div>
+          </SettleCard>
+        )}
+
+        {/* ReplyFlow V4 (P0.A) — the Work Card → Job Record link. Only
+         * offered once the job is genuinely completed: customer,
+         * address, issue, notes, and analysed photos all flow in
+         * automatically (app/api/work-cards/[id]/job-doc/route.ts) —
+         * nothing here asks the owner to retype anything already
+         * known. Once generated, this becomes "View report" instead,
+         * never a second, competing way to create the same document. */}
+        {card.status === "completed" && (
+          <SettleCard delay={0} className="rounded-2xl border border-border bg-card p-5 shadow-sm">
+            <h2 className={SECTION_HEADING}>Report</h2>
+            <p className="mb-3 text-[13px] text-muted-foreground">
+              {jobDocId
+                ? "The customer-facing report for this job."
+                : "Turn this completed job into a professional, customer-facing report — nothing here gets retyped."}
+            </p>
+            <motion.button
+              {...press}
+              onClick={generateOrOpenReport}
+              disabled={generatingReport}
+              className="flex items-center gap-1.5 rounded-xl bg-primary px-4 py-2 text-[13px] font-semibold text-primary-foreground disabled:opacity-50"
+            >
+              <FileText className="h-4 w-4" />
+              {generatingReport ? "Generating…" : jobDocId ? "View report" : "Generate report"}
+            </motion.button>
           </SettleCard>
         )}
 

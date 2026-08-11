@@ -17,17 +17,32 @@
  * Know no longer have separate destinations at all — they're one page
  * ("Teach your receptionist," /dashboard/receptionist), and this is
  * that page's single nav entry, replacing the old "Knowledge" entry.
- * WhatsApp connection is reached from Settings and from Front Desk
- * when its health actually needs attention (checklist 3.2), never
- * from primary navigation.
+ *
+ * ReplyFlow V2 (2026-08-11): WhatsApp gets its own direct secondary
+ * nav entry. It was previously reachable only via a CTA buried at the
+ * bottom of the Test Conversation screen — not from navigation at all
+ * — which put the current V2 job-ready workflow's one hard
+ * prerequisite behind an old onboarding-sequence detour. Kept
+ * secondary (not one of the four thumb-reachable primary tabs) rather
+ * than restructuring the primary group.
+ *
+ * ReplyFlow V4 (P0.B): Work Cards is the operational centre of the
+ * product — the thing a plumber actually manages all day — and had no
+ * nav destination at all before this. It takes a primary slot;
+ * Receptionist moves to secondary in exchange, because it's setup/
+ * configuration infrastructure visited occasionally, not a daily
+ * destination. Still four primary items, not five — a straight swap,
+ * not an expansion.
  *
  * No AI terminology anywhere in labels (Decision 001).
  */
 export const DASHBOARD_NAV = [
   { href: "/dashboard", label: "Front Desk", icon: "Home", primary: true },
   { href: "/dashboard/conversations", label: "Conversations", icon: "MessagesSquare", primary: true },
+  { href: "/dashboard/work-cards", label: "Work Cards", icon: "ClipboardList", primary: true },
   { href: "/dashboard/customers", label: "Customers", icon: "Users", primary: true },
-  { href: "/dashboard/receptionist", label: "Receptionist", icon: "Headset", primary: true },
+  { href: "/dashboard/receptionist", label: "Receptionist", icon: "Headset", primary: false },
+  { href: "/dashboard/whatsapp", label: "WhatsApp", icon: "MessageCircle", primary: false },
   { href: "/dashboard/approvals", label: "Approvals", icon: "ClipboardCheck", primary: false },
   { href: "/dashboard/job-records", label: "Job Records", icon: "FileText", primary: false },
   { href: "/dashboard/availability", label: "Hours", icon: "CalendarDays", primary: false },

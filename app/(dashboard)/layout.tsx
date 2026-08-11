@@ -7,8 +7,7 @@ import { BottomNav } from "@/app/(dashboard)/bottom-nav";
 import { SubscriptionGate } from "@/components/dashboard/billing/subscription-gate";
 import { SubscriptionBanner } from "@/components/dashboard/billing/subscription-banner";
 import { describeSubscriptionGate, type SubscriptionStatus } from "@/lib/billing";
-import { groupForStatus } from "@/lib/conversations";
-import { TEST_CONVERSATION_PHONE } from "@/lib/test-conversation";
+import { countAttentionItems } from "@/lib/attention-count";
 
 /**
  * Guards the whole (dashboard) route group server-side: no session ->
@@ -38,7 +37,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
   if (businessError) throw new Error(`Failed to load business: ${businessError.message}`);
   if (!business?.onboarding_completed) redirect("/onboarding/preparing");
 
-  const approvalsCount = await getApprovalsCount(supabase, business.id);
+  const approvalsCount = await countAttentionItems(supabase, business.id);
 
   // Master Execution Plan 3.1 — gated gracefully: Settings always stays
   // reachable (that's where billing actually gets fixed), everything
@@ -69,42 +68,4 @@ export default async function DashboardLayout({ children }: { children: React.Re
       <BottomNav />
     </div>
   );
-}
-
-/**
- * Master Execution Plan 2.4 — the same three real signals that make up
- * Front Desk's attention queue and the Approvals page's total (waiting
- * conversations, draft Work Cards, distinct conversations with a
- * pending reply draft), fetched lightly (no row content, just what's
- * needed to count) since this runs on every dashboard page load. Kept
- * in lockstep with those two so the nav badge, the Front Desk heading,
- * and the Approvals page always agree on the same number.
- */
-async function getApprovalsCount(supabase: ReturnType<typeof createClient>, businessId: string): Promise<number> {
-  const { data: testConversation } = await supabase
-    .from("conversations")
-    .select("id")
-    .eq("business_id", businessId)
-    .eq("customer_phone", TEST_CONVERSATION_PHONE)
-    .maybeSingle();
-  const testConversationId = testConversation?.id ?? null;
-
-  const [{ data: conversations }, { count: draftWorkCardCount }, { data: pendingReplyDrafts }] = await Promise.all([
-    supabase
-      .from("conversations")
-      .select("status, last_message_at")
-      .eq("business_id", businessId)
-      .neq("customer_phone", TEST_CONVERSATION_PHONE),
-    supabase.from("work_cards").select("id", { count: "exact", head: true }).eq("business_id", businessId).eq("status", "draft"),
-    (() => {
-      let q = supabase.from("reply_drafts").select("conversation_id").eq("business_id", businessId).eq("status", "pending");
-      if (testConversationId) q = q.neq("conversation_id", testConversationId);
-      return q;
-    })(),
-  ]);
-
-  const waitingCount = (conversations ?? []).filter((c) => groupForStatus(c.status) === "waiting" && c.last_message_at).length;
-  const pendingReplyConversationCount = new Set((pendingReplyDrafts ?? []).map((d) => d.conversation_id)).size;
-
-  return waitingCount + (draftWorkCardCount ?? 0) + pendingReplyConversationCount;
 }

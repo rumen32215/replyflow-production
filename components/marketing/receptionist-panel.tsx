@@ -4,10 +4,6 @@ import { forwardRef, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Wrench,
-  Zap,
-  Paintbrush,
-  Hammer,
-  Home as HomeIcon,
   MapPin,
   Check,
   MessageCircle,
@@ -48,10 +44,6 @@ const SEQUENCE: StepId[] = ["identity", "trade", "coverage", "hours", "knowledge
 
 const TRADE_ICONS: Record<Trade, LucideIcon> = {
   plumbing: Wrench,
-  electrical: Zap,
-  painting: Paintbrush,
-  building: Hammer,
-  roofing: HomeIcon,
 };
 
 interface Values {
@@ -168,8 +160,8 @@ function IdentityOpen({ onDone }: { onDone: (name: string) => void }) {
 function TradeOpen({ onDone }: { onDone: (t: Trade) => void }) {
   return (
     <div className="text-center">
-      <p className="mb-4 text-[13px] font-semibold text-muted-foreground">What&apos;s your trade?</p>
-      <div className="grid grid-cols-5 gap-2">
+      <p className="mb-4 text-[13px] font-semibold text-muted-foreground">ReplyFlow is built for UK plumbers</p>
+      <div className={cn("grid gap-2", ONBOARDING_TRADES.length === 1 ? "grid-cols-1" : "grid-cols-5")}>
         {ONBOARDING_TRADES.map((t) => {
           const Icon = TRADE_ICONS[t];
           return (

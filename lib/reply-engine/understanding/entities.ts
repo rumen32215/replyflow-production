@@ -1,4 +1,5 @@
 import type { PatternEntities } from "./types";
+import type { ConversationState } from "./state";
 
 /**
  * Deterministic, format-shaped entity extraction — no model, no
@@ -40,4 +41,19 @@ export function extractPatternEntities(text: string): PatternEntities {
   const explicitDates = uniq([...(text.match(NUMERIC_DATE_RE) ?? []), ...(text.match(WORDED_DATE_RE) ?? [])]);
 
   return { phoneNumbers, postcodes, emails, explicitDates };
+}
+
+/** ReplyFlow V2 (2026-08-11) — Proactive postcode qualification: the
+ * `location` slot is defined (understanding/classify.ts's own
+ * classification prompt) to hold postcode/address, but until now
+ * capturing it depended entirely on the classification model noticing
+ * and writing it — a real UK postcode typed by the customer should
+ * never be lost just because that model call degraded or missed it in
+ * a longer message. This backstop only ever *fills a gap* — it never
+ * overwrites a value the customer (via the model) has already
+ * confirmed, since a customer's own correction should always win over
+ * a regex match from an earlier message. */
+export function withPostcodeBackstop(state: ConversationState, patternEntities: PatternEntities): ConversationState {
+  if (state.slots.location || patternEntities.postcodes.length === 0) return state;
+  return { ...state, slots: { ...state.slots, location: patternEntities.postcodes[0]! } };
 }

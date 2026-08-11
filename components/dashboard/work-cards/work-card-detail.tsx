@@ -19,7 +19,12 @@ import {
 import { press, SettleCard, Reveal, EASE } from "@/components/shared/motion";
 import { Acknowledgement, useAcknowledgement } from "@/components/shared/acknowledgement";
 import { createClient } from "@/lib/supabase/client";
-import { describeWorkCardState, WORK_CARD_TONE_STYLE } from "@/lib/work-card-state";
+import {
+  describeWorkCardState,
+  WORK_CARD_TONE_STYLE,
+  SIMPLIFIED_STATUS_LABEL,
+  type SimplifiedWorkCardStatus,
+} from "@/lib/work-card-state";
 import { toDateTimeLocalValue, mapsHref, formatDateTime, formatDate } from "@/lib/work-card-format";
 import type { ConversationGroup } from "@/lib/conversations";
 import { cn } from "@/lib/utils";
@@ -43,6 +48,23 @@ export interface WorkCardDetailData {
   approvedAt: string | null;
 }
 
+/** ReplyFlow V2 (2026-08-11) — a photo the customer sent, already
+ * analysed (lib/reply-engine/vision/analyze-photo.ts). Same three-way
+ * shape everywhere this analysis is shown: what's actually visible,
+ * what's possible but not certain, and what genuinely can't be told
+ * without an in-person look — never collapsed into one summary, so
+ * the distinction between observed and uncertain is never lost on
+ * the way to the screen. `url` is null if the signed URL couldn't be
+ * generated (never a broken image, just no photo shown that turn). */
+export interface WorkCardPhoto {
+  id: string;
+  url: string | null;
+  visibleSummary: string;
+  possibleSummary: string;
+  unknownNote: string;
+  confidence: "low" | "medium" | "high";
+}
+
 const SECTION_HEADING = "mb-3 text-[11px] font-bold uppercase tracking-widest text-muted-foreground";
 
 export function WorkCardDetail({
@@ -51,6 +73,8 @@ export function WorkCardDetail({
   isEmergency,
   completedSiblingCount,
   communicationGuidance,
+  photos = [],
+  simplifiedStatus,
 }: {
   workCard: WorkCardDetailData;
   conversationGroup: ConversationGroup | null;
@@ -60,6 +84,17 @@ export function WorkCardDetail({
    * exactly nowhere in that case. Already phrased as guidance by the
    * caller (buildCommunicationGuidance), never a raw field value. */
   communicationGuidance: string | null;
+  /** ReplyFlow V2 — real, already-analysed photos for this job.
+   * Empty, not undefined, when the conversation never linked one — no
+   * section renders in that case (see the Photos section below). */
+  photos?: WorkCardPhoto[];
+  /** ReplyFlow V2 — the plain five-stage lifecycle (lib/work-card-
+   * state.ts's simplifiedWorkCardStatus), shown as a quiet secondary
+   * label next to the existing actionable badge below. That badge
+   * answers "what does this need from me" (Needs approval, Waiting
+   * for address, Emergency); this answers the plainer "what stage is
+   * it at" — deliberately kept as two separate signals, not merged. */
+  simplifiedStatus: SimplifiedWorkCardStatus;
 }) {
   const router = useRouter();
   const supabase = createClient();
@@ -208,15 +243,23 @@ export function WorkCardDetail({
           <p className="truncate text-[14px] font-bold">{card.customerName}</p>
           <p className="truncate text-[12px] text-muted-foreground">{card.issue}</p>
         </div>
-        <span
-          className={cn(
-            "flex shrink-0 items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold",
-            WORK_CARD_TONE_STYLE[state.tone]
-          )}
-        >
-          {state.tone === "emergency" && <AlertTriangle className="h-2.5 w-2.5" />}
-          {state.label}
-        </span>
+        <div className="flex shrink-0 flex-col items-end gap-1">
+          {/* Plain lifecycle stage — "what stage is this job at,"
+           * deliberately separate from the badge below it ("what does
+           * this need from me right now"). */}
+          <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground/70">
+            {SIMPLIFIED_STATUS_LABEL[simplifiedStatus]}
+          </span>
+          <span
+            className={cn(
+              "flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold",
+              WORK_CARD_TONE_STYLE[state.tone]
+            )}
+          >
+            {state.tone === "emergency" && <AlertTriangle className="h-2.5 w-2.5" />}
+            {state.label}
+          </span>
+        </div>
       </div>
 
       <div className="flex-1 space-y-4 overflow-y-auto p-5 md:p-6">
@@ -469,8 +512,43 @@ export function WorkCardDetail({
           </div>
         </Reveal>
 
-        {completedSiblingCount > 0 && (
+        {/* ReplyFlow V2 — real, already-analysed customer photos. Never
+         * rendered when there are none, exactly like every other
+         * optional section on this page. */}
+        {photos.length > 0 && (
           <Reveal index={3}>
+            <div className="rounded-2xl border border-border bg-card p-5 shadow-sm">
+              <h2 className={SECTION_HEADING}>Photos</h2>
+              <div className="space-y-4">
+                {photos.map((photo) => (
+                  <div key={photo.id} className="overflow-hidden rounded-xl border border-border/60">
+                    {photo.url && (
+                      // eslint-disable-next-line @next/next/no-img-element -- a per-job signed URL, not an optimizable static asset
+                      <img src={photo.url} alt="Photo sent by the customer" className="max-h-72 w-full object-cover" />
+                    )}
+                    <div className="space-y-1.5 bg-muted/30 px-3.5 py-3 text-[12.5px] leading-snug">
+                      <p>
+                        <span className="font-semibold text-foreground">Visible: </span>
+                        <span className="text-muted-foreground">{photo.visibleSummary}</span>
+                      </p>
+                      <p>
+                        <span className="font-semibold text-foreground">Possible — not certain: </span>
+                        <span className="text-muted-foreground">{photo.possibleSummary}</span>
+                      </p>
+                      <p>
+                        <span className="font-semibold text-foreground">Can&apos;t tell without an in-person look: </span>
+                        <span className="text-muted-foreground">{photo.unknownNote}</span>
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </Reveal>
+        )}
+
+        {completedSiblingCount > 0 && (
+          <Reveal index={4}>
             <p className="rounded-xl bg-muted/50 px-4 py-2.5 text-[12.5px] text-muted-foreground">
               {completedSiblingCount} completed job{completedSiblingCount === 1 ? "" : "s"} with this customer before.
             </p>

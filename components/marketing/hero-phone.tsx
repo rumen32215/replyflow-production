@@ -57,10 +57,11 @@ interface ProductMoment {
   kind: "job" | "booking" | "scheduled" | "customer" | "urgent" | "team" | "quote";
 }
 
-/** Matches one of the exact five words in `hero.tsx`'s eyebrow line —
- * every act below deliberately uses only these five trades, never a
- * sixth, so the eyebrow's word-highlight mechanism always has
- * something real to point at. */
+/** ReplyFlow V2 (2026-08-11): every act below now uses "plumbers"
+ * only, matching `hero.tsx`'s static "For UK plumbers" eyebrow — kept
+ * as a five-value union rather than narrowed to a single literal so
+ * a second trade can be added back here later without widening this
+ * type as a separate step. */
 export type Trade = "plumbers" | "electricians" | "builders" | "roofers" | "painters";
 
 interface AppTile {
@@ -393,8 +394,8 @@ function estimateStoryMs(act: JourneyAct): number {
 
 const DASHBOARD_ACT: DashboardAct = {
   kind: "dashboard",
-  businessName: "Whitmore Building Co",
-  trade: "builders",
+  businessName: "Dean's Plumbing",
+  trade: "plumbers",
   capabilityTiles: [
     { icon: MessageCircle, text: "WhatsApp connected", tone: "whatsapp" },
     { icon: Sparkles, text: "Receptionist online", tone: "primary" },
@@ -409,10 +410,12 @@ const DASHBOARD_ACT: DashboardAct = {
   ],
 };
 
-/** Five examples, one rotating pool. Two (electrician, builder) grow a
- * natural third beat where the customer sends a photo mid-thread —
- * see `ConversationScene.photo`'s own doc comment for why only two,
- * not all five. */
+/** ReplyFlow V2 (2026-08-11): reduced from five trades to plumbing
+ * only, matching the product's actual scope — see `hero.tsx`'s own
+ * V2 note. Two plumbing examples, one plain and one with a photo mid-
+ * thread (`ConversationScene.photo`'s own doc comment still applies:
+ * a real conversation doesn't always involve a photo either), so the
+ * pool still rotates rather than always showing the same scene. */
 const CONVERSATION_POOL: readonly ConversationScene[] = [
   {
     kind: "conversation",
@@ -435,112 +438,36 @@ const CONVERSATION_POOL: readonly ConversationScene[] = [
   },
   {
     kind: "conversation",
-    businessName: "Harris Electrical",
-    trade: "electricians",
+    businessName: "Riverside Plumbing & Heating",
+    trade: "plumbers",
     exchanges: [
       {
-        customer: "Do you do rewires for the whole house, or just partial jobs?",
-        reply: "Both — full rewires and partial upgrades. If it's easier, send me a few photos and I'll give you a proper price.",
-      },
-      {
-        customer: "Perfect, I'll send some over.",
-        reply: "Sounds good — send them over whenever's easy.",
-      },
-    ],
-    photo: {
-      customerCaption: "Here's the fusebox and the upstairs sockets.",
-      reply: "Thanks — that's really helpful, I can see exactly what needs doing. I'll get you a proper price by this evening.",
-    },
-    outcomes: [
-      { text: "Quote based on the photos", kind: "quote" },
-      { text: "Sent by this evening", kind: "scheduled" },
-    ],
-  },
-  {
-    kind: "conversation",
-    businessName: "Ridgeline Roofing",
-    trade: "roofers",
-    exchanges: [
-      {
-        customer: "A few tiles came off in last night's wind — there's water coming into the loft now.",
-        reply: "That's worth getting looked at today — I'm letting the team know right now, someone will call you shortly to sort a time.",
-      },
-      {
-        customer: "Thanks, really appreciate it.",
-        reply: "No problem — if you can, keep something under the leak until then.",
-      },
-    ],
-    outcomes: [
-      { text: "Flagged as urgent — team alerted", kind: "urgent" },
-      { text: "Someone's on the way to sort it", kind: "team" },
-    ],
-  },
-  {
-    kind: "conversation",
-    businessName: "Bright Coat Painters",
-    trade: "painters",
-    exchanges: [
-      {
-        customer: "How much would it be to repaint a 3-bed semi, inside only?",
-        reply: "For a 3-bed inside you're typically looking at £1,800–£2,400 depending on finish — I can get you an exact quote if you tell me the rooms.",
-      },
-      {
-        customer: "Just the bedrooms and hallway for now.",
-        reply: "That narrows it down nicely — I'll get a proper quote over to you today.",
-      },
-    ],
-    outcomes: [
-      { text: "Quote sent", kind: "quote" },
-      { text: "Follow-up booked in", kind: "scheduled" },
-    ],
-  },
-  {
-    kind: "conversation",
-    businessName: "Marsh & Co Builders",
-    trade: "builders",
-    exchanges: [
-      {
-        customer: "Hi, just checking in on the extension quote from last week?",
-        reply: "Good timing, I was just finishing it — quick one, could you send a photo of the boundary wall? Wasn't sure from the measurements.",
+        customer: "Hi, my boiler's making a banging noise when the heating comes on — is that dangerous?",
+        reply: "Not urgent, but worth sorting soon — sounds like trapped air. Can you send a photo of the boiler and its model plate so I know what I'm dealing with?",
       },
       {
         customer: "Sure, one sec.",
-        reply: "Perfect, take your time.",
+        reply: "Thanks — take your time.",
       },
     ],
     photo: {
-      customerCaption: "Here you go — that's the wall in question.",
-      reply: "Got it, that confirms it — I'll have the full quote over to you by this evening.",
+      customerCaption: "Here's the boiler and the plate.",
+      reply: "Got it, thanks — that's exactly what I needed. I can get someone out Thursday morning, does that work?",
     },
     outcomes: [
-      { text: "Quote confirmed from photo", kind: "quote" },
-      { text: "Sent by this evening", kind: "scheduled" },
+      { text: "Booked in for Thursday morning", kind: "job" },
+      { text: "Confirmation sent to the customer", kind: "customer" },
     ],
   },
 ] as const;
 
-/** Act 3, five scenes, one rotating pool. First kept from V15/V13
- * (pricing memory, Whitmore Building Co, bookending the Dashboard
- * act's own business). The other four are new, each demonstrating a
- * genuinely different kind of business intelligence from the
- * founder's own list — customer history, schedule/booking protection,
- * urgent-work priority, and keeping a promise — deliberately spread
- * across all five eyebrow trades (see `Trade` above) exactly once
- * each, the same discipline `CONVERSATION_POOL` already follows. */
+/** ReplyFlow V2 (2026-08-11): reduced to the plumbing scene only,
+ * matching `CONVERSATION_POOL`'s own V2 note — it already bookends
+ * the Dashboard act's business ("Dean's Plumbing"), which is exactly
+ * the pairing V15/V13 originally used Whitmore Building Co for. A
+ * single-entry pool still rotates safely (`usePoolRotation` below
+ * handles any pool length), it just always lands on this one scene. */
 const TRUST_POOL: readonly TrustAct[] = [
-  {
-    kind: "trust",
-    businessName: "Whitmore Building Co",
-    trade: "builders",
-    question: "Do you charge extra for evening call-outs?",
-    facts: ["Evening call-out fee: £25 after 6pm", "Weekend jobs: yes, by arrangement", "Standard response time: same day"],
-    factTone: "learning",
-    reply: "Yeah, evenings are fine — it's a flat £25 call-out after 6pm, same as any other job.",
-    trustChips: [
-      { icon: CalendarCheck, text: "Protects your schedule", tone: "success" },
-      { icon: Clock, text: "Never forgets a promise", tone: "attention" },
-    ],
-  },
   {
     kind: "trust",
     businessName: "Dean's Plumbing",
@@ -552,45 +479,6 @@ const TRUST_POOL: readonly TrustAct[] = [
     trustChips: [
       { icon: ClipboardCheck, text: "Remembers every past job", tone: "success" },
       { icon: UserPlus, text: "Never asks twice", tone: "attention" },
-    ],
-  },
-  {
-    kind: "trust",
-    businessName: "Ridgeline Roofing",
-    trade: "roofers",
-    question: "Can you squeeze us in tomorrow morning as well as the 2pm?",
-    facts: ["Tomorrow 9am–1pm: fully booked", "2pm slot: confirmed and protected", "Next real opening: Thursday"],
-    factTone: "attention",
-    reply: "Tomorrow morning's fully booked I'm afraid — I can lock in Thursday morning instead, want me to hold it?",
-    trustChips: [
-      { icon: CalendarCheck, text: "Never double-books", tone: "success" },
-      { icon: AlertTriangle, text: "Keeps urgent jobs moving", tone: "attention" },
-    ],
-  },
-  {
-    kind: "trust",
-    businessName: "Harris Electrical",
-    trade: "electricians",
-    question: "Is this urgent enough to jump the queue? Smell of burning near the fuse box.",
-    facts: ["Smell of burning: treated as urgent", "Today's queue: reordered automatically", "Team: notified immediately"],
-    factTone: "attention",
-    reply: "Yes — that jumps straight to the top, I've already flagged it and someone's on their way.",
-    trustChips: [
-      { icon: Bell, text: "Reorders the queue instantly", tone: "success" },
-      { icon: AlertTriangle, text: "Knows what's genuinely urgent", tone: "attention" },
-    ],
-  },
-  {
-    kind: "trust",
-    businessName: "Bright Coat Painters",
-    trade: "painters",
-    question: "You said you'd confirm the start date by Friday — any news?",
-    facts: ["Promised: confirm by Friday", "Today: Friday", "Start date: ready to confirm"],
-    factTone: "learning",
-    reply: "Right on time — Monday morning works, I'll get that confirmed for you now.",
-    trustChips: [
-      { icon: Clock, text: "Tracks every promise made", tone: "success" },
-      { icon: BookOpen, text: "Nothing slips through", tone: "attention" },
     ],
   },
 ] as const;

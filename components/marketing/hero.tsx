@@ -5,8 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Check } from "lucide-react";
 import { EASE } from "@/components/shared/motion";
 import { GradientText } from "@/components/shared/gradient-text";
-import { HeroPhone, HERO_PHONE_INITIAL_TRADE, type Trade } from "@/components/marketing/hero-phone";
-import { cn } from "@/lib/utils";
+import { HeroPhone } from "@/components/marketing/hero-phone";
 
 /**
  * Landing Experience, Section 1 — Hero (`DOCS/SPECS/ReplyFlow-Landing-
@@ -17,30 +16,19 @@ import { cn } from "@/lib/utils";
  * experience." The entire "living phone" system (glow, journey data,
  * dashboard/conversation/photo acts, drag/dots) moved out to
  * `hero-phone.tsx` — this file is now only headline, eyebrow, CTA, and
- * trust copy, plus the small bridge (`activeTrade` state, set via
- * `HeroPhone`'s `onActiveTradeChange` callback) that lets the eyebrow
- * line above still highlight whichever trade the phone is currently
- * telling. Was one 1080-line file doing two real jobs (marketing copy
- * and a product-demo engine); now two files each doing one.
- */
-
-const EYEBROW_TRADES: readonly Trade[] = ["plumbers", "electricians", "builders", "roofers", "painters"] as const;
-
-/** The eyebrow line, with the trade matching whatever the phone is
- * currently telling quietly carrying more weight than the rest — ties
- * the claim ("for plumbers, electricians...") to the real, specific
- * example playing below it, without a new UI element.
+ * trust copy. Was one 1080-line file doing two real jobs (marketing
+ * copy and a product-demo engine); now two files each doing one.
  *
- * V9 founder review (2026-08-04): "the goal is not to make them
- * larger or louder... a tiny moment of recognition... the visitor
- * should instantly recognise 'this is for me' without consciously
- * noticing an animation happened." The colour crossfade alone read as
- * an animation playing; pairing it with a small, non-animating weight
- * step (font-bold → font-extrabold, a state, not a tween) gives the
- * active word more quiet confidence without adding any more motion to
- * notice — the eye registers "that word is stronger" before it ever
- * registers "something moved." */
-function TradeEyebrow({ activeTrade }: { activeTrade: Trade }) {
+ * ReplyFlow V2 (2026-08-11): repositioned to UK plumbers only — the
+ * rotating five-trade eyebrow (and the `activeTrade` bridge that kept
+ * it in sync with whichever trade the phone was telling) is gone,
+ * since promising five trades here while the AI's own intake
+ * intelligence (`lib/trades.ts`) is only genuinely built for plumbing
+ * was a real promise/delivery mismatch, not a stylistic choice. One
+ * static line, same visual slot and weight the active word used to
+ * get.
+ */
+function PlumbingEyebrow() {
   return (
     <motion.p
       initial={{ opacity: 0, y: 10 }}
@@ -48,35 +36,14 @@ function TradeEyebrow({ activeTrade }: { activeTrade: Trade }) {
       transition={{ duration: 0.5, ease: EASE }}
       className="mb-5 text-[13px] font-bold uppercase tracking-widest"
     >
-      {/* V17 founder review (2026-08-04) — release-candidate audit:
-       * measured contrast of `text-primary` at the opacities this line
-       * previously used (`/55`–`/60`) against this page's light
-       * background comes out around 2.5–3.8:1 — well under WCAG AA's
-       * 4.5:1 minimum for 13px text, and primary blue needs ~95%+
-       * opacity on this background to clear 4.5:1 at all, which would
-       * have erased the hierarchy this eyebrow depends on. Fixed with
-       * a real colour swap instead of a faded one: inactive words (and
-       * "For") now use `text-foreground/70` (measured ~6.5:1, a clear
-       * AA pass with real margin) rather than a washed-out primary —
-       * the active word popping in full-saturation blue reads even
-       * more clearly against that quiet near-black than it did against
-       * a lighter tint of its own colour. */}
+      {/* Same contrast fix this line has carried since the V17
+       * founder review (2026-08-04): `text-foreground/70` for the
+       * quiet half of the line (~6.5:1, a clear WCAG AA pass),
+       * full-saturation `text-primary` for the half that should carry
+       * weight — not a faded tint, which measured 2.5–3.8:1 here and
+       * failed AA outright. */}
       <span className="text-foreground/70">For </span>
-      {EYEBROW_TRADES.map((trade, i) => (
-        <span key={trade}>
-          <span
-            className={cn(
-              "inline-block",
-              trade === activeTrade ? "font-extrabold text-primary" : "font-bold text-foreground/70"
-            )}
-          >
-            {trade}
-          </span>
-          {i < EYEBROW_TRADES.length - 1 && (
-            <span className="text-foreground/70">{i === EYEBROW_TRADES.length - 2 ? " & " : ", "}</span>
-          )}
-        </span>
-      ))}
+      <span className="font-extrabold text-primary">UK plumbers</span>
     </motion.p>
   );
 }
@@ -94,11 +61,11 @@ interface Headline {
 }
 
 const HEADLINES: readonly Headline[] = [
-  { text: "Never miss another job because you were up a ladder.", emphasis: "up a ladder" },
+  { text: "Never miss another job because you were under a sink.", emphasis: "under a sink" },
   { text: "Never lose another customer because you couldn't answer.", emphasis: "couldn't answer" },
-  { text: "Your customers never know you're busy.", emphasis: "never know" },
-  { text: "Your business keeps moving while you work.", emphasis: "keeps moving" },
-  { text: "Every message gets handled.", emphasis: "handled" },
+  { text: "Your customers never know you're mid-job.", emphasis: "mid-job" },
+  { text: "Your business keeps moving while you're on the tools.", emphasis: "on the tools" },
+  { text: "Every WhatsApp enquiry gets handled.", emphasis: "handled" },
   { text: "Your receptionist never takes a day off.", emphasis: "day off" },
 ] as const;
 
@@ -156,7 +123,6 @@ function HeadlineText({ headline }: { headline: Headline }) {
 }
 
 export function Hero() {
-  const [activeTrade, setActiveTrade] = useState<Trade>(HERO_PHONE_INITIAL_TRADE);
   const headlineIndex = useRotatingHeadlineIndex();
   const headline = HEADLINES[headlineIndex]!;
 
@@ -171,7 +137,7 @@ export function Hero() {
       </div>
 
       <div className="relative mx-auto max-w-3xl px-6 pt-8 text-center sm:pt-14 lg:pt-16">
-        <TradeEyebrow activeTrade={activeTrade} />
+        <PlumbingEyebrow />
 
         <motion.div layout transition={{ duration: 0.4, ease: EASE }}>
           <AnimatePresence mode="wait">
@@ -242,7 +208,7 @@ export function Hero() {
           animate={{ opacity: 1, scale: 1 }}
           transition={{ duration: 0.8, ease: EASE, delay: 0.9 }}
         >
-          <HeroPhone onActiveTradeChange={setActiveTrade} />
+          <HeroPhone />
         </motion.div>
       </div>
     </section>

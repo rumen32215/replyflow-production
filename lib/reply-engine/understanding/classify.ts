@@ -1,8 +1,15 @@
 import "server-only";
 import { getCompletion } from "../llm/client";
-import { extractPatternEntities } from "./entities";
-import { INTENTS, type Intent, type MeaningEntities, type SafetyTag, type UnderstandingConfidence, type UnderstandingResult } from "./types";
-import { EMPTY_CONVERSATION_STATE, toConversationState, type ConversationState } from "./state";
+import { extractPatternEntities, withPostcodeBackstop } from "./entities";
+import {
+  INTENTS,
+  type Intent,
+  type MeaningEntities,
+  type SafetyTag,
+  type UnderstandingConfidence,
+  type UnderstandingResult,
+} from "./types";
+import { EMPTY_CONVERSATION_STATE, mergeUrgency, toConversationState, type ConversationState } from "./state";
 import { recordErrorEvent } from "@/lib/error-events";
 
 /**
@@ -155,7 +162,7 @@ function toUnderstandingResult(raw: unknown, messageText: string, priorState: Co
     patternEntities,
     meaningEntities: { urgency: "none", impliedJobType: null, sentiment: "neutral" },
     safetyTag: null,
-    conversationState: priorState,
+    conversationState: withPostcodeBackstop(priorState, patternEntities),
   };
 
   if (!raw || typeof raw !== "object") return fallback;
@@ -185,7 +192,13 @@ function toUnderstandingResult(raw: unknown, messageText: string, priorState: Co
       sentiment,
     },
     safetyTag,
-    conversationState: toConversationState(r.conversation_state),
+    conversationState: {
+      ...withPostcodeBackstop(toConversationState(r.conversation_state), patternEntities),
+      // Carried forward mechanically, not by the model's own
+      // conversation_state schema — see state.ts's own doc comment on
+      // ConversationState.urgency.
+      urgency: mergeUrgency(priorState.urgency, urgency),
+    },
   };
 }
 
@@ -236,14 +249,15 @@ export async function classifyMessage(
       message: "classifyMessage's completion call failed — degraded to the safe UNCLEAR fallback, message was not lost.",
       error: err,
     });
+    const patternEntities = extractPatternEntities(messageText);
     return {
       primaryIntent: "UNCLEAR",
       secondaryIntents: [],
       confidence: "unknown",
-      patternEntities: extractPatternEntities(messageText),
+      patternEntities,
       meaningEntities: { urgency: "none", impliedJobType: null, sentiment: "neutral" },
       safetyTag: null,
-      conversationState: priorState,
+      conversationState: withPostcodeBackstop(priorState, patternEntities),
     };
   }
 }

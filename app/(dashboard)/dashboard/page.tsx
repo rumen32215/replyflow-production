@@ -8,6 +8,7 @@ import {
   type JourneyStep,
 } from "@/components/dashboard/home/home-experience";
 import { AttentionQueue } from "@/components/dashboard/home/attention-queue";
+import { ReadyToQuote, type ReadyToQuoteItem } from "@/components/dashboard/home/ready-to-quote";
 import { ConnectionAlert } from "@/components/dashboard/home/connection-alert";
 import { InsightList } from "@/components/shared/insight";
 import { TodaysWork, type TodaysWorkItem } from "@/components/dashboard/home/todays-work";
@@ -33,6 +34,7 @@ import { getBrainContext, selectTodaysPriority, type OrganiseCandidate } from "@
 import { groupForStatus, type ConversationGroup } from "@/lib/conversations";
 import { TEST_CONVERSATION_PHONE } from "@/lib/test-conversation";
 import { toConversationState } from "@/lib/reply-engine/understanding/state";
+import { computeJobReadiness } from "@/lib/work-card-state";
 
 export const metadata: Metadata = { title: "Front Desk — ReplyFlow" };
 
@@ -106,6 +108,7 @@ export default async function HomePage() {
     { data: workCardConversations },
     { data: recentPipelineFailures },
     { data: completedWorkCardConversations },
+    { data: photoConversations },
   ] = await Promise.all([
     // Real, already-live conversation state for every recent
     // conversation — the one fetch every section below reads from for
@@ -127,7 +130,7 @@ export default async function HomePage() {
       .neq("customer_phone", TEST_CONVERSATION_PHONE),
     supabase
       .from("work_cards")
-      .select("id, conversation_id, customer_name, issue, created_at")
+      .select("id, conversation_id, customer_name, issue, address, created_at")
       .eq("business_id", businessId)
       .eq("status", "draft")
       .order("created_at", { ascending: true }),
@@ -237,6 +240,10 @@ export default async function HomePage() {
     // the Attention Queue can quietly mark the already-earned
     // relationships (Trusted/VIP) without adding a new concept.
     supabase.from("work_cards").select("conversation_id").eq("business_id", businessId).eq("status", "completed"),
+    // ReplyFlow V2 — Job-Ready (lib/work-card-state.ts's computeJobReadiness):
+    // existence only, per conversation — whether at least one photo has
+    // actually been analysed, never inferred from conversation text.
+    supabase.from("conversation_photos").select("conversation_id").eq("business_id", businessId),
   ]);
 
   // One map, built once, every section below reads from it — a
@@ -260,10 +267,18 @@ export default async function HomePage() {
           impliesBooking: state.goal.type === "book_appointment" && state.goal.status !== "abandoned",
           lastMessageAt: c.last_message_at as string | null,
           lastMessagePreview: c.last_message_preview as string | null,
+          // ReplyFlow V2 — Job-Ready (computeJobReadiness) needs the
+          // real, already-persisted urgency and commitments ledger,
+          // not a re-derivation.
+          conversationState: state,
         },
       ];
     })
   );
+
+  // ReplyFlow V2 — which conversations have at least one genuinely
+  // analysed photo (a real conversation_photos row), for Job-Ready.
+  const conversationsWithPhoto = new Set((photoConversations ?? []).map((p) => p.conversation_id));
 
   // Organise Checkpoint (Brain Loop step 7) — one candidate per
   // conversation already fetched above; the rule itself (lib/brain/organise.ts)
@@ -332,6 +347,26 @@ export default async function HomePage() {
     minutes: minutesSince(j.created_at),
     relationshipStrength: noteworthyStrengthFor(j.conversation_id),
   }));
+
+  /* -------------------------------- Ready to quote (ReplyFlow V2) ------------------------------- */
+
+  // Every draft Work Card still needs the owner's eventual review
+  // (Attention Queue above covers that unconditionally) — this is a
+  // narrower, additive signal: which of those drafts already have
+  // everything genuinely useful gathered, so the owner can see what's
+  // actually ready to price without opening each one to check.
+  const readyToQuoteItems: ReadyToQuoteItem[] = (draftWorkCards ?? [])
+    .map((j) => {
+      const entry = j.conversation_id ? conversationById.get(j.conversation_id) : undefined;
+      const readiness = computeJobReadiness({
+        issue: j.issue,
+        address: j.address,
+        conversationState: entry?.conversationState ?? null,
+        hasAnalysedPhoto: j.conversation_id ? conversationsWithPhoto.has(j.conversation_id) : false,
+      });
+      return { id: j.id, customerName: j.customer_name, issue: j.issue, checklist: readiness.checklist, ready: readiness.ready };
+    })
+    .filter((j) => j.ready);
 
   const pendingReplyItems = groupPendingRepliesByConversation(
     (pendingReplyDrafts ?? []).map((d) => ({
@@ -553,6 +588,7 @@ export default async function HomePage() {
            * organise. */}
           <InsightList observations={brain.observations.filter((o) => o.id.startsWith("organise:"))} limit={1} />
           <AttentionQueue items={attentionQueue} totalCount={attentionQueueTotal} seeAllHref="/dashboard/approvals" />
+          <ReadyToQuote items={readyToQuoteItems} />
           <TodaysWork items={todaysWorkItems} />
           <WaitingForCustomer items={waitingForCustomerItems} />
           <RecentlyCompleted items={recentlyCompletedItems} />

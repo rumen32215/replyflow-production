@@ -100,9 +100,14 @@ export function accessSuggestionsForTrade(trade: string | null | undefined): rea
 export const TRADE_INTAKE_GUIDANCE: Partial<Record<TradeOrGeneral, string>> = {
   plumbing:
     "Where genuinely still unknown and relevant, prioritise finding out (one at a time, never all at once, only " +
-    "what's not already collected): what the issue actually is, where in the property it is, how urgent it is " +
-    "(can the customer isolate the water themselves? is there active flooding?), whether hot water or heating is " +
-    "affected, the property type where it's relevant, and roughly when they'd like it looked at.",
+    "what's not already collected): what the issue actually is, the postcode or address so a visit can actually " +
+    "be arranged, where in the property the problem is, how urgent it is (can the customer isolate the water " +
+    "themselves? is there active flooding?), whether hot water or heating is affected, the property type where " +
+    "it's relevant, and roughly when they'd like it looked at. Ask for a photo only when it would genuinely help " +
+    "understand this specific issue — something visible (a leak, a damaged pipe, an unfamiliar part, a boiler's " +
+    "fault code or model plate), never something a photo can't show (a strange noise, low water pressure, a " +
+    "simple booking request) — and only if the customer hasn't already sent one for this issue. A job can still " +
+    "be genuinely ready without a photo; never treat one as required.",
 };
 
 export function intakeGuidanceForTrade(trade: string | null | undefined): string | null {

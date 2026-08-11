@@ -74,6 +74,22 @@ export interface Commitment {
   status: "outstanding" | "resolved";
 }
 
+/** Mirrors `MeaningEntities["urgency"]` (types.ts) — duplicated as a
+ * literal union rather than imported to avoid a circular import
+ * (types.ts already imports `ConversationState` from this file). */
+export type ConversationUrgency = "none" | "soon" | "urgent";
+
+const URGENCY_RANK: Record<ConversationUrgency, number> = { none: 0, soon: 1, urgent: 2 };
+
+/** The strongest of two urgency readings — a later message saying
+ * "actually it's not urgent, no rush" should never downgrade an
+ * earlier, more urgent one (e.g. active flooding mentioned, then a
+ * calmer follow-up); the owner should always see the worst case the
+ * thread has genuinely described. */
+export function mergeUrgency(a: ConversationUrgency, b: ConversationUrgency): ConversationUrgency {
+  return URGENCY_RANK[a] >= URGENCY_RANK[b] ? a : b;
+}
+
 export interface ConversationState {
   stage: ConversationStage;
   slots: CollectedSlots;
@@ -91,6 +107,13 @@ export interface ConversationState {
   lastTopic: string | null;
   goal: ConversationGoal;
   commitments: Commitment[];
+  /** ReplyFlow V2 (2026-08-11) — Job-Ready computation needs to know
+   * the job's urgency at read time (e.g. Front Desk), not just in the
+   * moment a single message was classified, so the strongest urgency
+   * seen anywhere in the thread is carried forward here exactly like
+   * every other slot — mechanically merged in classify.ts, never
+   * re-derived from raw history. */
+  urgency: ConversationUrgency;
 }
 
 export const EMPTY_CONVERSATION_STATE: ConversationState = {
@@ -101,6 +124,7 @@ export const EMPTY_CONVERSATION_STATE: ConversationState = {
   lastTopic: null,
   goal: { type: "general_chat", status: "in_progress" },
   commitments: [],
+  urgency: "none",
 };
 
 const STAGES: readonly ConversationStage[] = [
@@ -130,6 +154,11 @@ const GOAL_TYPES: readonly GoalType[] = [
 const GOAL_STATUSES: readonly GoalStatus[] = ["in_progress", "completed", "escalated", "abandoned"];
 const COMMITMENT_KINDS: readonly Commitment["kind"][] = ["customer_fact", "customer_question", "receptionist_question"];
 const COMMITMENT_STATUSES: readonly Commitment["status"][] = ["outstanding", "resolved"];
+const URGENCY_LEVELS: readonly ConversationUrgency[] = ["none", "soon", "urgent"];
+
+function isUrgency(value: unknown): value is ConversationUrgency {
+  return typeof value === "string" && (URGENCY_LEVELS as readonly string[]).includes(value);
+}
 
 function isStage(value: unknown): value is ConversationStage {
   return typeof value === "string" && (STAGES as readonly string[]).includes(value);
@@ -202,5 +231,6 @@ export function toConversationState(raw: unknown): ConversationState {
     lastTopic: str(r.lastTopic ?? r.last_topic),
     goal: toGoal(r.goal),
     commitments: toCommitments(r.commitments),
+    urgency: isUrgency(r.urgency) ? r.urgency : "none",
   };
 }

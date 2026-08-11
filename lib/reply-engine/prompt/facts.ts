@@ -229,9 +229,14 @@ function conversationStateFacts(
     text: `Stage: ${stage} — ${STAGE_GUIDANCE[stage] ?? STAGE_GUIDANCE.understand}. Never move backwards to an earlier stage unless the customer has clearly started a brand new, unrelated request.`,
   });
 
+  // "location" is deliberately the postcode/address, not which room the
+  // problem is in (see understanding/classify.ts's own slot definition)
+  // — spelled out here so the drafting model never mistakes an already-
+  // collected postcode for still-missing information.
+  const SLOT_LABELS: Record<string, string> = { location: "location (postcode/address)" };
   const known = Object.entries(state.slots)
     .filter((entry): entry is [string, string] => Boolean(entry[1]))
-    .map(([key, value]) => `${key} = "${value}"`);
+    .map(([key, value]) => `${SLOT_LABELS[key] ?? key} = "${value}"`);
   if (known.length > 0) {
     facts.push({
       id: "conversation.collected",

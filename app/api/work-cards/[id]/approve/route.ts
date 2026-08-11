@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { sendReplyToCustomer } from "@/lib/reply-engine/send";
 import { recordErrorEvent } from "@/lib/error-events";
+import { markEpisodeBooked } from "@/lib/reply-engine/episode";
 
 export const runtime = "nodejs";
 
@@ -34,7 +35,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
 
   const { data: workCard } = await service
     .from("work_cards")
-    .select("id, business_id, conversation_id, customer_name, issue, scheduled_for, status")
+    .select("id, business_id, conversation_id, episode_id, customer_name, issue, scheduled_for, status")
     .eq("id", params.id)
     .maybeSingle();
   if (!workCard) return NextResponse.json({ error: "Work Card not found" }, { status: 404 });
@@ -65,6 +66,15 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       context: { workCardId: workCard.id },
     });
     return NextResponse.json({ error: workCardError.message }, { status: 500 });
+  }
+
+  // ReplyFlow V4 — Conversation Episodes (Contract §A): booked is not
+  // a closure (no closed_at, no draft supersession — a booked episode
+  // is still a real, valid future job) but it must move out of the
+  // "in progress" set, so a genuinely new, unrelated request from this
+  // same customer can open its own episode alongside it.
+  if (workCard.episode_id) {
+    await markEpisodeBooked(service, workCard.episode_id);
   }
 
   // The Work Card is real either way past this point — a failed send

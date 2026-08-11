@@ -1,5 +1,6 @@
 import "server-only";
 import { getCompletion } from "../llm/client";
+import { formatNowLondon } from "@/lib/datetime";
 import { extractPatternEntities, withPostcodeBackstop } from "./entities";
 import {
   INTENTS,
@@ -38,6 +39,7 @@ const RESPONSE_SCHEMA = {
     implied_job_type: { type: ["string", "null"] },
     sentiment: { type: "string", enum: ["neutral", "positive", "negative"] },
     safety_tag: { type: ["string", "null"], enum: [...SAFETY_TAGS, null] },
+    episode_continuity: { type: "string", enum: ["same_job", "new_job"] },
     conversation_state: {
       type: "object",
       additionalProperties: false,
@@ -54,8 +56,9 @@ const RESPONSE_SCHEMA = {
             location: { type: ["string", "null"] },
             preferred_time: { type: ["string", "null"] },
             customer_name: { type: ["string", "null"] },
+            preferred_time_resolved: { type: ["string", "null"] },
           },
-          required: ["issue", "location", "preferred_time", "customer_name"],
+          required: ["issue", "location", "preferred_time", "customer_name", "preferred_time_resolved"],
         },
         open_question: { type: ["string", "null"] },
         greeting_given: { type: "boolean" },
@@ -108,6 +111,7 @@ const RESPONSE_SCHEMA = {
     "implied_job_type",
     "sentiment",
     "safety_tag",
+    "episode_continuity",
     "conversation_state",
   ],
 } as const;
@@ -122,8 +126,8 @@ const SYSTEM_PROMPT = `You do two jobs for one inbound WhatsApp message to a UK 
 - safety_tag: set only when the message is spam, abusive, a scam/phishing attempt, a medical question, a legal question, or a request genuinely outside what this kind of business could ever help with. NEVER set it when primary_intent is EMERGENCY or COMPLAINT — a gas leak, a safety emergency, or a customer complaint is always something this business needs to handle, never "unsupported," regardless of exactly what's being asked. Otherwise null.
 
 2) UPDATE the conversation state. You are given the PREVIOUS state (where this conversation already was) — your job is to move it forward, not to re-derive it from nothing:
-- stage: understand (first contact, nothing established yet) -> diagnose (working out what the problem/need actually is) -> collect (gathering the specific details still needed: location, timing, etc.) -> quote_or_book (enough is known to offer a price or a visit) -> confirm (a booking has been proposed/made) -> waiting (confirmed, nothing further needed until the job happens) -> completed (the job has happened) -> closed (the conversation ended without becoming a job, or is genuinely finished). Never advance to quote_or_book or confirm while slots.issue is still null — a booking needs to know what the job actually is before it can be offered, even if timing/location came up first. NEVER move backwards from the previous stage unless the customer has clearly started a brand new, unrelated request in the same thread — in that case treat it as a fresh conversation and restart from "understand".
-- slots: carry forward every slot value from the previous state unchanged unless this message adds or corrects one. issue = the problem/job in a few words. location = postcode/area if given. preferred_time = whatever day/time the customer has proposed, in their own words (e.g. "tomorrow morning", "around 4pm") — if the customer gives a new time, replace the old one; if they haven't mentioned timing yet, keep it null.
+- stage: understand (first contact, nothing established yet) -> diagnose (working out what the problem/need actually is) -> collect (gathering the specific details still needed: location, timing, etc.) -> quote_or_book (enough is known to offer a price or a visit) -> confirm (a booking has been proposed/made) -> waiting (confirmed, nothing further needed until the job happens) -> completed (the job has happened) -> closed (the conversation ended without becoming a job, or is genuinely finished). Never advance to quote_or_book or confirm while slots.issue is still null — a booking needs to know what the job actually is before it can be offered, even if timing/location came up first. You do not need to decide whether the previous state's stage still applies if the customer has started a brand new, unrelated request — that decision is handled separately by episode_continuity below; just answer the stage question honestly for the request PREVIOUS STATE actually describes.
+- slots: carry forward every slot value from the previous state unchanged unless this message adds or corrects one. issue = the problem/job in a few words. location = postcode/area if given. preferred_time = whatever day/time the customer has proposed, in their own words (e.g. "tomorrow morning", "around 4pm") — if the customer gives a new time, replace the old one; if they haven't mentioned timing yet, keep it null. preferred_time_resolved = the same proposed time, but as a real ISO 8601 timestamp (e.g. "2026-08-12T09:00:00.000Z"), computed against CURRENT DATE/TIME given below — only when you are genuinely confident and unambiguous about both the date and the time; null whenever there's real ambiguity (no year-round guessing about which "Tuesday" someone means, no assuming a time of day that wasn't stated). This never overrides preferred_time, which always stays in the customer's own words regardless.
 - open_question: your best guess at what will still be outstanding after this turn, in a few words (e.g. "preferred time", "postcode"), or null if you expect nothing to be outstanding. This is a provisional estimate — the actual reply-writing step may ask something different and will correct this afterward, so don't overthink it.
 - greeting_given: true if a greeting has already happened anywhere in this thread (including the previous state already being true) — once true, it stays true.
 - last_topic: a short label for what the live exchange is actually about right now (e.g. "radiator repair booking", "call-out fee question", "casual chat") — replace it when the topic genuinely changes, keep it when it doesn't.
@@ -132,6 +136,11 @@ const SYSTEM_PROMPT = `You do two jobs for one inbound WhatsApp message to a UK 
 - goal.type: what the customer is fundamentally here for (book_appointment, change_booking, cancel_booking, get_pricing, get_information, make_payment, report_problem, make_complaint, handle_emergency, general_chat). IMPORTANT: "general_chat" is only ever correct for actual small talk with no real request in it — it is NOT a safe default and it is NOT something to preserve just because the previous state happened to have it (a brand new conversation always starts with goal.type = general_chat as a placeholder, meaning no real goal has been set yet, not that general_chat IS the goal). The moment the customer describes any real need — a problem, a booking, a question — classify the actual goal immediately, even on message one. Once a real goal is set, carry it forward unchanged UNLESS this message represents a genuinely different underlying request, not just a side-question within the current one — a call-out-fee question asked mid-booking does NOT change the goal (still book_appointment; just answer the price question and continue), but "actually, forget that, I want to cancel my Tuesday booking instead" DOES change it. When the goal genuinely changes, also reset stage to "understand" for the new goal — but do not clear commitments, past facts may still be relevant.
 - goal.status: in_progress by default; completed once the goal is genuinely achieved (booking confirmed, question answered, payment resolved); escalated if it's been handed to the owner (complaint, emergency, anything requiring_escalation); abandoned only if the customer explicitly said they no longer want to proceed.
 - commitments: the running ledger of facts and questions that don't fit the four fixed slots — carry every item from the previous state forward, updating status where this message resolves one, and appending new ones. Never delete an item, only change its status or add to the list. Three kinds: "customer_fact" (something the customer told you unprompted, e.g. "niece will be home", "I'm at work until 5") — always status "resolved" the moment it's stated, since a stated fact isn't waiting on anything. "customer_question" (something the customer asked you) — "outstanding" until your reply actually answers it, then "resolved". "receptionist_question" (something you asked the customer) — "outstanding" until the customer's message actually answers it, then "resolved". Before marking anything resolved, check this message actually resolves it — don't mark it resolved just because time has passed. An item that stays "outstanding" across multiple turns means exactly that: still waiting, not forgotten, and never something to silently re-ask as if it were new — the reply should acknowledge it's still open, not repeat the question fresh as though this were the first time.
+
+4) DECIDE episode_continuity — a separate, structural question from everything above, used by the application (not by you) to decide whether this message belongs to the job PREVIOUS STATE already describes, or a different one:
+- "same_job": this message is part of the same job/request PREVIOUS STATE already describes — including any side-question, a related follow-up, or simply more detail about the same problem. This is the default whenever you are genuinely unsure — an ambiguous message should never be treated as a new job.
+- "new_job": only when the customer has clearly, unambiguously started describing a different problem or request that has nothing to do with what PREVIOUS STATE was about (e.g. PREVIOUS STATE is about a boiler repair and this message is "hi, my toilet's now leaking too" — a different fault, not a continuation). A vague or short message ("hi", "quick question") is NOT on its own evidence of a new job — judge the actual content, not the length.
+- If PREVIOUS STATE is empty (a genuinely fresh conversation, nothing collected yet), always answer "same_job" — there is nothing to compare against, and the application does not use this field in that case.
 
 Never invent facts. You are classifying and tracking state, not drafting a reply.`;
 
@@ -143,7 +152,12 @@ interface RawClassification {
   implied_job_type: string | null;
   sentiment: MeaningEntities["sentiment"];
   safety_tag: SafetyTag;
+  episode_continuity: "same_job" | "new_job";
   conversation_state: unknown;
+}
+
+function isEpisodeContinuity(value: unknown): value is "same_job" | "new_job" {
+  return value === "same_job" || value === "new_job";
 }
 
 function isIntent(value: unknown): value is Intent {
@@ -163,6 +177,10 @@ function toUnderstandingResult(raw: unknown, messageText: string, priorState: Co
     meaningEntities: { urgency: "none", impliedJobType: null, sentiment: "neutral" },
     safetyTag: null,
     conversationState: withPostcodeBackstop(priorState, patternEntities),
+    // Safe default: an unparseable classification must never be
+    // mistaken for a confident "this is a new job" — that would close
+    // a real episode over a mere parsing failure.
+    episodeContinuity: "same_job",
   };
 
   if (!raw || typeof raw !== "object") return fallback;
@@ -199,6 +217,7 @@ function toUnderstandingResult(raw: unknown, messageText: string, priorState: Co
       // ConversationState.urgency.
       urgency: mergeUrgency(priorState.urgency, urgency),
     },
+    episodeContinuity: isEpisodeContinuity(r.episode_continuity) ? r.episode_continuity : "same_job",
   };
 }
 
@@ -216,7 +235,7 @@ export async function classifyMessage(
             .join("\n")}`
         : "";
 
-    const userContent = `PREVIOUS STATE: ${JSON.stringify(priorState)}${historyBlock}\n\nNEW MESSAGE from the customer: "${messageText}"`;
+    const userContent = `CURRENT DATE/TIME (Europe/London): ${formatNowLondon()}\n\nPREVIOUS STATE: ${JSON.stringify(priorState)}${historyBlock}\n\nNEW MESSAGE from the customer: "${messageText}"`;
 
     const result = await getCompletion({
       tier: "small",
@@ -258,6 +277,7 @@ export async function classifyMessage(
       meaningEntities: { urgency: "none", impliedJobType: null, sentiment: "neutral" },
       safetyTag: null,
       conversationState: withPostcodeBackstop(priorState, patternEntities),
+      episodeContinuity: "same_job",
     };
   }
 }

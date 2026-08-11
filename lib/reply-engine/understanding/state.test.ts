@@ -43,3 +43,29 @@ test("malformed/missing raw input still degrades to EMPTY_CONVERSATION_STATE, ur
   assert.deepEqual(toConversationState(null), EMPTY_CONVERSATION_STATE);
   assert.deepEqual(toConversationState(undefined), EMPTY_CONVERSATION_STATE);
 });
+
+/**
+ * ReplyFlow V4 (Conversation Episodes, Phase 3) — preferredTimeResolved
+ * must only ever be a real, parseable timestamp, never a passthrough
+ * of whatever the model happened to write.
+ */
+
+test("preferredTimeResolved parses a genuine ISO timestamp", () => {
+  const state = toConversationState({ slots: { preferredTimeResolved: "2026-08-12T09:00:00.000Z" } });
+  assert.equal(state.slots.preferredTimeResolved, "2026-08-12T09:00:00.000Z");
+});
+
+test("preferredTimeResolved is null when absent", () => {
+  const state = toConversationState({ slots: { issue: "leak" } });
+  assert.equal(state.slots.preferredTimeResolved, null);
+});
+
+test("preferredTimeResolved rejects a malformed date rather than propagating it to a Work Card", () => {
+  const state = toConversationState({ slots: { preferredTimeResolved: "tomorrow-ish" } });
+  assert.equal(state.slots.preferredTimeResolved, null);
+});
+
+test("preferredTimeResolved also accepts the snake_case key the model may return", () => {
+  const state = toConversationState({ slots: { preferred_time_resolved: "2026-08-12T09:00:00.000Z" } });
+  assert.equal(state.slots.preferredTimeResolved, "2026-08-12T09:00:00.000Z");
+});

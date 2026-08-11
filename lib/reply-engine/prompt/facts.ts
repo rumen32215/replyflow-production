@@ -1,6 +1,7 @@
 import type { ReplyContext } from "../context/types";
 import type { UnderstandingResult } from "../understanding/types";
 import { standingForDate, describeStanding } from "@/lib/availability";
+import { formatNowLondon } from "@/lib/datetime";
 
 /** One bounded fact, stably identified so the generation LLM can cite
  * exactly which real fact it used (Sprint 9 §5: `facts_used`) and the
@@ -22,6 +23,13 @@ export interface Fact {
 export function collectFacts(context: ReplyContext, understanding: UnderstandingResult): Fact[] {
   const facts: Fact[] = [];
   const p = context.businessProfile;
+
+  // ReplyFlow V4 (Conversation Episodes, Phase 3) — the real current
+  // date/time, always present, always first. Without this, any
+  // relative date the reply mentions ("tomorrow", "later this week")
+  // has no real grounding — production runs in UTC, and Europe/London
+  // shifts against it for roughly half the year (BST).
+  facts.push({ id: "datetime.now", text: `Right now it is ${formatNowLondon()} (Europe/London).` });
 
   if (p) {
     facts.push({ id: "profile.name", text: `The business is called ${p.businessName}.` });

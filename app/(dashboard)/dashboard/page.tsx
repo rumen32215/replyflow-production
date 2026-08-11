@@ -130,7 +130,7 @@ export default async function HomePage() {
       .neq("customer_phone", TEST_CONVERSATION_PHONE),
     supabase
       .from("work_cards")
-      .select("id, conversation_id, customer_name, issue, address, created_at")
+      .select("id, conversation_id, episode_id, customer_name, issue, address, created_at")
       .eq("business_id", businessId)
       .eq("status", "draft")
       .order("created_at", { ascending: true }),
@@ -241,9 +241,11 @@ export default async function HomePage() {
     // relationships (Trusted/VIP) without adding a new concept.
     supabase.from("work_cards").select("conversation_id").eq("business_id", businessId).eq("status", "completed"),
     // ReplyFlow V2 — Job-Ready (lib/work-card-state.ts's computeJobReadiness):
-    // existence only, per conversation — whether at least one photo has
-    // actually been analysed, never inferred from conversation text.
-    supabase.from("conversation_photos").select("conversation_id").eq("business_id", businessId),
+    // existence only, per episode (ReplyFlow V4) — whether at least one
+    // photo has actually been analysed for that specific job, never
+    // inferred from conversation text, and never an older unrelated
+    // job's photo bleeding into this one's readiness.
+    supabase.from("conversation_photos").select("episode_id").eq("business_id", businessId),
   ]);
 
   // One map, built once, every section below reads from it — a
@@ -276,9 +278,10 @@ export default async function HomePage() {
     })
   );
 
-  // ReplyFlow V2 — which conversations have at least one genuinely
-  // analysed photo (a real conversation_photos row), for Job-Ready.
-  const conversationsWithPhoto = new Set((photoConversations ?? []).map((p) => p.conversation_id));
+  // ReplyFlow V2 — which episodes have at least one genuinely analysed
+  // photo (a real conversation_photos row), for Job-Ready. Scoped per
+  // episode (ReplyFlow V4), not per conversation.
+  const episodesWithPhoto = new Set((photoConversations ?? []).map((p) => p.episode_id).filter((id): id is string => Boolean(id)));
 
   // Organise Checkpoint (Brain Loop step 7) — one candidate per
   // conversation already fetched above; the rule itself (lib/brain/organise.ts)
@@ -350,6 +353,17 @@ export default async function HomePage() {
 
   /* -------------------------------- Ready to quote (ReplyFlow V2) ------------------------------- */
 
+  // ReplyFlow V4 — readiness must reflect this specific draft's own
+  // job, not whatever conversations.ai_state happens to hold (Phase 3
+  // stopped writing it; it's frozen pre-migration and would silently
+  // reuse a different job's state here otherwise). Fetched separately,
+  // scoped to just the draft Work Cards' own episodes.
+  const draftEpisodeIds = Array.from(new Set((draftWorkCards ?? []).map((j) => j.episode_id).filter((id): id is string => Boolean(id))));
+  const { data: draftEpisodes } = draftEpisodeIds.length
+    ? await supabase.from("conversation_episodes").select("id, ai_state").in("id", draftEpisodeIds)
+    : { data: [] };
+  const episodeStateById = new Map((draftEpisodes ?? []).map((e) => [e.id, toConversationState(e.ai_state)]));
+
   // Every draft Work Card still needs the owner's eventual review
   // (Attention Queue above covers that unconditionally) — this is a
   // narrower, additive signal: which of those drafts already have
@@ -357,12 +371,11 @@ export default async function HomePage() {
   // actually ready to price without opening each one to check.
   const readyToQuoteItems: ReadyToQuoteItem[] = (draftWorkCards ?? [])
     .map((j) => {
-      const entry = j.conversation_id ? conversationById.get(j.conversation_id) : undefined;
       const readiness = computeJobReadiness({
         issue: j.issue,
         address: j.address,
-        conversationState: entry?.conversationState ?? null,
-        hasAnalysedPhoto: j.conversation_id ? conversationsWithPhoto.has(j.conversation_id) : false,
+        conversationState: j.episode_id ? episodeStateById.get(j.episode_id) ?? null : null,
+        hasAnalysedPhoto: j.episode_id ? episodesWithPhoto.has(j.episode_id) : false,
       });
       return { id: j.id, customerName: j.customer_name, issue: j.issue, checklist: readiness.checklist, ready: readiness.ready };
     })

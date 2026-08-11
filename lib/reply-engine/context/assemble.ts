@@ -14,6 +14,12 @@ export interface AssembleContextInput {
   supabase: ServiceClient;
   businessId: string;
   conversationId: string;
+  /** ReplyFlow V4 (Conversation Episodes) — scopes the message thread
+   * and "current job" facts below to this job alone. Deliberately NOT
+   * used for jobRowsPromise — the customer's full job history is
+   * still real, still relevant lifetime context, just a separate
+   * concern from what's currently active (Contract §G). */
+  episodeId: string;
   customerPhone: string;
   customerName: string | null;
   conversationStartedAt: string;
@@ -33,7 +39,7 @@ export interface AssembleContextInput {
  * detected intent" (Sprint 10A).
  */
 export async function assembleContext(input: AssembleContextInput): Promise<ReplyContext> {
-  const { supabase, businessId, conversationId, customerPhone, customerName, conversationStartedAt, needs } = input;
+  const { supabase, businessId, conversationId, episodeId, customerPhone, customerName, conversationStartedAt, needs } = input;
 
   const displayName = customerName || customerPhone;
 
@@ -67,20 +73,27 @@ export async function assembleContext(input: AssembleContextInput): Promise<Repl
         .maybeSingle()
     : Promise.resolve({ data: null });
 
+  // ReplyFlow V4 — scoped to this episode, not the customer's lifetime
+  // thread: the reply-generation prompt should reason about the
+  // current job's own conversation, never a mix of every job this
+  // customer has ever brought (Contract §G).
   const historyPromise = needs.conversationHistory
     ? supabase
         .from("messages")
         .select("direction, body, created_at")
-        .eq("conversation_id", conversationId)
+        .eq("episode_id", episodeId)
         .order("created_at", { ascending: false })
         .limit(CONVERSATION_HISTORY_WINDOW)
     : Promise.resolve({ data: null });
 
   // Always fetched, regardless of needs — see CurrentBookingContext.
+  // Scoped to this episode (ReplyFlow V4) — an older, unrelated job's
+  // Work Card must never be reported as "the current booking" for a
+  // brand new episode that hasn't created its own yet.
   const currentJobPromise = supabase
     .from("work_cards")
     .select("issue, status, scheduled_for")
-    .eq("conversation_id", conversationId)
+    .eq("episode_id", episodeId)
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();

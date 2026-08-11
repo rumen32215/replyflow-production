@@ -37,6 +37,14 @@ export interface CollectedSlots {
   location: string | null;
   preferredTime: string | null;
   customerName: string | null;
+  /** ReplyFlow V4 (Conversation Episodes, Phase 3) — an actual ISO 8601
+   * timestamp, set only when the model is genuinely confident and
+   * unambiguous given the real current date/time it's given (see
+   * lib/datetime.ts). Null far more often than preferredTime is — "next
+   * week sometime" has no resolved timestamp, but still has free text.
+   * Never auto-books anything; only ever pre-fills a Work Card's
+   * scheduled_for, which the owner still reviews. */
+  preferredTimeResolved: string | null;
 }
 
 /** What the customer is fundamentally trying to achieve — distinct from
@@ -118,7 +126,7 @@ export interface ConversationState {
 
 export const EMPTY_CONVERSATION_STATE: ConversationState = {
   stage: "understand",
-  slots: { issue: null, location: null, preferredTime: null, customerName: null },
+  slots: { issue: null, location: null, preferredTime: null, customerName: null, preferredTimeResolved: null },
   openQuestion: null,
   greetingGiven: false,
   lastTopic: null,
@@ -176,6 +184,17 @@ function str(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
+/** Defensive: only ever an actual, parseable timestamp — a malformed
+ * or half-written date from the model degrades to null (an honest
+ * "not resolved") rather than propagating garbage into a Work Card's
+ * scheduled_for. */
+function isoTimestamp(value: unknown): string | null {
+  const s = str(value);
+  if (!s) return null;
+  const parsed = new Date(s);
+  return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
+}
+
 function toGoal(raw: unknown): ConversationGoal {
   if (!raw || typeof raw !== "object") return EMPTY_CONVERSATION_STATE.goal;
   const r = raw as Record<string, unknown>;
@@ -225,6 +244,7 @@ export function toConversationState(raw: unknown): ConversationState {
       location: str(slots.location),
       preferredTime: str(slots.preferredTime ?? slots.preferred_time),
       customerName: str(slots.customerName ?? slots.customer_name),
+      preferredTimeResolved: isoTimestamp(slots.preferredTimeResolved ?? slots.preferred_time_resolved),
     },
     openQuestion: str(r.openQuestion ?? r.open_question),
     greetingGiven: Boolean(r.greetingGiven ?? r.greeting_given),

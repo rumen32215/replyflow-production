@@ -2,12 +2,13 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { buildAttachmentAcknowledgmentDraft } from "./attachment-acknowledgment";
 
-const input = { businessId: "biz-1", conversationId: "conv-1", customerMessageId: "msg-1" };
+const input = { businessId: "biz-1", conversationId: "conv-1", episodeId: "ep-1", customerMessageId: "msg-1" };
 
-test("references the exact business, conversation, and message it's acknowledging", () => {
+test("references the exact business, conversation, episode, and message it's acknowledging", () => {
   const draft = buildAttachmentAcknowledgmentDraft(input);
   assert.equal(draft.business_id, "biz-1");
   assert.equal(draft.conversation_id, "conv-1");
+  assert.equal(draft.episode_id, "ep-1");
   assert.equal(draft.customer_message_id, "msg-1");
 });
 

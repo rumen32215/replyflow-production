@@ -60,6 +60,7 @@ const UNDERSTANDING: UnderstandingResult = {
   meaningEntities: { urgency: "urgent", impliedJobType: null, sentiment: "neutral" },
   safetyTag: null,
   conversationState: EMPTY_CONVERSATION_STATE,
+  episodeContinuity: "same_job",
 };
 
 function emergencyFactText(context: ReplyContext): string {
@@ -98,6 +99,12 @@ test("unconfirmed call-out fee (null) is an honest gap, never a claim either way
 test("a real call-out fee amount is stated once genuinely taught", () => {
   const text = calloutFeeFactText(contextWith({ chargesCalloutFee: true, calloutFeeAmount: "£60" }));
   assert.ok(text.includes("£60"));
+});
+
+test("datetime.now is always present, first, and states the real Europe/London time (ReplyFlow V4)", () => {
+  const facts = collectFacts(contextWith({}), UNDERSTANDING);
+  assert.equal(facts[0]?.id, "datetime.now");
+  assert.match(facts[0]?.text ?? "", /Europe\/London/);
 });
 
 test("photo analysis produces no facts when the message wasn't a photo (Phase B)", () => {

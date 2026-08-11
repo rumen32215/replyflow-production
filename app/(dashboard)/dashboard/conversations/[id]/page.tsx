@@ -42,60 +42,113 @@ export default async function ConversationDetailPage({ params }: { params: { id:
 
   if (!conversation) notFound();
 
+  // ReplyFlow V4 — Conversation Episodes (Contract §F). A conversation
+  // can now have more than one episode (job); this page shows the
+  // current one as source of truth. "Current" is deterministic: the
+  // most recently opened episode, full stop — an in-progress one if
+  // there is one, otherwise whatever was most recently active. "View
+  // full history" (below) is the escape hatch to the Customer page,
+  // which still aggregates every episode. Backfill (0032) guarantees
+  // every conversation has at least one episode, but a defensive
+  // fallback to conversation_id-scoped queries covers the
+  // theoretical case of a row that predates it.
+  const { data: currentEpisode } = await supabase
+    .from("conversation_episodes")
+    .select("id, ai_state")
+    .eq("conversation_id", conversation.id)
+    .order("opened_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const episodeId = currentEpisode?.id ?? null;
+
   const [{ data: existingWorkCards }, { data: allWorkCards }, { data: messages }, { data: business }, { data: pendingDrafts }, { data: conversationPhotos }] = await Promise.all([
-    // A rejected draft can be followed by a fresh one on the same
-    // conversation — most-recent-first + limit(1) so this never
-    // breaks once more than one Work Card row exists here
-    // (maybeSingle() errors on ambiguous multiple rows).
-    supabase
-      .from("work_cards")
-      .select("id, issue, scheduled_for, status, notes")
-      .eq("conversation_id", conversation.id)
-      .order("created_at", { ascending: false })
-      .limit(1),
+    // Scoped to the current episode, not the whole conversation — an
+    // older job's Work Card must never be shown as if it belonged to
+    // this one. Most-recent-first + limit(1) so this never breaks
+    // once more than one Work Card row exists here (maybeSingle()
+    // errors on ambiguous multiple rows).
+    episodeId
+      ? supabase
+          .from("work_cards")
+          .select("id, issue, scheduled_for, status, notes")
+          .eq("episode_id", episodeId)
+          .order("created_at", { ascending: false })
+          .limit(1)
+      : supabase
+          .from("work_cards")
+          .select("id, issue, scheduled_for, status, notes")
+          .eq("conversation_id", conversation.id)
+          .order("created_at", { ascending: false })
+          .limit(1),
     // Trust Ladder V1 companion (Candidate 1) — the same real job
     // history relationshipStrengthFor()/buildRelationshipSummary()
     // already read on the Customer page (app/(dashboard)/dashboard/
     // customers/[id]/page.tsx), fetched here too so that same, exact
     // computation can run where the owner is actually deciding how to
-    // handle this customer. A conversation is unique per
-    // (business_id, customer_phone), so this conversation_id's full
-    // work_cards history *is* this customer's full history — no new
-    // relationship concept, the same one the Customer page already uses.
+    // handle this customer. Deliberately still scoped by
+    // conversation_id, not episode_id — this is the customer's whole
+    // job history across every episode, the same relationship concept
+    // the Customer page already uses.
     supabase
       .from("work_cards")
       .select("id, issue, status, scheduled_for, completed_at, notes, created_at, estimated_value")
       .eq("conversation_id", conversation.id)
       .order("created_at", { ascending: true }),
-    supabase
-      .from("messages")
-      .select("id, direction, body, message_type, storage_path, created_at")
-      .eq("conversation_id", conversation.id)
-      .order("created_at", { ascending: true }),
+    // Scoped to the current episode — the thread the owner sees here
+    // is this job's conversation, never a mix of every job this
+    // customer has ever brought.
+    episodeId
+      ? supabase
+          .from("messages")
+          .select("id, direction, body, message_type, storage_path, created_at")
+          .eq("episode_id", episodeId)
+          .order("created_at", { ascending: true })
+      : supabase
+          .from("messages")
+          .select("id, direction, body, message_type, storage_path, created_at")
+          .eq("conversation_id", conversation.id)
+          .order("created_at", { ascending: true }),
     supabase
       .from("businesses")
       .select("business_name, availability, opening_time, closing_time")
       .eq("id", conversation.business_id)
       .maybeSingle(),
     // The Reply Engine's most recent still-open draft for this
-    // conversation (Sprint 10A) — same most-recent-first + limit(1)
-    // pattern as Work Cards above, for the same reason.
-    supabase
-      .from("reply_drafts")
-      .select(
-        "id, draft_text, final_text, intent, confidence, requires_escalation, escalation_reason, facts_used, status"
-      )
-      .eq("conversation_id", conversation.id)
-      .eq("status", "pending")
-      .order("created_at", { ascending: false })
-      .limit(1),
+    // episode (Sprint 10A; scoped per-episode by V4) — same
+    // most-recent-first + limit(1) pattern as Work Cards above, for
+    // the same reason. A prior episode's superseded/closed drafts can
+    // never resurface here — they're scoped out, not just filtered.
+    episodeId
+      ? supabase
+          .from("reply_drafts")
+          .select(
+            "id, draft_text, final_text, intent, confidence, requires_escalation, escalation_reason, facts_used, status"
+          )
+          .eq("episode_id", episodeId)
+          .eq("status", "pending")
+          .order("created_at", { ascending: false })
+          .limit(1)
+      : supabase
+          .from("reply_drafts")
+          .select(
+            "id, draft_text, final_text, intent, confidence, requires_escalation, escalation_reason, facts_used, status"
+          )
+          .eq("conversation_id", conversation.id)
+          .eq("status", "pending")
+          .order("created_at", { ascending: false })
+          .limit(1),
     // Phase B — the already-computed VISIBLE/POSSIBLE analysis for any
-    // photo in this conversation, keyed by message_id below so it can
+    // photo in this episode, keyed by message_id below so it can
     // render right under the photo it belongs to.
-    supabase
-      .from("conversation_photos")
-      .select("message_id, visible_summary, possible_summary")
-      .eq("conversation_id", conversation.id),
+    episodeId
+      ? supabase
+          .from("conversation_photos")
+          .select("message_id, visible_summary, possible_summary")
+          .eq("episode_id", episodeId)
+      : supabase
+          .from("conversation_photos")
+          .select("message_id, visible_summary, possible_summary")
+          .eq("conversation_id", conversation.id),
   ]);
 
   const allMessages = messages ?? [];
@@ -179,9 +232,12 @@ export default async function ConversationDetailPage({ params }: { params: { id:
 
   // The Work Card pipeline (DOCS/SPECS/Work-Card-Object.md) — a
   // deterministic draft of the automatic fields, assembled from this
-  // conversation's real Conversation State. Never shown as fact until
-  // the owner creates and reviews the Work Card; only pre-fills it.
-  const workCardDraft = buildWorkCardDraft(toConversationState(conversation.ai_state));
+  // episode's real Conversation State. Never shown as fact until the
+  // owner creates and reviews the Work Card; only pre-fills it.
+  // ReplyFlow V4 — reads from conversation_episodes.ai_state, not
+  // conversations.ai_state: Phase 3 stopped writing the latter, so it's
+  // frozen at whatever it held right before the episode migration.
+  const workCardDraft = buildWorkCardDraft(toConversationState(currentEpisode?.ai_state ?? null));
 
   return (
     <div className="flex h-full flex-col">
@@ -215,6 +271,7 @@ export default async function ConversationDetailPage({ params }: { params: { id:
 
       <ConversationStory
         conversationId={conversation.id}
+        episodeId={episodeId}
         businessId={conversation.business_id}
         businessName={business?.business_name ?? "The team"}
         status={conversation.status}

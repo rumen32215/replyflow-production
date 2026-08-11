@@ -28,6 +28,10 @@ export async function handleCustomerPhoto(
   input: {
     businessId: string;
     conversationId: string;
+    /** ReplyFlow V4 (Conversation Episodes) — the resolved episode this
+     * photo belongs to, stamped onto conversation_photos directly so a
+     * later job's photos can never be attributed to an earlier one. */
+    episodeId: string;
     customerMessageId: string;
     mediaId: string;
     caption: string | null;
@@ -98,6 +102,7 @@ export async function handleCustomerPhoto(
     {
       business_id: input.businessId,
       conversation_id: input.conversationId,
+      episode_id: input.episodeId,
       message_id: input.customerMessageId,
       storage_path: storagePath,
       visible_summary: analysis.visible,

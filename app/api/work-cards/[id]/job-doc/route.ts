@@ -35,7 +35,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
   const { data: workCard } = await service
     .from("work_cards")
     .select(
-      "id, business_id, conversation_id, customer_name, issue, address, collected_details, conversation_summary, notes, scheduled_for, completed_at"
+      "id, business_id, conversation_id, episode_id, customer_name, issue, address, collected_details, conversation_summary, notes, scheduled_for, completed_at"
     )
     .eq("id", params.id)
     .maybeSingle();
@@ -119,11 +119,13 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
   // WhatsApp photo is copied into job-doc-media so it shows up on the
   // report without a re-upload. One failed photo must never fail the
   // whole report; it's just not there to include yet.
-  if (workCard.conversation_id) {
+  // ReplyFlow V4 — scoped to this job's own episode: an older,
+  // unrelated job's photos must never end up on this report.
+  if (workCard.episode_id) {
     const { data: photos } = await service
       .from("conversation_photos")
       .select("message_id, storage_path, visible_summary, possible_summary, unknown_note, analysis_confidence")
-      .eq("conversation_id", workCard.conversation_id)
+      .eq("episode_id", workCard.episode_id)
       .order("created_at", { ascending: true });
 
     for (const photo of photos ?? []) {

@@ -39,25 +39,33 @@ export default async function WorkCardDetailPage({ params }: { params: { id: str
   const { data: workCard } = await supabase
     .from("work_cards")
     .select(
-      "id, business_id, conversation_id, customer_name, issue, status, estimated_value, scheduled_for, completed_at, notes, created_at, address, address_confirmed, collected_details, conversation_summary, approved_at"
+      "id, business_id, conversation_id, episode_id, customer_name, issue, status, estimated_value, scheduled_for, completed_at, notes, created_at, address, address_confirmed, collected_details, conversation_summary, approved_at"
     )
     .eq("id", params.id)
     .maybeSingle();
 
   if (!workCard) notFound();
 
-  const [{ data: conversation }, { data: siblingCards }, { data: conversationPhotos }, { data: linkedJobDoc }] = await Promise.all([
+  const [{ data: conversation }, { data: episode }, { data: siblingCards }, { data: conversationPhotos }, { data: linkedJobDoc }] = await Promise.all([
     workCard.conversation_id
       ? supabase
           .from("conversations")
-          .select("id, customer_phone, status, ai_state, communication_preference")
+          .select("id, customer_phone, status, communication_preference")
           .eq("id", workCard.conversation_id)
           .maybeSingle()
+      : Promise.resolve({ data: null }),
+    // ReplyFlow V4 — this job's own Conversation State, not the
+    // conversation's (Phase 3 stopped writing conversations.ai_state;
+    // it's frozen pre-migration and would show a different job's
+    // stale state here otherwise).
+    workCard.episode_id
+      ? supabase.from("conversation_episodes").select("ai_state").eq("id", workCard.episode_id).maybeSingle()
       : Promise.resolve({ data: null }),
     // Relationship context (Work-Card-Object.md §2: "computed live, not
     // stored") — other Work Cards from the same conversation thread,
     // the same scoping `RelationshipOverview` already uses on the
-    // Customer page.
+    // Customer page. Deliberately conversation-wide, not episode-wide —
+    // this is the customer's whole job history, same as elsewhere in V4.
     workCard.conversation_id
       ? supabase
           .from("work_cards")
@@ -68,13 +76,21 @@ export default async function WorkCardDetailPage({ params }: { params: { id: str
     // ReplyFlow V2 — the same already-analysed photo output the
     // conversation detail page reads, surfaced here too so the owner
     // never has to leave the Work Card to see what was already found.
-    workCard.conversation_id
+    // ReplyFlow V4 — scoped to this job's own episode: an older job's
+    // photos must never appear to belong to this one.
+    workCard.episode_id
       ? supabase
           .from("conversation_photos")
           .select("message_id, storage_path, visible_summary, possible_summary, unknown_note, analysis_confidence, created_at")
-          .eq("conversation_id", workCard.conversation_id)
+          .eq("episode_id", workCard.episode_id)
           .order("created_at", { ascending: true })
-      : Promise.resolve({ data: [] }),
+      : workCard.conversation_id
+        ? supabase
+            .from("conversation_photos")
+            .select("message_id, storage_path, visible_summary, possible_summary, unknown_note, analysis_confidence, created_at")
+            .eq("conversation_id", workCard.conversation_id)
+            .order("created_at", { ascending: true })
+        : Promise.resolve({ data: [] }),
     // ReplyFlow V4 — the Work Card → Job Record link
     // (0030_link_job_docs_to_work_cards.sql). At most one, by the
     // unique index on job_docs.work_card_id.
@@ -107,7 +123,7 @@ export default async function WorkCardDetailPage({ params }: { params: { id: str
     confidence: p.analysis_confidence as "low" | "medium" | "high",
   }));
 
-  const conversationState = conversation ? toConversationState(conversation.ai_state) : null;
+  const conversationState = episode ? toConversationState(episode.ai_state) : null;
   const isEmergency = Boolean(
     conversationState &&
       conversationState.goal.type === "handle_emergency" &&

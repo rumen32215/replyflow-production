@@ -10,6 +10,7 @@ import { recordErrorEvent } from "@/lib/error-events";
 import { buildAttachmentAcknowledgmentDraft } from "./attachment-acknowledgment";
 import { handleCustomerPhoto } from "./media-intake";
 import type { PhotoAnalysisContext } from "./context/types";
+import { resolveEpisodeForMessage, closeEpisode, createEpisode, updateEpisodeState } from "./episode";
 
 const STATE_HISTORY_WINDOW = 4;
 
@@ -53,20 +54,6 @@ export async function generateReplyForMessage(params: {
       .maybeSingle();
     if (existingDraft) return;
 
-    // Non-text, non-image messages never reach Understanding/Generation
-    // — see attachment-acknowledgment.ts for why, and for what gets
-    // written instead of the silence this used to produce. Images get
-    // their own real path (Phase B) below, once the conversation row
-    // this needs is available.
-    if (messageType !== "text" && messageType !== "image") {
-      await supabase
-        .from("reply_drafts")
-        .upsert(buildAttachmentAcknowledgmentDraft({ businessId, conversationId, customerMessageId }), {
-          onConflict: "customer_message_id",
-        });
-      return;
-    }
-
     const { data: conversation } = await supabase
       .from("conversations")
       .select("customer_phone, customer_name, created_at")
@@ -88,6 +75,35 @@ export async function generateReplyForMessage(params: {
         message: "generateReplyForMessage could not find its own conversation row — this customer message has no reply_drafts row.",
         context: { conversationId, customerMessageId },
       });
+      return;
+    }
+
+    // ReplyFlow V4 — Conversation Episodes (Implementation Contract
+    // §B). Every processed message gets filed into the right job
+    // before anything else happens — episode membership is a data-
+    // organisation fact, not an outcome of the pipeline below. When an
+    // in-progress episode already exists, this is provisional (the
+    // message is tentatively filed under it); if Understanding later
+    // decides this message actually starts a new, unrelated job, both
+    // the message and any photo already analysed against it are
+    // re-filed under the new episode — see the "new_job" branch below.
+    let episode = await resolveEpisodeForMessage(supabase, { conversationId, businessId });
+    let episodeId = episode.id;
+    await supabase.from("messages").update({ episode_id: episodeId }).eq("id", customerMessageId);
+
+    // Non-text, non-image messages never reach Understanding/Generation
+    // — see attachment-acknowledgment.ts for why, and for what gets
+    // written instead of the silence this used to produce. Images get
+    // their own real path (Phase B) below, once the conversation row
+    // this needs is available. These never trigger an episode-continuity
+    // check (no Understanding call happens for them at all) — they stay
+    // filed under whichever episode was already resolved above.
+    if (messageType !== "text" && messageType !== "image") {
+      await supabase
+        .from("reply_drafts")
+        .upsert(buildAttachmentAcknowledgmentDraft({ businessId, conversationId, episodeId, customerMessageId }), {
+          onConflict: "customer_message_id",
+        });
       return;
     }
 
@@ -134,13 +150,14 @@ export async function generateReplyForMessage(params: {
         // honest stopgap is safer than pretending to understand it.
         await supabase
           .from("reply_drafts")
-          .upsert(buildAttachmentAcknowledgmentDraft({ businessId, conversationId, customerMessageId }), { onConflict: "customer_message_id" });
+          .upsert(buildAttachmentAcknowledgmentDraft({ businessId, conversationId, episodeId, customerMessageId }), { onConflict: "customer_message_id" });
         return;
       }
       const { data: businessRow } = await supabase.from("businesses").select("trade").eq("id", businessId).maybeSingle();
       const analysis = await handleCustomerPhoto(supabase, {
         businessId,
         conversationId,
+        episodeId,
         customerMessageId,
         mediaId,
         caption: mediaCaption,
@@ -152,38 +169,24 @@ export async function generateReplyForMessage(params: {
         // from. Same honest fallback as every other unsupported case.
         await supabase
           .from("reply_drafts")
-          .upsert(buildAttachmentAcknowledgmentDraft({ businessId, conversationId, customerMessageId }), { onConflict: "customer_message_id" });
+          .upsert(buildAttachmentAcknowledgmentDraft({ businessId, conversationId, episodeId, customerMessageId }), { onConflict: "customer_message_id" });
         return;
       }
       photoAnalysis = { visible: analysis.visible, possible: analysis.possible, unknown: analysis.unknown };
       effectiveMessageBody = mediaCaption ? `[Customer sent a photo: "${mediaCaption}"]` : "[Customer sent a photo]";
     }
 
-    // Prior Conversation State (Conversation Intelligence Sprint) —
-    // fetched as its own defensive, separate query rather than folded
-    // into the `conversations` select above: a PostgREST select fails
-    // its *entire* query if any one requested column doesn't exist, and
-    // the ai_state column depends on a migration that may not have run
-    // yet in every environment. Isolating it means a missing column
-    // degrades to "no state yet" instead of breaking message processing
-    // outright — the exact failure mode the tone_notes migration gap
-    // caused once already.
-    let priorState = EMPTY_CONVERSATION_STATE;
-    try {
-      const { data: stateRow } = await supabase
-        .from("conversations")
-        .select("ai_state")
-        .eq("id", conversationId)
-        .maybeSingle();
-      if (stateRow?.ai_state) priorState = toConversationState(stateRow.ai_state);
-    } catch (err) {
-      console.error("[reply-engine] could not read prior conversation state (migration 0012 may not be applied yet):", err);
-    }
+    // Prior Conversation State — comes from the episode already
+    // resolved above, scoped to this one job, never the customer's
+    // lifetime history (ReplyFlow V4, Conversation Episodes §G — the
+    // direct fix for a new job inheriting a previous one's stale
+    // slots/goal/commitments).
+    const priorState = episode.priorState;
 
     const { data: recentRows } = await supabase
       .from("messages")
       .select("direction, body, created_at")
-      .eq("conversation_id", conversationId)
+      .eq("episode_id", episodeId)
       .order("created_at", { ascending: false })
       .limit(STATE_HISTORY_WINDOW);
     const recentHistory = (recentRows ?? [])
@@ -193,24 +196,59 @@ export async function generateReplyForMessage(params: {
 
     // recentHistory already includes this new inbound message (the
     // webhook inserts it before calling here) — length <= 1 means
-    // nothing preceded it, i.e. this is genuinely the opening message
-    // of a brand new conversation. Live testing found "Hi, just
+    // nothing preceded it in this episode, i.e. this is genuinely the
+    // opening message of a brand new job. Live testing found "Hi, just
     // checking in" as an opening message getting silenced, which is
     // wrong — an opening message always deserves a reply, however vague.
     const isFirstMessage = recentHistory.length <= 1;
 
-    const understanding = await classifyMessage(businessId, effectiveMessageBody, priorState, recentHistory);
+    let understanding = await classifyMessage(businessId, effectiveMessageBody, priorState, recentHistory);
+
+    // ReplyFlow V4 — Conversation Episodes (Implementation Contract
+    // §B). A real, structured decision the orchestrator acts on, not a
+    // prompt instruction alone. Only meaningful when this message was
+    // provisionally filed under an already-in-progress episode
+    // (episode.isNew === false) — a brand new episode has nothing to
+    // compare continuity against, and the classifier is told exactly
+    // that (see classify.ts's own prompt).
+    if (!episode.isNew && understanding.episodeContinuity === "new_job") {
+      await closeEpisode(supabase, episodeId, "abandoned");
+      const fresh = await createEpisode(supabase, { conversationId, businessId });
+      episodeId = fresh.id;
+      episode = { id: fresh.id, priorState: EMPTY_CONVERSATION_STATE, isNew: true };
+
+      // Re-file the message — and its photo, if one was already
+      // analysed above — under the new episode. Both were only ever
+      // provisionally stamped under the old one, before this verdict
+      // was known.
+      await supabase.from("messages").update({ episode_id: episodeId }).eq("id", customerMessageId);
+      if (photoAnalysis) {
+        await supabase.from("conversation_photos").update({ episode_id: episodeId }).eq("message_id", customerMessageId);
+      }
+
+      // Re-classify from a genuinely clean slate — the first call's
+      // conversationState was computed against the OLD episode's own
+      // slots/goal/commitments and must never leak into the new job,
+      // regardless of how well the model itself tried to reset it in
+      // its own answer. Same message/photo context, fresh understanding.
+      understanding = await classifyMessage(businessId, effectiveMessageBody, EMPTY_CONVERSATION_STATE, recentHistory.slice(-1));
+    }
 
     // Persist the updated state immediately, regardless of what happens
     // downstream (escalation, silence, auto-send, pending draft) — the
-    // state describes the conversation's understanding, not the outcome
-    // of any one reply. Best-effort: a failure here (e.g. migration
-    // 0012 not applied yet) must never block drafting a reply.
-    try {
-      await supabase.from("conversations").update({ ai_state: understanding.conversationState }).eq("id", conversationId);
-    } catch (err) {
-      console.error("[reply-engine] could not persist conversation state:", err);
-    }
+    // state describes this episode's understanding, not the outcome of
+    // any one reply.
+    await updateEpisodeState(supabase, episodeId, understanding.conversationState);
+
+    // ReplyFlow V4 — Conversation Episodes (Implementation Contract
+    // §H). Whatever this message resolves to below, any OTHER draft
+    // still "pending" in this same episode is now stale — superseded
+    // here, once, so every branch below (safety tag, silence,
+    // auto-send, or a fresh pending draft) starts from a clean slate.
+    // This is what makes an old, never-actioned draft structurally
+    // unable to resurface as "the" suggested reply for a later message
+    // in the same job.
+    await supabase.from("reply_drafts").update({ status: "superseded" }).eq("episode_id", episodeId).eq("status", "pending");
 
     // Understanding-level safety pre-check (Sprint 9.1 §6) — some
     // messages must never reach the generation call at all.
@@ -228,7 +266,7 @@ export async function generateReplyForMessage(params: {
     const tagConflictsWithRealIntent =
       understanding.primaryIntent === "EMERGENCY" || understanding.primaryIntent === "COMPLAINT";
     if (understanding.safetyTag && !tagConflictsWithRealIntent) {
-      await handleSafetyTag(supabase, { businessId, conversationId, customerMessageId, understanding });
+      await handleSafetyTag(supabase, { businessId, conversationId, episodeId, customerMessageId, understanding });
       return;
     }
 
@@ -237,6 +275,7 @@ export async function generateReplyForMessage(params: {
       supabase,
       businessId,
       conversationId,
+      episodeId,
       customerPhone: conversation.customer_phone,
       customerName: conversation.customer_name,
       conversationStartedAt: conversation.created_at,
@@ -266,16 +305,11 @@ export async function generateReplyForMessage(params: {
       resolvedTexts.has(c.text) ? { ...c, status: "resolved" as const } : c
     );
 
-    try {
-      await supabase
-        .from("conversations")
-        .update({
-          ai_state: { ...understanding.conversationState, openQuestion: generation.asksQuestion, commitments: correctedCommitments },
-        })
-        .eq("id", conversationId);
-    } catch (err) {
-      console.error("[reply-engine] could not persist post-generation conversation state:", err);
-    }
+    await updateEpisodeState(supabase, episodeId, {
+      ...understanding.conversationState,
+      openQuestion: generation.asksQuestion,
+      commitments: correctedCommitments,
+    });
 
     // Silence (Voice doc 07 §2, Judgement doc 08 "deliberately do
     // nothing") — honoured only within the same narrow, already-safe
@@ -344,6 +378,7 @@ export async function generateReplyForMessage(params: {
         {
           business_id: businessId,
           conversation_id: conversationId,
+          episode_id: episodeId,
           customer_message_id: customerMessageId,
           draft_text: "",
           intent: understanding.primaryIntent,
@@ -391,6 +426,7 @@ export async function generateReplyForMessage(params: {
         {
           business_id: businessId,
           conversation_id: conversationId,
+          episode_id: episodeId,
           customer_message_id: customerMessageId,
           draft_text: draftText,
           intent: understanding.primaryIntent,
@@ -415,6 +451,7 @@ export async function generateReplyForMessage(params: {
       {
         business_id: businessId,
         conversation_id: conversationId,
+        episode_id: episodeId,
         customer_message_id: customerMessageId,
         draft_text: draftText,
         intent: understanding.primaryIntent,
@@ -463,11 +500,12 @@ async function handleSafetyTag(
   params: {
     businessId: string;
     conversationId: string;
+    episodeId: string;
     customerMessageId: string;
     understanding: Awaited<ReturnType<typeof classifyMessage>>;
   }
 ) {
-  const { businessId, conversationId, customerMessageId, understanding } = params;
+  const { businessId, conversationId, episodeId, customerMessageId, understanding } = params;
   const tag = understanding.safetyTag;
 
   // Spam gets no reply attempted and isn't surfaced at all (Sprint 9.1
@@ -481,6 +519,7 @@ async function handleSafetyTag(
     {
       business_id: businessId,
       conversation_id: conversationId,
+      episode_id: episodeId,
       customer_message_id: customerMessageId,
       draft_text: template.text,
       intent: understanding.primaryIntent,

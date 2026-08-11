@@ -254,17 +254,32 @@ export function WorkCardDetail({
   async function transitionTo(next: string, ackText: string) {
     if (busy) return;
     setBusy(true);
-    const extra = next === "completed" ? { completed_at: new Date().toISOString() } : {};
-    const { error } = await supabase
-      .from("work_cards")
-      .update({ status: next, ...extra })
-      .eq("id", card.id);
+    // ReplyFlow V4 — Conversation Episodes: this transition may also need
+    // to close the Work Card's episode, and conversation_episodes is
+    // service-role-write-only, so this goes through the shared status
+    // route (app/api/work-cards/[id]/status) instead of a direct write.
+    let completedAt: string | null = null;
+    let ok = true;
+    try {
+      const res = await fetch(`/api/work-cards/${card.id}/status`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: next }),
+      });
+      ok = res.ok;
+      if (ok) {
+        const payload = await res.json();
+        completedAt = payload.completedAt ?? null;
+      }
+    } catch {
+      ok = false;
+    }
     setBusy(false);
-    if (error) {
+    if (!ok) {
       softError();
       return;
     }
-    setCard({ ...card, status: next, ...(next === "completed" ? { completedAt: new Date().toISOString() } : {}) });
+    setCard({ ...card, status: next, ...(next === "completed" ? { completedAt: completedAt ?? new Date().toISOString() } : {}) });
     acknowledge(ackText);
     router.refresh();
   }

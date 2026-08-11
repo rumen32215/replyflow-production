@@ -16,6 +16,7 @@ function baseUnderstanding(overrides: Partial<UnderstandingResult> = {}): Unders
     safetyTag: null,
     conversationState: EMPTY_CONVERSATION_STATE,
     ...overrides,
+    episodeContinuity: overrides.episodeContinuity ?? "same_job",
   };
 }
 
@@ -81,6 +82,36 @@ test("a non-payment question is unaffected by taught payment facts", () => {
     understanding: baseUnderstanding({ primaryIntent: "BUSINESS_INFORMATION" }),
     generation: baseGeneration({ draftReply: "We're open 8 to 5:30, Monday to Friday.", factsUsed: [] }),
     facts: [PAYMENT_FACT],
+  });
+  assert.equal(result.groundingFailed, false);
+  assert.equal(result.requiresEscalation, false);
+});
+
+/* -------- Invented deposit requirement (live-test regression) -------- */
+
+test("a draft inventing a deposit requirement always fails grounding and escalates, even with a citation", () => {
+  const result = evaluateSafety({
+    understanding: baseUnderstanding({ primaryIntent: "BOOKING_REQUEST" }),
+    generation: baseGeneration({
+      draftReply: "Great — a £20 call-out fee applies, and a deposit will be required to secure the booking.",
+      factsUsed: ["profile.callout_fee"],
+    }),
+    facts: [{ id: "profile.callout_fee", text: "Charges a call-out fee of £20." }],
+  });
+  assert.equal(result.groundingFailed, true);
+  assert.equal(result.requiresEscalation, true);
+  assert.equal(result.wouldAutoSend, false);
+  assert.ok(result.reasons.some((r) => /deposit/i.test(r)));
+});
+
+test("a legitimately cited call-out fee with no deposit mention passes", () => {
+  const result = evaluateSafety({
+    understanding: baseUnderstanding({ primaryIntent: "BOOKING_REQUEST" }),
+    generation: baseGeneration({
+      draftReply: "Happy to book that in — a £20 call-out fee applies.",
+      factsUsed: ["profile.callout_fee"],
+    }),
+    facts: [{ id: "profile.callout_fee", text: "Charges a call-out fee of £20." }],
   });
   assert.equal(result.groundingFailed, false);
   assert.equal(result.requiresEscalation, false);

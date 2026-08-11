@@ -122,6 +122,7 @@ function formatScheduled(iso: string | null): string | null {
  */
 export function ConversationStory({
   conversationId,
+  episodeId,
   businessId,
   businessName,
   status,
@@ -140,6 +141,14 @@ export function ConversationStory({
   communicationGuidance,
 }: {
   conversationId: string;
+  /** ReplyFlow V4 (Conversation Episodes) — the currently active
+   * episode for this conversation. A new Work Card is always filed
+   * under it, never just loosely under the permanent customer thread.
+   * null only in the near-impossible case of a conversation that
+   * somehow predates both the backfill and its first inbound message
+   * — saveJob() refuses to create a Work Card without a real one
+   * rather than risk a foreign-key failure or an orphaned record. */
+  episodeId: string | null;
   businessId: string;
   businessName: string;
   status: string;
@@ -230,6 +239,10 @@ export function ConversationStory({
 
   async function saveJob() {
     if (savingJob || !jobTitle.trim()) return;
+    if (!editingDraft && !episodeId) {
+      softError();
+      return;
+    }
     setSavingJob(true);
 
     if (editingDraft && job) {
@@ -271,6 +284,7 @@ export function ConversationStory({
       .insert({
         business_id: businessId,
         conversation_id: conversationId,
+        episode_id: episodeId,
         customer_name: customerName || customerPhone,
         issue: jobTitle.trim(),
         status: "draft",
@@ -322,9 +336,23 @@ export function ConversationStory({
   async function rejectJob() {
     if (!job || decidingJob) return;
     setDecidingJob(true);
-    const { error } = await supabase.from("work_cards").update({ status: "cancelled" }).eq("id", job.id);
+    // ReplyFlow V4 — cancelling also closes this Work Card's episode
+    // (Contract §B), which conversation_episodes' service-role-only
+    // write rule means a client component can no longer do directly —
+    // one canonical status-transition route now handles both.
+    let ok = true;
+    try {
+      const res = await fetch(`/api/work-cards/${job.id}/status`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "cancelled" }),
+      });
+      ok = res.ok;
+    } catch {
+      ok = false;
+    }
     setDecidingJob(false);
-    if (error) {
+    if (!ok) {
       softError();
       return;
     }

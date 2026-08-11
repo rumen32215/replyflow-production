@@ -23,6 +23,10 @@
 export interface AttachmentAcknowledgmentInput {
   businessId: string;
   conversationId: string;
+  /** ReplyFlow V4 (Conversation Episodes) — the episode this message
+   * was filed under, so even an unread attachment stays attached to
+   * the right job, not just the right customer. */
+  episodeId: string;
   customerMessageId: string;
 }
 
@@ -30,6 +34,7 @@ export function buildAttachmentAcknowledgmentDraft(input: AttachmentAcknowledgme
   return {
     business_id: input.businessId,
     conversation_id: input.conversationId,
+    episode_id: input.episodeId,
     customer_message_id: input.customerMessageId,
     draft_text:
       "Thanks for sending that over — I'm not able to view attachments yet, but I've made sure the team can see it's here.",

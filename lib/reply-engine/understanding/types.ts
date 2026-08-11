@@ -82,6 +82,15 @@ export interface UnderstandingResult {
   /** Conversation Intelligence Sprint — carried forward turn by turn,
    * never re-derived from scratch (see understanding/state.ts). */
   conversationState: ConversationState;
+  /** ReplyFlow V4 (Conversation Episodes, Phase 3) — does this message
+   * continue the in-progress episode it was classified against, or
+   * does it describe a genuinely different, unrelated job? Only
+   * meaningful when an in-progress episode actually exists; the
+   * orchestrator (not this field alone) decides what happens next —
+   * see lib/reply-engine/episode.ts. Defaults to "same_job" whenever
+   * the model's answer is missing or invalid: ambiguous cases should
+   * never fragment a normal conversation into spurious episodes. */
+  episodeContinuity: "same_job" | "new_job";
 }
 
 /** The six context categories the deterministic lookup table (§3)

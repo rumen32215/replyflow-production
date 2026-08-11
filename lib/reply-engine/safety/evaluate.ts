@@ -131,6 +131,23 @@ export function evaluateSafety(input: {
     );
   }
 
+  // Deterministic backstop for a real invented commitment found in live
+  // testing: a draft told a customer "a deposit will be required to
+  // secure the booking" with nothing configured anywhere in the schema
+  // that could ever support that claim — there is no deposit field on
+  // `businesses`, `ai_configurations`, or anywhere else facts.ts reads
+  // from (unlike the call-out fee, which has a real
+  // `profile.callout_fee` fact when genuinely configured). Unlike the
+  // uncited-price/instruction check above, this one isn't "cite a fact
+  // or fail" — a deposit claim has literally no fact it could ever cite,
+  // so any mention of one always fails grounding and always escalates,
+  // the same severity as the reschedule-overclaim backstop.
+  const hasUncitedDepositClaim = Boolean(generation.draftReply) && /\bdeposit\b/i.test(generation.draftReply);
+  if (hasUncitedDepositClaim) {
+    groundingFailed = true;
+    reasons.push("Draft mentions a deposit, but nothing about a deposit is configured anywhere for this business.");
+  }
+
   // Check 2 — escalation category: the Understanding Engine's safety
   // tag or category-level "always escalate" rule (e.g. Emergency,
   // Complaint) or the generation model's own judgment.
@@ -140,7 +157,8 @@ export function evaluateSafety(input: {
       anySecondaryAlwaysEscalate ||
       understanding.safetyTag !== null ||
       hasUnconfirmedRescheduleClaim ||
-      hasUncitedPaymentAnswer
+      hasUncitedPaymentAnswer ||
+      hasUncitedDepositClaim
   );
   if (decision.alwaysEscalate) reasons.push(`"${decision.category}" always requires the owner's review.`);
   if (anySecondaryAlwaysEscalate) {

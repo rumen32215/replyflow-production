@@ -28,6 +28,17 @@ export interface WorkCardDraftFields {
   /** A plain-language recap built only from slots and resolved
    * commitments — never a generated paraphrase of the transcript. */
   conversationSummary: string | null;
+  /** ReplyFlow V4 (Conversation Episodes) — the customer's actual
+   * requested time, already resolved against the real calendar date
+   * ("tomorrow at 10am" -> a real ISO timestamp) by the Understanding
+   * Engine. Distinct from `preferredTime` (the free-text slot used only
+   * for the human-readable summary line above) — this is the one value
+   * that should ever pre-fill a Work Card's `scheduled_for`. Was
+   * computed since the V4 rollout but never wired into the create-job
+   * form, which is why a Work Card's scheduled_for previously only ever
+   * captured a date, silently losing whatever time the customer asked
+   * for. */
+  preferredTimeResolved: string | null;
 }
 
 export function buildWorkCardDraft(state: ConversationState): WorkCardDraftFields {
@@ -47,5 +58,6 @@ export function buildWorkCardDraft(state: ConversationState): WorkCardDraftField
     address: state.slots.location?.trim() || null,
     collectedDetails: collected.length > 0 ? collected.join("\n") : null,
     conversationSummary: summaryLines.length > 0 ? summaryLines.join(" ") : null,
+    preferredTimeResolved: state.slots.preferredTimeResolved,
   };
 }

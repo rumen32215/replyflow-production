@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { sendReplyToCustomer } from "@/lib/reply-engine/send";
@@ -111,6 +112,10 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     conversationId: workCard.conversation_id,
     text: confirmationText,
   });
+
+  // Production hardening — the Work Cards list is a separate route
+  // whose own cached data has no way to know this write happened.
+  revalidatePath("/dashboard/work-cards");
 
   return NextResponse.json({
     job: { ...workCard, status: "booked" },

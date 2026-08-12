@@ -11,6 +11,8 @@ import { TypingDots } from "@/components/shared/typed-message";
 import { createClient } from "@/lib/supabase/client";
 import { buildStory, groupForStatus } from "@/lib/conversations";
 import type { WorkCardDraftFields } from "@/lib/work-card";
+import { toDateTimeLocalValue } from "@/lib/work-card-format";
+import { revalidateWorkCards } from "@/app/(dashboard)/dashboard/work-cards/actions";
 import type { RelationshipStrength } from "@/lib/customer-memory-signals";
 import { STRENGTH_STYLE } from "@/components/dashboard/customers/ai-insights-panel";
 import { cn } from "@/lib/utils";
@@ -185,7 +187,16 @@ export function ConversationStory({
     workCardDraft?.issue || `Enquiry from ${customerName || customerPhone}`
   );
   const [notes, setNotes] = useState(latestCustomerMessage ?? "");
-  const [scheduledDate, setScheduledDate] = useState(suggestedSlotDate ?? "");
+  // The customer's own requested time (already resolved to a real
+  // timestamp by the Understanding Engine) always wins over the diary's
+  // generic suggestion — a Work Card must never silently lose "tomorrow
+  // at 10am" down to just a date. suggestedScheduledValue is only ever
+  // a fallback for when nothing was actually requested yet.
+  const suggestedScheduledValue = suggestedSlotDate ? `${suggestedSlotDate}T09:00` : "";
+  const defaultScheduledValue = workCardDraft?.preferredTimeResolved
+    ? toDateTimeLocalValue(workCardDraft.preferredTimeResolved)
+    : suggestedScheduledValue;
+  const [scheduledDate, setScheduledDate] = useState(defaultScheduledValue);
   const [savingJob, setSavingJob] = useState(false);
   const [decidingJob, setDecidingJob] = useState(false);
   const [showSentPreview, setShowSentPreview] = useState(false);
@@ -232,7 +243,10 @@ export function ConversationStory({
     if (!job) return;
     setJobTitle(job.issue);
     setNotes(job.notes ?? "");
-    setScheduledDate(job.scheduled_for ? job.scheduled_for.slice(0, 10) : "");
+    // Was job.scheduled_for.slice(0, 10) — a date-only substring that
+    // silently dropped whatever time was actually stored, the same
+    // data-loss bug fixed below for job creation.
+    setScheduledDate(toDateTimeLocalValue(job.scheduled_for));
     setEditingDraft(true);
     setShowJobForm(true);
   }
@@ -268,6 +282,7 @@ export function ConversationStory({
       setShowJobForm(false);
       setEditingDraft(false);
       acknowledge("Updated the draft.");
+      await revalidateWorkCards();
       router.refresh();
       return;
     }
@@ -305,6 +320,12 @@ export function ConversationStory({
     setJob(inserted);
     setShowJobForm(false);
     acknowledge("Draft ready — take a look when you're ready.");
+    // Production hardening — a real bug found in live testing: the
+    // Work Cards list (a separate route) could show empty/stale for up
+    // to 30s after this insert, since the App Router's client Router
+    // Cache doesn't know this direct client-side write happened.
+    // router.refresh() only re-fetches *this* page.
+    await revalidateWorkCards();
     router.refresh();
   }
 
@@ -562,7 +583,7 @@ export function ConversationStory({
               // whatever was last typed into the rejected draft.
               setJobTitle(workCardDraft?.issue || `Enquiry from ${customerName || customerPhone}`);
               setNotes(latestCustomerMessage ?? "");
-              setScheduledDate(suggestedSlotDate ?? "");
+              setScheduledDate(defaultScheduledValue);
               setEditingDraft(false);
               setShowJobForm((v) => !v);
             }}
@@ -864,6 +885,11 @@ export function ConversationStory({
                 <input
                   value={jobTitle}
                   onChange={(e) => setJobTitle(e.target.value)}
+                  // Production hardening — see the matching fix in
+                  // work-card-detail.tsx: typing into a pre-filled
+                  // field without clearing it first silently
+                  // concatenates instead of replacing.
+                  onFocus={(e) => e.target.select()}
                   placeholder="What's this job?"
                   className="w-full rounded-lg border border-border bg-background px-3 py-2 text-[13px] outline-none transition-colors placeholder:text-muted-foreground/60 focus:border-primary"
                 />
@@ -871,15 +897,22 @@ export function ConversationStory({
               <label className="block">
                 <span className="mb-1 block text-[11.5px] font-semibold text-muted-foreground">Scheduled for</span>
                 <input
-                  type="date"
+                  type="datetime-local"
                   value={scheduledDate}
                   onChange={(e) => setScheduledDate(e.target.value)}
                   className="w-full rounded-lg border border-border bg-background px-3 py-2 text-[13px] outline-none transition-colors focus:border-primary"
                 />
-                {suggestedSlotLabel && scheduledDate === suggestedSlotDate && (
+                {workCardDraft?.preferredTimeResolved ? (
                   <span className="mt-1 block text-[11px] text-muted-foreground">
-                    A suggested day based on your diary ({suggestedSlotLabel}) — worth checking against today&apos;s bookings.
+                    The time the customer actually asked for — worth checking against today&apos;s bookings before saving.
                   </span>
+                ) : (
+                  suggestedSlotLabel &&
+                  scheduledDate === suggestedScheduledValue && (
+                    <span className="mt-1 block text-[11px] text-muted-foreground">
+                      A suggested day based on your diary ({suggestedSlotLabel}) — worth checking against today&apos;s bookings.
+                    </span>
+                  )
                 )}
               </label>
               <label className="block">

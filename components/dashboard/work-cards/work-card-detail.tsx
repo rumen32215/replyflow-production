@@ -29,6 +29,7 @@ import {
 import { toDateTimeLocalValue, mapsHref, formatDateTime, formatDate } from "@/lib/work-card-format";
 import type { ConversationGroup } from "@/lib/conversations";
 import { cn } from "@/lib/utils";
+import { revalidateWorkCards } from "@/app/(dashboard)/dashboard/work-cards/actions";
 
 export interface WorkCardDetailData {
   id: string;
@@ -181,6 +182,10 @@ export function WorkCardDetail({
     });
     setEditing(false);
     acknowledge("Updated.");
+    // Production hardening — the Work Cards list is a separate route
+    // whose own cached data has no way to know this direct client
+    // write happened; router.refresh() only re-fetches this page.
+    await revalidateWorkCards();
     router.refresh();
   }
 
@@ -544,6 +549,14 @@ export function WorkCardDetail({
                   <input
                     value={issue}
                     onChange={(e) => setIssue(e.target.value)}
+                    // Production hardening — a real "boiler
+                    // leakingLeaking boiler - kitchen sink" value found
+                    // in production data: typing into a pre-filled
+                    // field without clearing it first silently
+                    // concatenates instead of replacing. Auto-selecting
+                    // on focus means the first keystroke replaces the
+                    // whole value, matching what most people expect.
+                    onFocus={(e) => e.target.select()}
                     className="w-full rounded-lg border border-border bg-background px-3 py-2 text-[13.5px] outline-none focus:border-primary"
                   />
                 </Field>

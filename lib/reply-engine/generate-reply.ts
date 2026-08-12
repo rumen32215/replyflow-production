@@ -193,7 +193,19 @@ export async function generateReplyForMessage(params: {
         return;
       }
       photoAnalysis = { visible: analysis.visible, possible: analysis.possible, unknown: analysis.unknown };
-      effectiveMessageBody = mediaCaption ? `[Customer sent a photo: "${mediaCaption}"]` : "[Customer sent a photo]";
+      // Real production bug: classifyMessage() below only ever sees
+      // effectiveMessageBody, never photoAnalysis directly (that's
+      // fed to generation via assembleContext/facts.ts instead) — a
+      // batch of photos with no caption all looked identical to the
+      // classifier ("[Customer sent a photo]" repeated with no other
+      // signal), which drifted the primary intent to SOCIAL on a
+      // genuine photo of a leaking toilet. The analysis is already
+      // hedged/safety-checked (it's the exact same object stored to
+      // conversation_photos and shown as Photo Intelligence) — folding
+      // its visible-content line in here just gives classification the
+      // same real signal generation already had, nothing new invented.
+      const photoTag = mediaCaption ? `[Customer sent a photo: "${mediaCaption}"]` : "[Customer sent a photo]";
+      effectiveMessageBody = `${photoTag} Photo shows: ${analysis.visible}`;
     }
 
     // Prior Conversation State — comes from the episode already

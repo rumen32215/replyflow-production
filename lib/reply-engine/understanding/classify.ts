@@ -1,6 +1,6 @@
 import "server-only";
 import { getCompletion } from "../llm/client";
-import { formatNowLondon } from "@/lib/datetime";
+import { formatNowLondon, londonWallClockToUtcIso } from "@/lib/datetime";
 import { extractPatternEntities, withPostcodeBackstop } from "./entities";
 import {
   INTENTS,
@@ -127,7 +127,7 @@ const SYSTEM_PROMPT = `You do two jobs for one inbound WhatsApp message to a UK 
 
 2) UPDATE the conversation state. You are given the PREVIOUS state (where this conversation already was) — your job is to move it forward, not to re-derive it from nothing:
 - stage: understand (first contact, nothing established yet) -> diagnose (working out what the problem/need actually is) -> collect (gathering the specific details still needed: location, timing, etc.) -> quote_or_book (enough is known to offer a price or a visit) -> confirm (a booking has been proposed/made) -> waiting (confirmed, nothing further needed until the job happens) -> completed (the job has happened) -> closed (the conversation ended without becoming a job, or is genuinely finished). Never advance to quote_or_book or confirm while slots.issue is still null — a booking needs to know what the job actually is before it can be offered, even if timing/location came up first. You do not need to decide whether the previous state's stage still applies if the customer has started a brand new, unrelated request — that decision is handled separately by episode_continuity below; just answer the stage question honestly for the request PREVIOUS STATE actually describes.
-- slots: carry forward every slot value from the previous state unchanged unless this message adds or corrects one. issue = the problem/job in a few words. location = postcode/area if given. preferred_time = whatever day/time the customer has proposed, in their own words (e.g. "tomorrow morning", "around 4pm") — if the customer gives a new time, replace the old one; if they haven't mentioned timing yet, keep it null. preferred_time_resolved = the same proposed time, but as a real ISO 8601 timestamp (e.g. "2026-08-12T09:00:00.000Z"), computed against CURRENT DATE/TIME given below — only when you are genuinely confident and unambiguous about both the date and the time; null whenever there's real ambiguity (no year-round guessing about which "Tuesday" someone means, no assuming a time of day that wasn't stated). This never overrides preferred_time, which always stays in the customer's own words regardless.
+- slots: carry forward every slot value from the previous state unchanged unless this message adds or corrects one. issue = the problem/job in a few words. location = postcode/area if given. preferred_time = whatever day/time the customer has proposed, in their own words (e.g. "tomorrow morning", "around 4pm") — if the customer gives a new time, replace the old one; if they haven't mentioned timing yet, keep it null. preferred_time_resolved = the same proposed time, but as a real date and time, computed against CURRENT DATE/TIME given below — only when you are genuinely confident and unambiguous about both the date and the time; null whenever there's real ambiguity (no year-round guessing about which "Tuesday" someone means, no assuming a time of day that wasn't stated). Write it as the LOCAL Europe/London wall-clock time, in the exact form "YYYY-MM-DDTHH:MM:SS" with NO "Z" and no timezone offset at the end (e.g. "10am tomorrow" on the date given below becomes "2026-08-13T10:00:00", not "2026-08-13T10:00:00.000Z" and not any other timezone's equivalent) — the application converts this to UTC itself; adding your own "Z" or offset would silently double-convert it and get the customer's requested time wrong. This never overrides preferred_time, which always stays in the customer's own words regardless.
 - open_question: your best guess at what will still be outstanding after this turn, in a few words (e.g. "preferred time", "postcode"), or null if you expect nothing to be outstanding. This is a provisional estimate — the actual reply-writing step may ask something different and will correct this afterward, so don't overthink it.
 - greeting_given: true if a greeting has already happened anywhere in this thread (including the previous state already being true) — once true, it stays true.
 - last_topic: a short label for what the live exchange is actually about right now (e.g. "radiator repair booking", "call-out fee question", "casual chat") — replace it when the topic genuinely changes, keep it when it doesn't.
@@ -162,6 +162,24 @@ function isEpisodeContinuity(value: unknown): value is "same_job" | "new_job" {
 
 function isIntent(value: unknown): value is Intent {
   return typeof value === "string" && (INTENTS as readonly string[]).includes(value);
+}
+
+/** Timezone fix (see lib/datetime.ts's londonWallClockToUtcIso doc
+ * comment for the full story) — the model is asked for a London local
+ * wall-clock time, but even if it still attaches a "Z" out of habit,
+ * this only ever trusts the literal digits, never a suffix, and
+ * converts them to the real UTC instant here, deterministically. */
+function resolvePreferredTime(rawConversationState: unknown): unknown {
+  if (!rawConversationState || typeof rawConversationState !== "object") return rawConversationState;
+  const cs = rawConversationState as Record<string, unknown>;
+  if (!cs.slots || typeof cs.slots !== "object") return rawConversationState;
+  const slots = cs.slots as Record<string, unknown>;
+  const raw = slots.preferred_time_resolved;
+  if (typeof raw !== "string") return rawConversationState;
+  return {
+    ...cs,
+    slots: { ...slots, preferred_time_resolved: londonWallClockToUtcIso(raw) },
+  };
 }
 
 /** Defensive parsing — the model's output is never trusted blindly.
@@ -211,7 +229,7 @@ function toUnderstandingResult(raw: unknown, messageText: string, priorState: Co
     },
     safetyTag,
     conversationState: {
-      ...withPostcodeBackstop(toConversationState(r.conversation_state), patternEntities),
+      ...withPostcodeBackstop(toConversationState(resolvePreferredTime(r.conversation_state)), patternEntities),
       // Carried forward mechanically, not by the model's own
       // conversation_state schema — see state.ts's own doc comment on
       // ConversationState.urgency.

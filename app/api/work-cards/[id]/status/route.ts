@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { recordErrorEvent } from "@/lib/error-events";
@@ -78,6 +79,10 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
   if (workCard.episode_id && (nextStatus === "completed" || nextStatus === "cancelled")) {
     await closeEpisode(service, workCard.episode_id, nextStatus === "completed" ? "completed" : "abandoned");
   }
+
+  // Production hardening — the Work Cards list is a separate route
+  // whose own cached data has no way to know this write happened.
+  revalidatePath("/dashboard/work-cards");
 
   return NextResponse.json({ status: nextStatus, completedAt: nextStatus === "completed" ? (updates.completed_at as string) : null });
 }

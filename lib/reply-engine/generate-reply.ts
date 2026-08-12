@@ -239,15 +239,22 @@ export async function generateReplyForMessage(params: {
     // ReplyFlow V4 — Conversation Episodes (Implementation Contract
     // §B). A real, structured decision the orchestrator acts on, not a
     // prompt instruction alone. Only meaningful when this message was
-    // provisionally filed under an already-in-progress episode
-    // (episode.isNew === false) — a brand new episode has nothing to
-    // compare continuity against, and the classifier is told exactly
-    // that (see classify.ts's own prompt).
+    // provisionally filed under an already-in-progress OR a
+    // recently-booked episode (episode.isNew === false) — a brand new
+    // episode has nothing to compare continuity against, and the
+    // classifier is told exactly that (see classify.ts's own prompt).
     if (!episode.isNew && understanding.episodeContinuity === "new_job") {
-      await closeEpisode(supabase, episodeId, "abandoned");
+      // Product Reset Blueprint D.1 — a booked episode that turns out
+      // not to be what this message is about is still a real, valid
+      // future appointment, not something that ever happened and then
+      // got superseded. Only a genuinely in-progress episode (one that
+      // never became a real booking) gets marked abandoned here.
+      if (!episode.wasBookedCandidate) {
+        await closeEpisode(supabase, episodeId, "abandoned");
+      }
       const fresh = await createEpisode(supabase, { conversationId, businessId });
       episodeId = fresh.id;
-      episode = { id: fresh.id, priorState: EMPTY_CONVERSATION_STATE, isNew: true };
+      episode = { id: fresh.id, priorState: EMPTY_CONVERSATION_STATE, isNew: true, wasBookedCandidate: false };
 
       // Re-file the message — and its photo, if one was already
       // analysed above — under the new episode. Both were only ever

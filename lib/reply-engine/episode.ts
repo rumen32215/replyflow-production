@@ -22,6 +22,29 @@ type ServiceClient = ReturnType<typeof createServiceClient>;
 
 const IN_PROGRESS_STATUSES = ["active", "waiting_owner"] as const;
 
+/**
+ * Product Reset Blueprint D.1 — the continuity fix. A `booked` episode
+ * is deliberately excluded from "in progress" above (a confirmed
+ * future appointment shouldn't block a genuinely new, unrelated
+ * problem from opening its own episode) — but that same exclusion
+ * meant ANY message after booking, including more photos of the exact
+ * same job, was routed into a brand-new, context-free episode with the
+ * classifier never even consulted (traced live: a booked kitchen-sink
+ * leak, followed minutes later by photos of that same leak, opened a
+ * fresh episode and misclassified the photos as a new EMERGENCY).
+ *
+ * This constant bounds how long a booked episode stays eligible to be
+ * offered as a continuity candidate: always eligible while its
+ * appointment is still upcoming (no matter how far out), and for this
+ * many hours after the scheduled time has passed — long enough for a
+ * same-day or next-day follow-up, short enough that a customer
+ * messaging again days or weeks later gets a fresh episode rather than
+ * reopening old history. This boundary is deterministic, not a model
+ * judgment — the classifier is never trusted with deciding whether a
+ * two-week-old job should be reopened.
+ */
+const BOOKED_CONTINUITY_GRACE_HOURS = 48;
+
 export interface EpisodeRow {
   id: string;
   status: "active" | "waiting_owner" | "booked" | "completed" | "abandoned";
@@ -39,6 +62,46 @@ export async function findInProgressEpisode(supabase: ServiceClient, conversatio
     .in("status", IN_PROGRESS_STATUSES)
     .maybeSingle();
   return (data as EpisodeRow | null) ?? null;
+}
+
+/**
+ * The customer's most recently booked episode, only if it's still
+ * genuinely "live" — see BOOKED_CONTINUITY_GRACE_HOURS above. Looks up
+ * the episode's own linked Work Card for the real appointment time
+ * (episodes don't store a schedule themselves; work_cards.episode_id
+ * already exists for exactly this relationship). An episode with no
+ * linked Work Card, or a Work Card with no scheduled_for, has nothing
+ * to anchor "still upcoming" to — deliberately not offered as a
+ * candidate rather than guessing.
+ */
+export async function findRecentlyBookedEpisode(
+  supabase: ServiceClient,
+  conversationId: string,
+  now: Date = new Date()
+): Promise<EpisodeRow | null> {
+  const { data: episode } = await supabase
+    .from("conversation_episodes")
+    .select("id, status, ai_state")
+    .eq("conversation_id", conversationId)
+    .eq("status", "booked")
+    .order("opened_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (!episode) return null;
+
+  const { data: workCard } = await supabase
+    .from("work_cards")
+    .select("scheduled_for")
+    .eq("episode_id", episode.id)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (!workCard?.scheduled_for) return null;
+
+  const scheduledMs = new Date(workCard.scheduled_for).getTime();
+  const graceMs = BOOKED_CONTINUITY_GRACE_HOURS * 60 * 60 * 1000;
+  const stillLive = scheduledMs + graceMs >= now.getTime();
+  return stillLive ? (episode as EpisodeRow) : null;
 }
 
 /**
@@ -121,20 +184,36 @@ export interface ResolvedEpisode {
    * (Contract §B: "If PREVIOUS STATE is empty... the application does
    * not use this field in that case"). */
   isNew: boolean;
+  /** Product Reset Blueprint D.1 — true when this episode was offered
+   * as a continuity candidate because it's a recently booked job, not
+   * because it's strictly "in progress". The caller must never treat a
+   * "new_job" verdict against a candidate like this as a reason to
+   * abandon it — a booked episode superseded by an unrelated new
+   * request is still a real, valid future appointment and must be left
+   * exactly as "booked". Only a genuinely in-progress episode gets
+   * marked abandoned when superseded. */
+  wasBookedCandidate: boolean;
 }
 
 /** The one entry point generate-reply.ts calls at the start of every
- * message: find the customer's in-progress episode, or create one if
- * there isn't one (Contract §B, rule 1 — deterministic, no model
- * judgment needed when nothing is in progress at all). */
+ * message: find the customer's in-progress episode, or a still-live
+ * recently-booked one to check continuity against, or create a new one
+ * if neither exists (Contract §B rule 1, extended by Blueprint D.1). */
 export async function resolveEpisodeForMessage(
   supabase: ServiceClient,
-  input: { conversationId: string; businessId: string }
+  input: { conversationId: string; businessId: string },
+  now: Date = new Date()
 ): Promise<ResolvedEpisode> {
   const inProgress = await findInProgressEpisode(supabase, input.conversationId);
-  if (!inProgress) {
-    const created = await createEpisode(supabase, input);
-    return { id: created.id, priorState: EMPTY_CONVERSATION_STATE, isNew: true };
+  if (inProgress) {
+    return { id: inProgress.id, priorState: toConversationState(inProgress.ai_state), isNew: false, wasBookedCandidate: false };
   }
-  return { id: inProgress.id, priorState: toConversationState(inProgress.ai_state), isNew: false };
+
+  const recentlyBooked = await findRecentlyBookedEpisode(supabase, input.conversationId, now);
+  if (recentlyBooked) {
+    return { id: recentlyBooked.id, priorState: toConversationState(recentlyBooked.ai_state), isNew: false, wasBookedCandidate: true };
+  }
+
+  const created = await createEpisode(supabase, input);
+  return { id: created.id, priorState: EMPTY_CONVERSATION_STATE, isNew: true, wasBookedCandidate: false };
 }

@@ -140,10 +140,18 @@ class FakeSupabase {
 // imported. `current*` are mutated per-call by each test.
 
 let currentSupabase: FakeSupabase;
-let nextEpisode: { id: string; priorState: unknown; isNew: boolean };
+let nextEpisode: { id: string; priorState: unknown; isNew: boolean; wasBookedCandidate: boolean };
 let nextUnderstanding: unknown;
 let nextGeneration: unknown;
 let nextPhotoAnalysis: { visible: string; possible: string; unknown: string } | null = null;
+
+// Product Reset Blueprint D.1 — call spies for the two functions whose
+// invocation (or non-invocation) IS the behaviour under test: a booked
+// episode superseded by an unrelated request must never be abandoned,
+// while a genuinely in-progress one still must be (existing behaviour).
+let closeEpisodeCalls: Array<{ episodeId: string; status: string }> = [];
+let createEpisodeCallCount = 0;
+let createdEpisodeId = "unused-new-episode";
 
 // "server-only" throws unconditionally when required outside Next's own
 // build pipeline (by design, as a guard) — harmless to no-op here since
@@ -159,8 +167,13 @@ mock.module("@/lib/error-events", {
 mock.module("./episode", {
   namedExports: {
     resolveEpisodeForMessage: async () => nextEpisode,
-    closeEpisode: async () => {},
-    createEpisode: async () => ({ id: "unused-new-episode" }),
+    closeEpisode: async (_supabase: unknown, episodeId: string, status: string) => {
+      closeEpisodeCalls.push({ episodeId, status });
+    },
+    createEpisode: async () => {
+      createEpisodeCallCount += 1;
+      return { id: createdEpisodeId };
+    },
     updateEpisodeState: async () => {},
   },
 });
@@ -277,7 +290,7 @@ test("1. a normal text message supersedes the previous pending draft", async () 
   seedBusiness(currentSupabase);
   const episodeId = "ep-1";
   seedPendingDraft(currentSupabase, { episodeId, customerMessageId: "old-msg", draftId: "old-draft" });
-  nextEpisode = { id: episodeId, priorState: EMPTY_CONVERSATION_STATE, isNew: false };
+  nextEpisode = { id: episodeId, priorState: EMPTY_CONVERSATION_STATE, isNew: false, wasBookedCandidate: false };
   nextUnderstanding = baseUnderstanding();
   nextGeneration = baseGeneration();
 
@@ -298,7 +311,7 @@ test("2. a non-text/unsupported message supersedes the previous pending draft be
   seedBusiness(currentSupabase);
   const episodeId = "ep-1";
   seedPendingDraft(currentSupabase, { episodeId, customerMessageId: "old-msg", draftId: "old-draft" });
-  nextEpisode = { id: episodeId, priorState: EMPTY_CONVERSATION_STATE, isNew: false };
+  nextEpisode = { id: episodeId, priorState: EMPTY_CONVERSATION_STATE, isNew: false, wasBookedCandidate: false };
 
   await generateReplyForMessage({
     businessId: BUSINESS_ID,
@@ -319,7 +332,7 @@ test("3. an image with no mediaId supersedes the previous pending draft before c
   seedBusiness(currentSupabase);
   const episodeId = "ep-1";
   seedPendingDraft(currentSupabase, { episodeId, customerMessageId: "old-msg", draftId: "old-draft" });
-  nextEpisode = { id: episodeId, priorState: EMPTY_CONVERSATION_STATE, isNew: false };
+  nextEpisode = { id: episodeId, priorState: EMPTY_CONVERSATION_STATE, isNew: false, wasBookedCandidate: false };
 
   await generateReplyForMessage({
     businessId: BUSINESS_ID,
@@ -340,7 +353,7 @@ test("4. an image whose media processing returns null supersedes the previous pe
   seedBusiness(currentSupabase);
   const episodeId = "ep-1";
   seedPendingDraft(currentSupabase, { episodeId, customerMessageId: "old-msg", draftId: "old-draft" });
-  nextEpisode = { id: episodeId, priorState: EMPTY_CONVERSATION_STATE, isNew: false };
+  nextEpisode = { id: episodeId, priorState: EMPTY_CONVERSATION_STATE, isNew: false, wasBookedCandidate: false };
   nextPhotoAnalysis = null; // simulates handleCustomerPhoto failing (download/auth/analysis error)
 
   await generateReplyForMessage({
@@ -361,7 +374,7 @@ test("5. multiple consecutive failed/unsupported image messages leave only the n
   currentSupabase = new FakeSupabase();
   seedBusiness(currentSupabase);
   const episodeId = "ep-1";
-  nextEpisode = { id: episodeId, priorState: EMPTY_CONVERSATION_STATE, isNew: false };
+  nextEpisode = { id: episodeId, priorState: EMPTY_CONVERSATION_STATE, isNew: false, wasBookedCandidate: false };
   nextPhotoAnalysis = null;
 
   await generateReplyForMessage({
@@ -400,7 +413,7 @@ test("6. a valid BOOKING_REQUEST draft cannot be buried underneath older pending
   currentSupabase = new FakeSupabase();
   seedBusiness(currentSupabase);
   const episodeId = "ep-1";
-  nextEpisode = { id: episodeId, priorState: EMPTY_CONVERSATION_STATE, isNew: false };
+  nextEpisode = { id: episodeId, priorState: EMPTY_CONVERSATION_STATE, isNew: false, wasBookedCandidate: false };
 
   // A failed photo lands first, exactly like the live incident.
   nextPhotoAnalysis = null;
@@ -438,7 +451,7 @@ test("7. drafts belonging to a different episode are never superseded", async ()
   const episodeB = "ep-B";
   seedPendingDraft(currentSupabase, { episodeId: episodeA, customerMessageId: "old-in-a", draftId: "draft-a" });
 
-  nextEpisode = { id: episodeB, priorState: EMPTY_CONVERSATION_STATE, isNew: true };
+  nextEpisode = { id: episodeB, priorState: EMPTY_CONVERSATION_STATE, isNew: true, wasBookedCandidate: false };
   nextPhotoAnalysis = null;
   await generateReplyForMessage({
     businessId: BUSINESS_ID,
@@ -460,7 +473,7 @@ test("8. the current newly-created draft remains pending and is not accidentally
   seedBusiness(currentSupabase);
   const episodeId = "ep-1";
   seedPendingDraft(currentSupabase, { episodeId, customerMessageId: "old-msg", draftId: "old-draft" });
-  nextEpisode = { id: episodeId, priorState: EMPTY_CONVERSATION_STATE, isNew: false };
+  nextEpisode = { id: episodeId, priorState: EMPTY_CONVERSATION_STATE, isNew: false, wasBookedCandidate: false };
   nextUnderstanding = baseUnderstanding();
   nextGeneration = baseGeneration();
 
@@ -474,4 +487,140 @@ test("8. the current newly-created draft remains pending and is not accidentally
   const own = currentSupabase.tables.reply_drafts.find((d) => d.customer_message_id === "brand-new-msg");
   assert.ok(own, "the current message's own draft must exist");
   assert.equal(own?.status, "pending", "supersede runs before this row is inserted, so it must never catch its own draft");
+});
+
+/* -------- Product Reset Blueprint D.1 — booked-episode continuity -------- */
+// resolveEpisodeForMessage itself (which episode.test.ts covers directly)
+// is mocked here via `nextEpisode` — these tests exercise what
+// generate-reply.ts's orchestrator DOES with a wasBookedCandidate
+// episode: whether it stays attached, and critically, whether a
+// superseding "new_job" verdict ever abandons a real booked job.
+
+test("A. booked job + same-job text reply stays attached to the existing episode", async () => {
+  currentSupabase = new FakeSupabase();
+  seedBusiness(currentSupabase);
+  closeEpisodeCalls = [];
+  createEpisodeCallCount = 0;
+  const bookedEpisodeId = "ep-booked";
+  nextEpisode = { id: bookedEpisodeId, priorState: EMPTY_CONVERSATION_STATE, isNew: false, wasBookedCandidate: true };
+  nextUnderstanding = baseUnderstanding({ primaryIntent: "RETURNING_PROBLEM", episodeContinuity: "same_job" });
+  nextGeneration = baseGeneration({ draftReply: "Thanks — I'll pass that on to the team ahead of tomorrow's visit." });
+
+  await generateReplyForMessage({
+    businessId: BUSINESS_ID,
+    conversationId: CONVERSATION_ID,
+    customerMessageId: "followup-text",
+    messageBody: "Just to add — it's worse than I thought, there's water pooling now too.",
+  });
+
+  const draft = currentSupabase.tables.reply_drafts.find((d) => d.customer_message_id === "followup-text");
+  assert.equal(draft?.episode_id, bookedEpisodeId);
+  assert.equal(closeEpisodeCalls.length, 0, "the booked episode must never be closed for a same_job follow-up");
+  assert.equal(createEpisodeCallCount, 0, "no new episode should be created for a same_job follow-up");
+});
+
+test("B. booked job + same-job photo stays attached to the existing episode, and Photo Intelligence still runs", async () => {
+  currentSupabase = new FakeSupabase();
+  seedBusiness(currentSupabase);
+  closeEpisodeCalls = [];
+  createEpisodeCallCount = 0;
+  const bookedEpisodeId = "ep-booked";
+  nextEpisode = { id: bookedEpisodeId, priorState: EMPTY_CONVERSATION_STATE, isNew: false, wasBookedCandidate: true };
+  nextPhotoAnalysis = {
+    visible: "Water pooling around the base of a sink cabinet, a plumbing fitting visibly dripping.",
+    possible: "May indicate a loose or failed fitting connection.",
+    unknown: "Exact cause cannot be confirmed from the photo alone.",
+  };
+  nextUnderstanding = baseUnderstanding({ primaryIntent: "RETURNING_PROBLEM", episodeContinuity: "same_job" });
+  nextGeneration = baseGeneration({ draftReply: "Thanks for the photo — that's really helpful ahead of tomorrow's visit." });
+
+  await generateReplyForMessage({
+    businessId: BUSINESS_ID,
+    conversationId: CONVERSATION_ID,
+    customerMessageId: "followup-photo",
+    messageBody: "[image message]",
+    messageType: "image",
+    mediaId: "media-followup",
+  });
+
+  const draft = currentSupabase.tables.reply_drafts.find((d) => d.customer_message_id === "followup-photo");
+  assert.equal(draft?.episode_id, bookedEpisodeId, "the photo's draft must stay on the booked job's episode");
+  assert.equal(closeEpisodeCalls.length, 0);
+  assert.equal(createEpisodeCallCount, 0);
+});
+
+test("C. booked job + a genuinely unrelated new request creates a new episode WITHOUT abandoning the booked one", async () => {
+  currentSupabase = new FakeSupabase();
+  seedBusiness(currentSupabase);
+  closeEpisodeCalls = [];
+  createEpisodeCallCount = 0;
+  createdEpisodeId = "ep-fresh";
+  const bookedEpisodeId = "ep-booked";
+  nextEpisode = { id: bookedEpisodeId, priorState: EMPTY_CONVERSATION_STATE, isNew: false, wasBookedCandidate: true };
+  nextUnderstanding = baseUnderstanding({ primaryIntent: "BOOKING_REQUEST", episodeContinuity: "new_job" });
+  nextGeneration = baseGeneration({ draftReply: "Sure — when would you like someone to look at that?" });
+
+  await generateReplyForMessage({
+    businessId: BUSINESS_ID,
+    conversationId: CONVERSATION_ID,
+    customerMessageId: "unrelated-request",
+    messageBody: "Different question — my electric shower has also stopped working, can someone look at that too?",
+  });
+
+  assert.equal(createEpisodeCallCount, 1, "a genuinely unrelated request must open a new episode");
+  assert.equal(
+    closeEpisodeCalls.length,
+    0,
+    "the booked episode is a real, valid future appointment and must never be marked abandoned just because a later message is about something else"
+  );
+  const draft = currentSupabase.tables.reply_drafts.find((d) => d.customer_message_id === "unrelated-request");
+  assert.equal(draft?.episode_id, "ep-fresh");
+  assert.notEqual(draft?.episode_id, bookedEpisodeId);
+});
+
+test("F. an in-progress (not booked) episode superseded by a new_job verdict is still abandoned, exactly as before", async () => {
+  currentSupabase = new FakeSupabase();
+  seedBusiness(currentSupabase);
+  closeEpisodeCalls = [];
+  createEpisodeCallCount = 0;
+  createdEpisodeId = "ep-fresh-2";
+  const inProgressEpisodeId = "ep-in-progress";
+  nextEpisode = { id: inProgressEpisodeId, priorState: EMPTY_CONVERSATION_STATE, isNew: false, wasBookedCandidate: false };
+  nextUnderstanding = baseUnderstanding({ primaryIntent: "BOOKING_REQUEST", episodeContinuity: "new_job" });
+  nextGeneration = baseGeneration();
+
+  await generateReplyForMessage({
+    businessId: BUSINESS_ID,
+    conversationId: CONVERSATION_ID,
+    customerMessageId: "new-topic",
+    messageBody: "Actually, different issue — my toilet is now leaking too.",
+  });
+
+  assert.deepEqual(closeEpisodeCalls, [{ episodeId: inProgressEpisodeId, status: "abandoned" }]);
+  assert.equal(createEpisodeCallCount, 1);
+});
+
+test("G. supersede/safety behaviour composes correctly with a booked-episode continuity resolution", async () => {
+  currentSupabase = new FakeSupabase();
+  seedBusiness(currentSupabase);
+  closeEpisodeCalls = [];
+  createEpisodeCallCount = 0;
+  const bookedEpisodeId = "ep-booked";
+  seedPendingDraft(currentSupabase, { episodeId: bookedEpisodeId, customerMessageId: "stale-msg", draftId: "stale-draft" });
+  nextEpisode = { id: bookedEpisodeId, priorState: EMPTY_CONVERSATION_STATE, isNew: false, wasBookedCandidate: true };
+  nextUnderstanding = baseUnderstanding({ primaryIntent: "RETURNING_PROBLEM", episodeContinuity: "same_job" });
+  nextGeneration = baseGeneration();
+
+  await generateReplyForMessage({
+    businessId: BUSINESS_ID,
+    conversationId: CONVERSATION_ID,
+    customerMessageId: "followup-2",
+    messageBody: "One more thing about that same leak.",
+  });
+
+  // The existing supersede fix still fires normally for this episode.
+  assert.equal(statusOf(currentSupabase, "stale-draft"), "superseded");
+  const draft = currentSupabase.tables.reply_drafts.find((d) => d.customer_message_id === "followup-2");
+  assert.equal(draft?.status, "pending");
+  assert.equal(draft?.episode_id, bookedEpisodeId);
 });

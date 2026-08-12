@@ -15,6 +15,23 @@ import { resolveEpisodeForMessage, closeEpisode, createEpisode, updateEpisodeSta
 const STATE_HISTORY_WINDOW = 4;
 
 /**
+ * ReplyFlow V4 fix — factored out so every branch that can create a
+ * reply_drafts row calls it immediately before doing so, not just the
+ * main classify/generate path. Three early-return branches (a
+ * non-text/non-image message, an image with no mediaId, an image
+ * whose analysis failed) used to build their attachment-acknowledgment
+ * draft without ever reaching the one supersede call that used to live
+ * deep in the main pipeline — a run of such messages left several
+ * "pending" drafts stacked in the same episode, and the Conversations
+ * UI (newest-pending-first) surfaced whichever fallback happened to be
+ * last, burying a real draft underneath. Always called before this
+ * message's own draft is inserted, so it can never supersede itself.
+ */
+async function supersedePendingDrafts(supabase: ReturnType<typeof createServiceClient>, episodeId: string) {
+  await supabase.from("reply_drafts").update({ status: "superseded" }).eq("episode_id", episodeId).eq("status", "pending");
+}
+
+/**
  * The Reply Engine orchestrator — the one entry point that wires
  * Understanding -> Context Assembly -> Prompt -> LLM -> Safety Layer ->
  * Draft, exactly the pipeline agreed in Sprint 9 §3 and refined by
@@ -99,6 +116,7 @@ export async function generateReplyForMessage(params: {
     // check (no Understanding call happens for them at all) — they stay
     // filed under whichever episode was already resolved above.
     if (messageType !== "text" && messageType !== "image") {
+      await supersedePendingDrafts(supabase, episodeId);
       await supabase
         .from("reply_drafts")
         .upsert(buildAttachmentAcknowledgmentDraft({ businessId, conversationId, episodeId, customerMessageId }), {
@@ -148,6 +166,7 @@ export async function generateReplyForMessage(params: {
         // Meta sent an image-type message with no media id at all —
         // genuinely shouldn't happen, but falling back to the same
         // honest stopgap is safer than pretending to understand it.
+        await supersedePendingDrafts(supabase, episodeId);
         await supabase
           .from("reply_drafts")
           .upsert(buildAttachmentAcknowledgmentDraft({ businessId, conversationId, episodeId, customerMessageId }), { onConflict: "customer_message_id" });
@@ -167,6 +186,7 @@ export async function generateReplyForMessage(params: {
         // Download, storage, or analysis failed somewhere — the photo
         // may or may not be stored, but there's nothing safe to draft
         // from. Same honest fallback as every other unsupported case.
+        await supersedePendingDrafts(supabase, episodeId);
         await supabase
           .from("reply_drafts")
           .upsert(buildAttachmentAcknowledgmentDraft({ businessId, conversationId, episodeId, customerMessageId }), { onConflict: "customer_message_id" });
@@ -248,7 +268,7 @@ export async function generateReplyForMessage(params: {
     // This is what makes an old, never-actioned draft structurally
     // unable to resurface as "the" suggested reply for a later message
     // in the same job.
-    await supabase.from("reply_drafts").update({ status: "superseded" }).eq("episode_id", episodeId).eq("status", "pending");
+    await supersedePendingDrafts(supabase, episodeId);
 
     // Understanding-level safety pre-check (Sprint 9.1 §6) — some
     // messages must never reach the generation call at all.

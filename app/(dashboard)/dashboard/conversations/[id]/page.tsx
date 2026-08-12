@@ -269,80 +269,97 @@ export default async function ConversationDetailPage({ params }: { params: { id:
         </span>
       </div>
 
-      <ConversationStory
-        conversationId={conversation.id}
-        episodeId={episodeId}
-        businessId={conversation.business_id}
-        businessName={business?.business_name ?? "The team"}
-        status={conversation.status}
-        customerName={conversation.customer_name}
-        customerPhone={conversation.customer_phone}
-        messageCount={allMessages.length}
-        photoCount={photoCount}
-        existingWorkCard={existingWorkCards?.[0] ?? null}
-        workCardDraft={workCardDraft}
-        latestCustomerMessage={latestCustomerMessage}
-        suggestedSlotDate={suggestedSlot ? toDateString(suggestedSlot.date) : null}
-        suggestedSlotLabel={suggestedSlot?.label ?? null}
-        pendingDraft={pendingDrafts?.[0] ?? null}
-        relationshipStrength={relationshipStrength}
-        relationshipSummary={relationshipSummary}
-        communicationGuidance={communicationGuidance}
-      />
+      {/*
+        ReplyFlow V4 fix — ConversationStory used to sit outside this
+        scroll container, as a fixed-natural-height block between the
+        header and the messages list. ConversationsShell bounds this
+        whole pane to a fixed viewport height with overflow-hidden
+        (its own two-pane-scroll design, intentional for the sidebar
+        list); with ConversationStory outside the one scrollable
+        region, its own overflow (a long draft, an escalation banner)
+        had nowhere to go and was silently clipped, permanently hiding
+        Approve/Edit/Reject beneath it. Moving it inside the same
+        overflow-y-auto region as the messages — as an unpadded sibling
+        above the padded message list, preserving each one's exact
+        existing look — means its overflow is reachable exactly the
+        same way a long message thread already was.
+      */}
+      <div className="flex-1 overflow-y-auto">
+        <ConversationStory
+          conversationId={conversation.id}
+          episodeId={episodeId}
+          businessId={conversation.business_id}
+          businessName={business?.business_name ?? "The team"}
+          status={conversation.status}
+          customerName={conversation.customer_name}
+          customerPhone={conversation.customer_phone}
+          messageCount={allMessages.length}
+          photoCount={photoCount}
+          existingWorkCard={existingWorkCards?.[0] ?? null}
+          workCardDraft={workCardDraft}
+          latestCustomerMessage={latestCustomerMessage}
+          suggestedSlotDate={suggestedSlot ? toDateString(suggestedSlot.date) : null}
+          suggestedSlotLabel={suggestedSlot?.label ?? null}
+          pendingDraft={pendingDrafts?.[0] ?? null}
+          relationshipStrength={relationshipStrength}
+          relationshipSummary={relationshipSummary}
+          communicationGuidance={communicationGuidance}
+        />
 
-      <div className="flex-1 space-y-3 overflow-y-auto p-5 md:p-6">
-        {allMessages.length === 0 ? (
-          <p className="py-8 text-center text-sm text-muted-foreground">
-            Nothing has been said yet — I&apos;ll bring every message here.
-          </p>
-        ) : (
-          allMessages.map((m) => (
-            <div key={m.id} className={cn("flex", m.direction === "inbound" ? "justify-start" : "justify-end")}>
-              <div
-                className={cn(
-                  "max-w-[75%] rounded-2xl px-4 py-2.5 text-[13.5px] leading-relaxed",
-                  m.direction === "inbound"
-                    ? "rounded-bl-sm bg-muted text-foreground"
-                    : "rounded-br-sm bg-primary text-primary-foreground"
-                )}
-              >
-                {m.message_type === "image" && signedUrlByMessageId.has(m.id) ? (
-                  <>
-                    {/* eslint-disable-next-line @next/next/no-img-element -- a per-conversation signed URL, not an optimizable static asset */}
-                    <img
-                      src={signedUrlByMessageId.get(m.id)}
-                      alt="Photo sent by the customer"
-                      className="mb-1.5 max-h-64 w-full rounded-lg object-cover"
-                    />
-                    {m.body && m.body !== "[image message]" && <p>{m.body}</p>}
-                    {photoAnalysisByMessageId.has(m.id) && (
-                      <div className="mt-1.5 rounded-lg bg-background/60 px-2.5 py-2 text-[12px] leading-snug text-muted-foreground">
-                        <p>
-                          <span className="font-semibold text-foreground">Visible: </span>
-                          {photoAnalysisByMessageId.get(m.id)!.visible_summary}
-                        </p>
-                        <p className="mt-1">
-                          <span className="font-semibold text-foreground">Possible: </span>
-                          {photoAnalysisByMessageId.get(m.id)!.possible_summary}
-                        </p>
-                      </div>
-                    )}
-                  </>
-                ) : (
-                  m.body
-                )}
+        <div className="space-y-3 p-5 md:p-6">
+          {allMessages.length === 0 ? (
+            <p className="py-8 text-center text-sm text-muted-foreground">
+              Nothing has been said yet — I&apos;ll bring every message here.
+            </p>
+          ) : (
+            allMessages.map((m) => (
+              <div key={m.id} className={cn("flex", m.direction === "inbound" ? "justify-start" : "justify-end")}>
                 <div
                   className={cn(
-                    "mt-1 text-[10.5px]",
-                    m.direction === "inbound" ? "text-muted-foreground" : "text-primary-foreground/70"
+                    "max-w-[75%] rounded-2xl px-4 py-2.5 text-[13.5px] leading-relaxed",
+                    m.direction === "inbound"
+                      ? "rounded-bl-sm bg-muted text-foreground"
+                      : "rounded-br-sm bg-primary text-primary-foreground"
                   )}
                 >
-                  {new Date(m.created_at).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
+                  {m.message_type === "image" && signedUrlByMessageId.has(m.id) ? (
+                    <>
+                      {/* eslint-disable-next-line @next/next/no-img-element -- a per-conversation signed URL, not an optimizable static asset */}
+                      <img
+                        src={signedUrlByMessageId.get(m.id)}
+                        alt="Photo sent by the customer"
+                        className="mb-1.5 max-h-64 w-full rounded-lg object-cover"
+                      />
+                      {m.body && m.body !== "[image message]" && <p>{m.body}</p>}
+                      {photoAnalysisByMessageId.has(m.id) && (
+                        <div className="mt-1.5 rounded-lg bg-background/60 px-2.5 py-2 text-[12px] leading-snug text-muted-foreground">
+                          <p>
+                            <span className="font-semibold text-foreground">Visible: </span>
+                            {photoAnalysisByMessageId.get(m.id)!.visible_summary}
+                          </p>
+                          <p className="mt-1">
+                            <span className="font-semibold text-foreground">Possible: </span>
+                            {photoAnalysisByMessageId.get(m.id)!.possible_summary}
+                          </p>
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    m.body
+                  )}
+                  <div
+                    className={cn(
+                      "mt-1 text-[10.5px]",
+                      m.direction === "inbound" ? "text-muted-foreground" : "text-primary-foreground/70"
+                    )}
+                  >
+                    {new Date(m.created_at).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
+                  </div>
                 </div>
               </div>
-            </div>
-          ))
-        )}
+            ))
+          )}
+        </div>
       </div>
 
       {/*

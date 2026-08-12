@@ -18,7 +18,30 @@ interface RawGeneration {
   resolves_commitments: string[];
 }
 
-function toGenerationResult(raw: unknown): GenerationResult {
+/**
+ * Live testing found gpt-4o-mini emitting the literal string "null"
+ * (sometimes with surrounding whitespace, sometimes "NULL") for
+ * escalation_reason instead of using the schema's actual null option
+ * (build.ts already declares it type: ["string", "null"]) — a real
+ * small-model structured-output quirk. Left unnormalized, this string
+ * is truthy, so evaluate.ts's `generation.escalationReason ?? reasons[0]`
+ * fallback picks it over a real deterministic backstop reason (deposit,
+ * reschedule, payment), and the owner sees the literal word "null" in
+ * the escalation banner instead of an explanation. A genuinely empty/
+ * whitespace-only reason is the same failure shape. Everything else
+ * passes through completely unchanged — this only ever narrows null-
+ * like placeholders, never rewrites a real reason.
+ */
+function normalizeEscalationReason(raw: unknown): string | null {
+  if (typeof raw !== "string") return null;
+  const trimmed = raw.trim();
+  if (trimmed === "" || trimmed.toLowerCase() === "null") return null;
+  return raw;
+}
+
+/** Exported for direct testing — pure, no I/O (unlike generateReplyDraft
+ * below, which makes a real LLM call). */
+export function toGenerationResult(raw: unknown): GenerationResult {
   const fallback: GenerationResult = {
     draftReply: "",
     confidence: "unknown",
@@ -50,7 +73,7 @@ function toGenerationResult(raw: unknown): GenerationResult {
     draftReply: r.draft_reply.trim(),
     confidence,
     requiresEscalation: Boolean(r.requires_escalation),
-    escalationReason: typeof r.escalation_reason === "string" ? r.escalation_reason : null,
+    escalationReason: normalizeEscalationReason(r.escalation_reason),
     factsUsed: Array.isArray(r.facts_used) ? r.facts_used.filter((f): f is string => typeof f === "string") : [],
     noReplyNeeded,
     asksQuestion: typeof r.asks_question === "string" && r.asks_question.trim() ? r.asks_question.trim() : null,

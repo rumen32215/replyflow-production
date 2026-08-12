@@ -104,6 +104,23 @@ test("a draft inventing a deposit requirement always fails grounding and escalat
   assert.ok(result.reasons.some((r) => /deposit/i.test(r)));
 });
 
+test("3. the deposit backstop's own reason surfaces as escalationReason when the model's own reason is null", () => {
+  const result = evaluateSafety({
+    understanding: baseUnderstanding({ primaryIntent: "BOOKING_REQUEST" }),
+    generation: baseGeneration({
+      draftReply: "Great — a £20 call-out fee applies, and a deposit will be required to secure the booking.",
+      factsUsed: ["profile.callout_fee"],
+      escalationReason: null, // matches a real gpt-4o-mini "null" response, correctly normalized upstream by generate.ts
+    }),
+    facts: [{ id: "profile.callout_fee", text: "Charges a call-out fee of £20." }],
+  });
+  assert.equal(
+    result.escalationReason,
+    "Draft mentions a deposit, but nothing about a deposit is configured anywhere for this business."
+  );
+  assert.notEqual(result.escalationReason, "null");
+});
+
 test("a legitimately cited call-out fee with no deposit mention passes", () => {
   const result = evaluateSafety({
     understanding: baseUnderstanding({ primaryIntent: "BOOKING_REQUEST" }),

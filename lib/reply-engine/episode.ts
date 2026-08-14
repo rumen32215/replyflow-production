@@ -1,6 +1,7 @@
 import "server-only";
 import type { createServiceClient } from "@/lib/supabase/service";
 import { EMPTY_CONVERSATION_STATE, toConversationState, type ConversationState } from "./understanding/state";
+import { recordProductEvent } from "@/lib/product-events";
 
 type ServiceClient = ReturnType<typeof createServiceClient>;
 
@@ -211,6 +212,16 @@ export async function resolveEpisodeForMessage(
 
   const recentlyBooked = await findRecentlyBookedEpisode(supabase, input.conversationId, now);
   if (recentlyBooked) {
+    // Production hardening (2026-08-14) — the D.1 continuity path had
+    // no way to prove, in production, that it had ever actually fired
+    // (as opposed to being merely deployed and unit-tested). A real
+    // product event, not an error — this is the fix working exactly as
+    // designed — so it goes through product_events, not error_events.
+    await recordProductEvent({
+      eventType: "episode.booked_continuity_used",
+      businessId: input.businessId,
+      context: { conversationId: input.conversationId, episodeId: recentlyBooked.id },
+    });
     return { id: recentlyBooked.id, priorState: toConversationState(recentlyBooked.ai_state), isNew: false, wasBookedCandidate: true };
   }
 

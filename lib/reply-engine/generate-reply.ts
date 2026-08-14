@@ -152,7 +152,29 @@ export async function generateReplyForMessage(params: {
         bookedToday: 0,
       },
     });
-    if (!brain.thoughts.readyToActAlone) return;
+    if (!brain.thoughts.readyToActAlone) {
+      // Production hardening (2026-08-14) — this used to be a bare
+      // `return`, the one place in this entire pipeline that could drop
+      // a real customer message with zero trace: no draft, no
+      // error_events row, nothing indistinguishable from the message
+      // never having arrived at all. Traced live to a burst of messages
+      // (two photos and a later text reply) that vanished this way in
+      // the same conversation. Not a failure — the business genuinely
+      // hasn't finished teaching its receptionist yet — but
+      // "intentionally not actionable" still has to be an observable,
+      // queryable fact, not silence. Never a customer-facing draft: a
+      // fabricated "I can't help with that yet" here would be inventing
+      // an answer just to look like something happened.
+      await recordErrorEvent({
+        severity: "warning",
+        source: "reply-engine.not_ready_to_act_alone",
+        businessId,
+        message:
+          "No AI draft was attempted — this business hasn't finished teaching its receptionist yet (Shared Brain readiness gate).",
+        context: { conversationId, customerMessageId },
+      });
+      return;
+    }
 
     // Photo intake (Phase B — the differentiating loop). Runs before
     // Understanding so a successful analysis can be threaded into

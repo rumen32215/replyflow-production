@@ -122,7 +122,7 @@ export default async function ConversationDetailPage({ params }: { params: { id:
       ? supabase
           .from("reply_drafts")
           .select(
-            "id, draft_text, final_text, intent, confidence, requires_escalation, escalation_reason, facts_used, status"
+            "id, draft_text, final_text, intent, confidence, requires_escalation, escalation_reason, facts_used, status, customer_message_id"
           )
           .eq("episode_id", episodeId)
           .eq("status", "pending")
@@ -131,7 +131,7 @@ export default async function ConversationDetailPage({ params }: { params: { id:
       : supabase
           .from("reply_drafts")
           .select(
-            "id, draft_text, final_text, intent, confidence, requires_escalation, escalation_reason, facts_used, status"
+            "id, draft_text, final_text, intent, confidence, requires_escalation, escalation_reason, facts_used, status, customer_message_id"
           )
           .eq("conversation_id", conversation.id)
           .eq("status", "pending")
@@ -174,6 +174,22 @@ export default async function ConversationDetailPage({ params }: { params: { id:
   }
   const group = groupForStatus(conversation.status);
   const latestCustomerMessage = [...allMessages].reverse().find((m) => m.direction === "inbound")?.body ?? null;
+
+  // Production hardening (2026-08-14) — a real bug found in live testing:
+  // "Replying to ..." used to always quote the episode's latest inbound
+  // message, computed completely independently of which message the
+  // shown draft was actually generated for. When a burst of messages
+  // arrives close together, those two can diverge (a draft can be the
+  // most-recent *pending* row while a newer message came in after it) —
+  // the caption then names the wrong message, making an unrelated draft
+  // look like it was written in response to whatever the customer said
+  // most recently. The draft's own customer_message_id is the real,
+  // already-existing foreign key to what it was actually generated for;
+  // this uses that instead of re-deriving "latest" independently.
+  const pendingDraft = pendingDrafts?.[0] ?? null;
+  const draftSourceMessage = pendingDraft
+    ? (allMessages.find((m) => m.id === pendingDraft.customer_message_id)?.body ?? null)
+    : null;
 
   // Trust Ladder V1 companion (Candidate 1) — reusing
   // relationshipStrengthFor()/buildRelationshipSummary() exactly as
@@ -298,9 +314,10 @@ export default async function ConversationDetailPage({ params }: { params: { id:
           existingWorkCard={existingWorkCards?.[0] ?? null}
           workCardDraft={workCardDraft}
           latestCustomerMessage={latestCustomerMessage}
+          draftSourceMessage={draftSourceMessage}
           suggestedSlotDate={suggestedSlot ? toDateString(suggestedSlot.date) : null}
           suggestedSlotLabel={suggestedSlot?.label ?? null}
-          pendingDraft={pendingDrafts?.[0] ?? null}
+          pendingDraft={pendingDraft}
           relationshipStrength={relationshipStrength}
           relationshipSummary={relationshipSummary}
           communicationGuidance={communicationGuidance}

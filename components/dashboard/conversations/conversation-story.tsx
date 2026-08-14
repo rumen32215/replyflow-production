@@ -135,6 +135,7 @@ export function ConversationStory({
   existingWorkCard,
   workCardDraft,
   latestCustomerMessage,
+  draftSourceMessage,
   suggestedSlotDate,
   suggestedSlotLabel,
   pendingDraft,
@@ -161,6 +162,13 @@ export function ConversationStory({
   existingWorkCard: ExistingWorkCard | null;
   workCardDraft: WorkCardDraftFields | null;
   latestCustomerMessage: string | null;
+  /** Production hardening (2026-08-14) — the body of the specific
+   * message `pendingDraft` was actually generated for (via its own
+   * customer_message_id), not just "whatever the customer said most
+   * recently" — those two can diverge when messages arrive in a burst.
+   * null whenever that source message can't be resolved; the caption
+   * below renders nothing rather than guessing. */
+  draftSourceMessage: string | null;
   suggestedSlotDate: string | null;
   suggestedSlotLabel: string | null;
   pendingDraft: PendingReplyDraft | null;
@@ -767,9 +775,9 @@ export function ConversationStory({
                       </div>
                     ) : (
                       <>
-                        {latestCustomerMessage && (
+                        {draftSourceMessage && (
                           <p className="mb-2 truncate text-[11.5px] leading-snug text-muted-foreground">
-                            Replying to <span className="italic">&ldquo;{latestCustomerMessage}&rdquo;</span>
+                            Replying to <span className="italic">&ldquo;{draftSourceMessage}&rdquo;</span>
                           </p>
                         )}
                         <div className="flex justify-end">

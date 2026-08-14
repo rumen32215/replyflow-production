@@ -153,6 +153,12 @@ let closeEpisodeCalls: Array<{ episodeId: string; status: string }> = [];
 let createEpisodeCallCount = 0;
 let createdEpisodeId = "unused-new-episode";
 
+// Production hardening (2026-08-14) — a spy, not just a no-op: closing
+// the silent-message-loss gap (the readiness gate used to be a bare
+// `return`, with no draft and no trace) is only actually verified by
+// asserting an event was recorded, not merely that the call didn't throw.
+let recordedErrorEvents: Array<{ severity: string; source: string; context?: Record<string, unknown> }> = [];
+
 // "server-only" throws unconditionally when required outside Next's own
 // build pipeline (by design, as a guard) — harmless to no-op here since
 // this test never runs in a browser context.
@@ -162,7 +168,11 @@ mock.module("@/lib/supabase/service", {
   namedExports: { createServiceClient: () => currentSupabase },
 });
 mock.module("@/lib/error-events", {
-  namedExports: { recordErrorEvent: async () => {} },
+  namedExports: {
+    recordErrorEvent: async (input: { severity: string; source: string; context?: Record<string, unknown> }) => {
+      recordedErrorEvents.push({ severity: input.severity, source: input.source, context: input.context });
+    },
+  },
 });
 mock.module("./episode", {
   namedExports: {
@@ -487,6 +497,47 @@ test("8. the current newly-created draft remains pending and is not accidentally
   const own = currentSupabase.tables.reply_drafts.find((d) => d.customer_message_id === "brand-new-msg");
   assert.ok(own, "the current message's own draft must exist");
   assert.equal(own?.status, "pending", "supersede runs before this row is inserted, so it must never catch its own draft");
+});
+
+/* -------- Production hardening (2026-08-14) — readiness-gate observability -------- */
+// Live testing traced a real, silent message-loss bug to exactly this
+// gate: a bare `return` with no draft and no error_events row, for a
+// business that hasn't finished teaching its receptionist. This must
+// stay silent to the customer (no invented reply) but never silent to
+// observability (a real, queryable record of why nothing happened).
+
+test("9. an untaught receptionist produces no draft but records an observable, non-customer-facing reason", async () => {
+  currentSupabase = new FakeSupabase();
+  seedBusiness(currentSupabase);
+  // Override seedBusiness's fully-taught config — an empty receptionist
+  // setup is exactly what makes Shared Brain's readyToActAlone false.
+  currentSupabase.tables.ai_configurations = [
+    {
+      business_id: BUSINESS_ID,
+      system_prompt: "",
+      business_rules: "",
+      escalation_rules: "",
+      auto_reply_general_enabled: false,
+    },
+  ];
+  recordedErrorEvents = [];
+  const episodeId = "ep-untaught";
+  nextEpisode = { id: episodeId, priorState: EMPTY_CONVERSATION_STATE, isNew: true, wasBookedCandidate: false };
+
+  await generateReplyForMessage({
+    businessId: BUSINESS_ID,
+    conversationId: CONVERSATION_ID,
+    customerMessageId: "not-ready-msg",
+    messageBody: "Hi, my boiler is leaking.",
+  });
+
+  const draft = currentSupabase.tables.reply_drafts.find((d) => d.customer_message_id === "not-ready-msg");
+  assert.equal(draft, undefined, "no draft must be invented just to look like something happened");
+  assert.equal(recordedErrorEvents.length, 1, "the outcome must be recorded exactly once");
+  assert.equal(recordedErrorEvents[0]?.severity, "warning");
+  assert.equal(recordedErrorEvents[0]?.source, "reply-engine.not_ready_to_act_alone");
+  assert.equal(recordedErrorEvents[0]?.context?.customerMessageId, "not-ready-msg");
+  assert.equal(recordedErrorEvents[0]?.context?.conversationId, CONVERSATION_ID);
 });
 
 /* -------- Product Reset Blueprint D.1 — booked-episode continuity -------- */

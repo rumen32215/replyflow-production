@@ -136,6 +136,18 @@ class FakeSupabase {
 // build pipeline (by design, as a guard) — harmless to no-op here.
 mock.module("server-only", { namedExports: {} });
 
+// Production hardening (2026-08-14) — a spy, so the booked-continuity
+// path's own observability call can be proven, not just its resolution
+// logic (already covered below). Must NOT fire on the other two paths.
+let recordedProductEvents: Array<{ eventType: string; businessId: string; context?: Record<string, unknown> }> = [];
+mock.module("@/lib/product-events", {
+  namedExports: {
+    recordProductEvent: async (input: { eventType: string; businessId: string; context?: Record<string, unknown> }) => {
+      recordedProductEvents.push(input);
+    },
+  },
+});
+
 let resolveEpisodeForMessage: (typeof import("./episode"))["resolveEpisodeForMessage"];
 let findRecentlyBookedEpisode: (typeof import("./episode"))["findRecentlyBookedEpisode"];
 before(async () => {
@@ -212,6 +224,7 @@ test("a booked episode with no scheduled_for at all is not offered as a candidat
 
 test("resolveEpisodeForMessage: an in-progress episode always wins over a booked one (existing behaviour preserved)", async () => {
   const supabase = new FakeSupabase();
+  recordedProductEvents = [];
   seedBookedEpisode(supabase, { episodeId: "ep-booked", scheduledFor: "2026-08-20T10:00:00.000Z", openedAt: "2026-08-11T19:00:00.000Z" });
   supabase.tables.conversation_episodes.push({
     id: "ep-active",
@@ -225,24 +238,32 @@ test("resolveEpisodeForMessage: an in-progress episode always wins over a booked
   assert.equal(result.id, "ep-active");
   assert.equal(result.isNew, false);
   assert.equal(result.wasBookedCandidate, false);
+  assert.equal(recordedProductEvents.length, 0, "the booked-continuity event must not fire when the active episode wins");
 });
 
-test("resolveEpisodeForMessage: no in-progress episode, but a live booked one exists -> offered as a candidate", async () => {
+test("resolveEpisodeForMessage: no in-progress episode, but a live booked one exists -> offered as a candidate, and it's provable", async () => {
   const supabase = new FakeSupabase();
+  recordedProductEvents = [];
   seedBookedEpisode(supabase, { episodeId: "ep-booked", scheduledFor: "2026-08-13T10:00:00.000Z", openedAt: "2026-08-12T19:00:00.000Z" });
   const result = await resolveEpisodeForMessage(supabase as never, { conversationId: CONVERSATION_ID, businessId: BUSINESS_ID }, new Date("2026-08-12T20:00:00.000Z"));
   assert.equal(result.id, "ep-booked");
   assert.equal(result.isNew, false);
   assert.equal(result.wasBookedCandidate, true);
+  assert.equal(recordedProductEvents.length, 1, "the booked-continuity path firing must be a provable, recorded fact");
+  assert.equal(recordedProductEvents[0]?.eventType, "episode.booked_continuity_used");
+  assert.equal(recordedProductEvents[0]?.businessId, BUSINESS_ID);
+  assert.equal(recordedProductEvents[0]?.context?.episodeId, "ep-booked");
 });
 
 test("resolveEpisodeForMessage: no in-progress and no live booked episode -> creates a new one (existing behaviour preserved)", async () => {
   const supabase = new FakeSupabase();
+  recordedProductEvents = [];
   seedBookedEpisode(supabase, { episodeId: "ep-old", scheduledFor: "2026-07-01T10:00:00.000Z", openedAt: "2026-06-30T19:00:00.000Z" });
   const result = await resolveEpisodeForMessage(supabase as never, { conversationId: CONVERSATION_ID, businessId: BUSINESS_ID }, new Date("2026-08-12T20:00:00.000Z"));
   assert.notEqual(result.id, "ep-old");
   assert.equal(result.isNew, true);
   assert.equal(result.wasBookedCandidate, false);
+  assert.equal(recordedProductEvents.length, 0, "the booked-continuity event must not fire on the fallback create-new path");
 });
 
 test("E. consecutive resolveEpisodeForMessage calls for the same burst deterministically return the same episode", async () => {

@@ -59,11 +59,27 @@ export async function middleware(request: NextRequest) {
   // (lib/admin.ts) that's simpler to keep out of the edge runtime.
   const isProtectedPath = path.startsWith("/onboarding") || path.startsWith("/dashboard") || path.startsWith("/admin");
 
+  // Production hardening (2026-08-14) — mobile auth bug, root cause: no
+  // response here ever set Cache-Control, so mobile Safari/Chrome could
+  // restore a full previous page (DOM and all) straight from the
+  // back/forward cache on navigation or app resume — zero network
+  // request, this middleware never runs, an already-signed-out or
+  // already-switched-account browser silently shows the stale page.
+  // Scoped to auth-sensitive paths only, never the public marketing
+  // pages, which should stay normally cacheable.
+  if (isProtectedPath || isPublicPath) {
+    response.headers.set("Cache-Control", "no-store");
+  }
+
   if (!user && isProtectedPath) {
-    return NextResponse.redirect(new URL("/login", request.url));
+    const redirect = NextResponse.redirect(new URL("/login", request.url));
+    redirect.headers.set("Cache-Control", "no-store");
+    return redirect;
   }
   if (user && isPublicPath) {
-    return NextResponse.redirect(new URL("/", request.url));
+    const redirect = NextResponse.redirect(new URL("/", request.url));
+    redirect.headers.set("Cache-Control", "no-store");
+    return redirect;
   }
 
   return response;

@@ -72,20 +72,23 @@ export default async function SettingsPage() {
         <SettingsPasswordForm />
       </SettleCard>
 
-      <SettleCard delay={0.13} className="rounded-2xl border border-border bg-card p-6">
-        <div className="mb-1 flex items-center gap-2.5">
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-            <Bell className="h-4 w-4" />
+      {/* Product cleanup pass (2026-08-14) — same "only shown once it's
+       * real" discipline as "Get help" below: this used to always
+       * render, showing a permanently-disabled toggle whenever email
+       * delivery wasn't configured. Hidden entirely instead of shown
+       * broken. */}
+      {emailDeliveryConfigured && (
+        <SettleCard delay={0.13} className="rounded-2xl border border-border bg-card p-6">
+          <div className="mb-1 flex items-center gap-2.5">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+              <Bell className="h-4 w-4" />
+            </div>
+            <h2 className="text-[15px] font-bold">Notifications</h2>
           </div>
-          <h2 className="text-[15px] font-bold">Notifications</h2>
-        </div>
-        <p className="mb-2 text-[13px] text-muted-foreground">Choose what ReplyFlow keeps you posted on.</p>
-        <SettingsNotifications
-          businessId={business.id}
-          initialNotifyNewEnquiry={business.notify_new_enquiry ?? true}
-          emailDeliveryConfigured={emailDeliveryConfigured}
-        />
-      </SettleCard>
+          <p className="mb-2 text-[13px] text-muted-foreground">Choose what ReplyFlow keeps you posted on.</p>
+          <SettingsNotifications businessId={business.id} initialNotifyNewEnquiry={business.notify_new_enquiry ?? true} />
+        </SettleCard>
+      )}
 
       <SettleCard delay={0.17} className="rounded-2xl border border-border bg-card p-6">
         <div className="mb-1 flex items-center gap-2.5">

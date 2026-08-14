@@ -147,16 +147,23 @@ export function AvailabilityDiary({
 
   // Short "current value" summaries for each rule's collapsed row —
   // the narrative descriptions stay put inside, once expanded.
+  //
+  // Product cleanup pass (2026-08-14) — this section used to expose 8
+  // rules; only 3 (below) are actually read by anything (lib/availability
+  // .ts's describeBookingReply, the one function the reply engine's
+  // context assembly calls). same-day, emergency call-outs, travel
+  // buffer, working radius, and lunch break were stored and displayed
+  // but consumed by nothing — including a stray lunch-break value
+  // (16:00–13:00) nothing downstream ever validated or could have
+  // caught, which is exactly the risk of a control that looks live but
+  // isn't. Removed from the UI rather than left half-built; the
+  // underlying businesses.availability columns are untouched, so this
+  // can come back the moment there's real behaviour behind it.
   const { rules } = availability;
   const summaries = {
-    sameDay: rules.sameDay ? "On" : "Off",
-    emergency: rules.emergency ? (rules.emergencyHours.trim() ? `On · ${rules.emergencyHours.trim()}` : "On") : "Off",
     weekendEmergencyOnly: rules.weekendEmergencyOnly ? "On" : "Off",
     minNotice: rules.minNoticeHours > 0 ? `${rules.minNoticeHours}h notice` : "None needed",
     maxJobs: rules.maxJobsPerDay !== null ? `${rules.maxJobsPerDay} a day` : "No limit",
-    travel: rules.travelBufferMinutes > 0 ? `${rules.travelBufferMinutes} min` : "None",
-    radius: rules.workingRadiusMiles !== null ? `${rules.workingRadiusMiles} miles` : "No limit",
-    lunchBreak: rules.lunchBreak.enabled ? `${rules.lunchBreak.start}–${rules.lunchBreak.end}` : "Off",
   };
 
   return (
@@ -425,57 +432,6 @@ export function AvailabilityDiary({
 
         <div className="divide-y divide-border">
           <CollapsibleRule
-            label="Same-day bookings"
-            summary={summaries.sameDay}
-            open={openRule === "sameDay"}
-            onToggle={() => toggleRule("sameDay")}
-          >
-            <RuleRow
-              label="What would you usually do if somebody wanted a same-day booking?"
-              description="I'll offer today's slots to customers while they're free"
-              checked={availability.rules.sameDay}
-              onChange={(v) => updateRules({ sameDay: v })}
-              noPadding
-            />
-          </CollapsibleRule>
-
-          <CollapsibleRule
-            label="Emergency call-outs"
-            summary={summaries.emergency}
-            open={openRule === "emergency"}
-            onToggle={() => toggleRule("emergency")}
-          >
-            <RuleRow
-              label="When would you make an exception and fit someone in outside your normal hours?"
-              description="I'll fit urgent jobs in outside normal hours when it's genuinely needed"
-              checked={availability.rules.emergency}
-              onChange={(v) => updateRules({ emergency: v })}
-              noPadding
-            />
-            <AnimatePresence initial={false}>
-              {availability.rules.emergency && (
-                <motion.div
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: "auto" }}
-                  exit={{ opacity: 0, height: 0 }}
-                  transition={{ duration: 0.28, ease: EASE }}
-                  className="overflow-hidden"
-                >
-                  <div className="pt-2">
-                    <input
-                      value={availability.rules.emergencyHours}
-                      onChange={(e) => updateRules({ emergencyHours: e.target.value })}
-                      placeholder="When? e.g. 24/7, or weekdays after 6pm"
-                      aria-label="When emergency call-outs are available"
-                      className="w-full rounded-lg border border-border bg-background px-3 py-2 text-[12.5px] outline-none focus:border-yellow-500"
-                    />
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </CollapsibleRule>
-
-          <CollapsibleRule
             label="Only emergency jobs at weekends"
             summary={summaries.weekendEmergencyOnly}
             open={openRule === "weekendEmergencyOnly"}
@@ -533,92 +489,6 @@ export function AvailabilityDiary({
               customUnit="jobs"
               noPadding
             />
-          </CollapsibleRule>
-
-          <CollapsibleRule
-            label="Travel time between jobs"
-            summary={summaries.travel}
-            open={openRule === "travel"}
-            onToggle={() => toggleRule("travel")}
-          >
-            <ChipRow
-              label="How much travel between jobs is too much?"
-              description="I'll always leave this much time so you're never rushed getting to the next one"
-              options={[
-                { label: "None", value: 0 },
-                { label: "15 min", value: 15 },
-                { label: "30 min", value: 30 },
-                { label: "45 min", value: 45 },
-                { label: "60 min", value: 60 },
-              ]}
-              value={availability.rules.travelBufferMinutes}
-              onChange={(v) => updateRules({ travelBufferMinutes: v })}
-              customUnit="minutes"
-              noPadding
-            />
-          </CollapsibleRule>
-
-          <CollapsibleRule
-            label="Working radius"
-            summary={summaries.radius}
-            open={openRule === "radius"}
-            onToggle={() => toggleRule("radius")}
-          >
-            <ChipRow
-              label="How far is too far to travel for a job?"
-              description="I'll only offer jobs within this distance, so you're never driving further than makes sense"
-              options={[
-                { label: "5 miles", value: 5 },
-                { label: "10 miles", value: 10 },
-                { label: "15 miles", value: 15 },
-                { label: "20 miles", value: 20 },
-                { label: "No limit", value: null },
-              ]}
-              value={availability.rules.workingRadiusMiles}
-              onChange={(v) => updateRules({ workingRadiusMiles: v })}
-              customUnit="miles"
-              noPadding
-            />
-          </CollapsibleRule>
-
-          <CollapsibleRule
-            label="Block out a lunch break"
-            summary={summaries.lunchBreak}
-            open={openRule === "lunchBreak"}
-            onToggle={() => toggleRule("lunchBreak")}
-          >
-            <RuleRow
-              label="Do you need a proper break in the middle of the day?"
-              description="I'll never book over this window, so you always get a proper break"
-              checked={availability.rules.lunchBreak.enabled}
-              onChange={(v) => updateRules({ lunchBreak: { ...availability.rules.lunchBreak, enabled: v } })}
-              noPadding
-            />
-            <AnimatePresence initial={false}>
-              {availability.rules.lunchBreak.enabled && (
-                <motion.div
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: "auto" }}
-                  exit={{ opacity: 0, height: 0 }}
-                  transition={{ duration: 0.28, ease: EASE }}
-                  className="overflow-hidden"
-                >
-                  <div className="flex items-center gap-2 pb-1 pt-2">
-                    <TimeInput
-                      value={availability.rules.lunchBreak.start}
-                      onChange={(v) => updateRules({ lunchBreak: { ...availability.rules.lunchBreak, start: v } })}
-                      label="Lunch break start"
-                    />
-                    <span className="text-[12px] text-muted-foreground">to</span>
-                    <TimeInput
-                      value={availability.rules.lunchBreak.end}
-                      onChange={(v) => updateRules({ lunchBreak: { ...availability.rules.lunchBreak, end: v } })}
-                      label="Lunch break end"
-                    />
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
           </CollapsibleRule>
         </div>
       </SettleCard>

@@ -42,7 +42,14 @@ export default async function JobRecordsPage() {
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="text-xl font-bold tracking-tight">Job Records</h1>
-          <p className="mt-1 text-[13.5px] text-muted-foreground">A record for each job — the foundation the rest of this builds on.</p>
+          {/* Product cleanup pass (2026-08-14) — the old subtitle ("A
+           * record for each job") gave no signal this is different from
+           * Work Cards. It isn't a second job tracker: a Job Record is
+           * the customer-facing report generated from a completed Work
+           * Card (lib/job-docs/from-work-card.ts, migration 0030). */}
+          <p className="mt-1 text-[13.5px] text-muted-foreground">
+            The customer-facing reports generated from your completed Work Cards.
+          </p>
         </div>
         <Button variant="primary" asChild className="w-auto">
           <Link href="/dashboard/job-records/new">

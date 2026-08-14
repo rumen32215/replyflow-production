@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { CalendarClock, Headset, MessageCircleQuestion, MessagesSquare } from "lucide-react";
+import { CalendarClock, Headset, MessagesSquare } from "lucide-react";
 import { press, ScrollReveal } from "@/components/shared/motion";
 import { Acknowledgement, ACK, useAcknowledgement } from "@/components/shared/acknowledgement";
 import { SwitchVisual } from "@/components/ui/switch";
@@ -28,15 +28,14 @@ interface QuickActionsProps {
   initialAvailability: Availability;
 }
 
+// Product cleanup pass (2026-08-14) — "Test your receptionist" removed:
+// a separate simulated-conversation interface risked implying there
+// were two different versions of the receptionist. The real WhatsApp
+// conversation is the source of truth for how it behaves; Conversations
+// below is that destination. Not replaced with anything else.
 const ACTIONS = [
   { href: "/dashboard/receptionist", icon: Headset, label: "Receptionist" },
   { href: "/dashboard/availability", icon: CalendarClock, label: "Your hours" },
-  // V1 First-Run redesign: "Your business" retired as a quick action —
-  // Business Profile merged into Receptionist (same destination now,
-  // so the two links were duplicates). Replaced with Test, the new
-  // journey's confidence-building step, genuinely distinct from
-  // teaching or conversations.
-  { href: "/dashboard/receptionist/try", icon: MessageCircleQuestion, label: "Test your receptionist" },
   { href: "/dashboard/conversations", icon: MessagesSquare, label: "Conversations" },
 ] as const;
 
@@ -85,7 +84,7 @@ export function QuickActions({ businessId, initialAvailability }: QuickActionsPr
   return (
     <ScrollReveal className="rounded-2xl border border-border bg-card p-6 shadow-sm">
       <h2 className="mb-4 text-[11px] font-bold uppercase tracking-widest text-muted-foreground">Quick actions</h2>
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
         {ACTIONS.map((action, i) => (
           // Sprint 7.7: scroll-triggered like the card around it, not
           // mount-triggered — a mount-based stagger here would already

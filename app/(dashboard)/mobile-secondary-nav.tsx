@@ -55,7 +55,7 @@ export function MobileSecondaryNav({ approvalsCount = 0 }: { approvalsCount?: nu
             href={item.href}
             aria-label={showBadge ? `${item.label} (${approvalsCount})` : item.label}
             className={cn(
-              "relative flex h-9 w-9 items-center justify-center rounded-full transition-colors",
+              "relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition-colors",
               active ? "text-primary" : "text-muted-foreground hover:bg-muted hover:text-foreground"
             )}
           >

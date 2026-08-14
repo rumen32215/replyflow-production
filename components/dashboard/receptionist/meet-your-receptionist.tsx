@@ -201,14 +201,17 @@ export function MeetYourReceptionist({
                     For now, everything I do goes through you first — you&apos;ll see every reply before it sends. As
                     you get to know how I work, you can hand me more.
                   </Bubble>
-                  <Bubble>Want to see how I&apos;d actually handle something? Try me.</Bubble>
+                  <Bubble>The real proof is in a real conversation — that&apos;s always where I&apos;ll show you what I can do.</Bubble>
                   <div className={cn("mt-2")}>
-                    {/* Hiring Experience redesign (roadmap A2/A3): straight
-                     * into Test Conversations, in the same breath — before
-                     * WhatsApp is ever mentioned, per 03-Trust-Experience.md
-                     * §3-4. */}
-                    <Button onClick={() => router.push("/dashboard/receptionist/try")} variant="primary" size="lg">
-                      Try to break me
+                    {/* Product cleanup pass (2026-08-14) — used to route
+                     * into Test Conversations (a simulated interface,
+                     * removed from the main product), before WhatsApp was
+                     * ever mentioned (Hiring Experience redesign, roadmap
+                     * A2/A3). Now points at the real thing directly — the
+                     * actual WhatsApp conversation history is the source
+                     * of truth for how the receptionist behaves. */}
+                    <Button onClick={() => router.push("/dashboard/conversations")} variant="primary" size="lg">
+                      Go to Conversations
                     </Button>
                   </div>
                 </motion.div>

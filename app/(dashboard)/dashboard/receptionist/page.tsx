@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { redirect } from "next/navigation";
+import { CalendarClock, ChevronRight } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { ReceptionistPlayground } from "@/components/dashboard/receptionist/receptionist-playground";
 import { LearningProposalCard } from "@/components/dashboard/receptionist/learning-proposal-card";
@@ -181,6 +183,28 @@ export default async function TeachYourReceptionistPage({
         initialTopic={receptionistTopic}
         ownerTrust={ownerTrust}
       />
+      {/* Product cleanup pass (2026-08-14) — booking rules (notice
+       * period, job limits, weekend emergencies, weekly hours) live on
+       * the Hours page, not here; that split was invisible before this
+       * link existed, and an owner reasonably expects "how I want my
+       * business to operate" to be reachable from Receptionist. Kept as
+       * a pointer rather than moved, so the working save logic on Hours
+       * stays exactly as-is. */}
+      <Link
+        href="/dashboard/availability"
+        className="group flex items-center gap-3 rounded-2xl border border-border bg-card p-4 shadow-sm transition-colors hover:border-primary/25 hover:bg-accent/40"
+      >
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-accent text-primary">
+          <CalendarClock className="h-4 w-4" />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-[13.5px] font-semibold text-foreground">Booking rules &amp; hours</span>
+          <span className="block text-[12px] text-muted-foreground">
+            Notice period, job limits, weekend emergencies, and your weekly hours — over on Hours.
+          </span>
+        </span>
+        <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
+      </Link>
       {/* Product Guarantee 1: no fallback coercion below — null means
        * genuinely unconfirmed and must stay that way, never silently
        * become a claimed fact. */}

@@ -32,7 +32,11 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
 
   const service = createServiceClient();
 
-  const { data: jobDoc } = await service.from("job_docs").select("id, business_id, status").eq("id", params.id).maybeSingle();
+  const { data: jobDoc } = await service
+    .from("job_docs")
+    .select("id, business_id, status, work_card_id")
+    .eq("id", params.id)
+    .maybeSingle();
   if (!jobDoc) return NextResponse.json({ error: "Job record not found" }, { status: 404 });
 
   const { data: business } = await service.from("businesses").select("id, owner_id").eq("id", jobDoc.business_id).maybeSingle();
@@ -48,6 +52,18 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
   }
 
   try {
+    // Production hardening (2026-08-14) — the real, live Work Card
+    // status, same live-fetch as everywhere else; approval must judge
+    // the report against the same status the customer-facing document
+    // itself will show, never a stale assumption.
+    let isJobCompleted = false;
+    let issueReported: string | null = null;
+    if (jobDoc.work_card_id) {
+      const { data: workCard } = await service.from("work_cards").select("status, issue").eq("id", jobDoc.work_card_id).maybeSingle();
+      isJobCompleted = workCard?.status === "completed";
+      issueReported = workCard?.issue ?? null;
+    }
+
     const { data: fields } = await service
       .from("job_doc_fields")
       .select("id, job_doc_id, section_label, sort_order, field_key, field_value, provenance, confidence, updated_by")
@@ -64,6 +80,8 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       jobDocId: jobDoc.id,
       fields: (fields ?? []) as JobDocFieldRow[],
       photos: (photoRows ?? []) as ReportContentPhotoRow[],
+      isJobCompleted,
+      issueReported,
     });
 
     if (!hasApprovableContent(content)) {

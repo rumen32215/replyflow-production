@@ -9,10 +9,12 @@ import { PhotoSection } from "@/components/dashboard/job-records/photo-section";
 import type { JobDocPhoto } from "@/hooks/use-job-doc-photos";
 import { JOB_DOC_MEDIA_BUCKET } from "@/lib/job-docs/photo-storage";
 import { ANALYSIS_ERROR_MARKER } from "@/lib/job-docs/photo-schema";
+import { cn } from "@/lib/utils";
 import {
   RAW_NOTES_FIELD_KEY,
   JOB_SUMMARY_FIELD_KEY,
   WORK_PERFORMED_FIELD_KEY,
+  NEXT_STEPS_FIELD_KEY,
   DIVERGENCE_NOTE_FIELD_KEY,
   isObservationFieldKey,
   type JobDocFieldRow,
@@ -35,10 +37,20 @@ export default async function JobRecordDetailPage({ params }: { params: { id: st
   // RLS (0025_job_docs.sql) scopes this to the signed-in owner's business.
   const { data: jobDoc } = await supabase
     .from("job_docs")
-    .select("id, title, status, customer_name, customer_phone, customer_email, job_address, job_date, created_at")
+    .select("id, title, status, customer_name, customer_phone, customer_email, job_address, job_date, created_at, work_card_id")
     .eq("id", params.id)
     .maybeSingle();
   if (!jobDoc) notFound();
+
+  // Production hardening (2026-08-14) — the real Work Card status/issue,
+  // live-fetched via the existing link, never a stored copy on job_docs.
+  // "Issue Reported" is the customer's actual original issue (already
+  // exists on work_cards), not a new AI-generated or stored field.
+  const { data: workCard } = jobDoc.work_card_id
+    ? await supabase.from("work_cards").select("status, issue").eq("id", jobDoc.work_card_id).maybeSingle()
+    : { data: null };
+  const isJobCompleted = workCard?.status === "completed";
+  const issueReported = workCard?.issue ?? null;
 
   const { data: fields } = await supabase
     .from("job_doc_fields")
@@ -50,6 +62,7 @@ export default async function JobRecordDetailPage({ params }: { params: { id: st
   const rawNotes = allFields.find((f) => f.field_key === RAW_NOTES_FIELD_KEY)?.field_value ?? "";
   const jobSummary = toDraftField(allFields.find((f) => f.field_key === JOB_SUMMARY_FIELD_KEY));
   const workPerformed = toDraftField(allFields.find((f) => f.field_key === WORK_PERFORMED_FIELD_KEY));
+  const nextSteps = toDraftField(allFields.find((f) => f.field_key === NEXT_STEPS_FIELD_KEY));
   const divergenceNote = allFields.find((f) => f.field_key === DIVERGENCE_NOTE_FIELD_KEY)?.field_value ?? null;
   const observations = allFields
     .filter((f) => isObservationFieldKey(f.field_key))
@@ -103,11 +116,34 @@ export default async function JobRecordDetailPage({ params }: { params: { id: st
               href={`/dashboard/job-records/${jobDoc.id}/report`}
               className="rounded-full border border-border bg-card px-3 py-1 text-[11.5px] font-semibold text-foreground hover:bg-muted"
             >
-              Preview Report
+              {/* Production hardening (2026-08-14) — same destination
+               * either way (the report/approval/download page); the
+               * label just tells the truth about what's there. */}
+              {jobDoc.status === "approved" ? "View Approved Report" : "Preview Report"}
             </Link>
-            <span className="shrink-0 rounded-full bg-muted px-2.5 py-1 text-[11.5px] font-semibold capitalize text-muted-foreground">{jobDoc.status}</span>
+            <span
+              className={cn(
+                "shrink-0 rounded-full px-2.5 py-1 text-[11.5px] font-semibold capitalize",
+                jobDoc.status === "approved" ? "bg-success/10 text-success" : "bg-muted text-muted-foreground"
+              )}
+            >
+              {jobDoc.status}
+            </span>
           </div>
         </div>
+        {/* Production hardening (2026-08-14) — the real Work Card status,
+         * so the owner understands why Work Performed may be locked to
+         * "in progress" below, rather than it looking broken or blank
+         * for no reason. Read-only here — job completion is only ever
+         * changed from the Work Card itself. */}
+        {jobDoc.work_card_id && (
+          <p className="mt-1.5 text-[12.5px] text-muted-foreground">
+            Job status:{" "}
+            <span className={cn("font-semibold", isJobCompleted ? "text-success" : "text-attention")}>
+              {isJobCompleted ? "Completed" : "In progress"}
+            </span>
+          </p>
+        )}
       </div>
 
       <section className="rounded-2xl border border-border bg-card p-5">
@@ -138,6 +174,17 @@ export default async function JobRecordDetailPage({ params }: { params: { id: st
         </dl>
       </section>
 
+      {/* Production hardening (2026-08-14) — the customer's actual
+       * original issue, straight from the linked Work Card (work_cards
+       * .issue), not a new stored/AI field — this is what "Issue
+       * Reported" means on the final report too. */}
+      {issueReported && (
+        <section className="rounded-2xl border border-border bg-card p-5">
+          <h2 className="text-[13px] font-bold uppercase tracking-wide text-muted-foreground">Issue Reported</h2>
+          <p className="mt-2 whitespace-pre-wrap text-[13.5px] leading-relaxed text-foreground">{issueReported}</p>
+        </section>
+      )}
+
       {rawNotes && (
         <section className="rounded-2xl border border-border bg-muted/40 p-5">
           <h2 className="text-[13px] font-bold uppercase tracking-wide text-muted-foreground">Original Notes</h2>
@@ -146,18 +193,34 @@ export default async function JobRecordDetailPage({ params }: { params: { id: st
       )}
 
       <section className="rounded-2xl border border-border bg-card p-5">
-        <PhotoSection jobDocId={jobDoc.id} initialPhotos={initialPhotos} />
+        {/* Production hardening (2026-08-14) — a real bug found in live
+         * testing: navigating between two different Job Records without
+         * a full page reload could leave this component's own local
+         * photo state (useJobDocPhotos) un-reset, since React reuses a
+         * component instance at the same tree position across a prop
+         * change alone. `key={jobDoc.id}` forces a genuine remount per
+         * record, so a new job always starts from its own fresh
+         * initialPhotos — the previous job's photos can never bleed
+         * into or duplicate onto this one. */}
+        <PhotoSection key={jobDoc.id} jobDocId={jobDoc.id} initialPhotos={initialPhotos} />
       </section>
 
       <section className="rounded-2xl border border-border bg-card p-5">
         <h2 className="mb-4 text-[13px] font-bold uppercase tracking-wide text-muted-foreground">Job Report</h2>
+        {/* Same remount-on-navigation fix as PhotoSection above — this
+         * editor's own local draft-field state must never carry over
+         * from a previously-viewed Job Record either. */}
         <JobReportDraft
+          key={jobDoc.id}
           jobDocId={jobDoc.id}
           jobSummary={jobSummary}
           workPerformed={workPerformed}
+          nextSteps={nextSteps}
           observations={observations}
           divergenceNote={divergenceNote}
           hasPhotos={initialPhotos.length > 0}
+          isJobCompleted={isJobCompleted}
+          hasLinkedWorkCard={Boolean(jobDoc.work_card_id)}
         />
       </section>
     </div>

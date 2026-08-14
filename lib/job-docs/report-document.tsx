@@ -39,6 +39,11 @@ const COLORS = {
   border: "#E5E7EB",
   primary: "#2563EB",
   white: "#FFFFFF",
+  // Production hardening (2026-08-14) — status colours, same success/
+  // attention pairing used elsewhere in the app (app/globals.css), so
+  // "In Progress" vs "Completed" reads consistently everywhere.
+  success: "#16A34A",
+  attention: "#B45309",
 };
 
 const styles = StyleSheet.create({
@@ -127,6 +132,22 @@ const styles = StyleSheet.create({
     fontSize: 10.5,
     color: COLORS.dark,
   },
+  statusValueCompleted: {
+    fontSize: 10.5,
+    fontWeight: 700,
+    color: COLORS.success,
+  },
+  statusValueInProgress: {
+    fontSize: 10.5,
+    fontWeight: 700,
+    color: COLORS.attention,
+  },
+  notCompletedNotice: {
+    fontSize: 10.5,
+    lineHeight: 1.5,
+    color: COLORS.grey,
+    fontStyle: "italic",
+  },
   section: {
     marginBottom: 18,
   },
@@ -204,7 +225,9 @@ function Footer() {
 export function ReportDocument({ model }: { model: ReportDocumentModel }) {
   const { header, jobDetails } = model;
   const jobDate = formatDate(jobDetails.jobDate);
-  const hasTextContent = Boolean(model.jobSummary || model.workPerformed || model.observations.length > 0);
+  const hasTextContent = Boolean(
+    model.jobSummary || model.workPerformed || model.nextSteps || model.observations.length > 0 || model.issueReported
+  );
 
   return (
     <Document title={`Job Report — ${jobDetails.title}`}>
@@ -242,7 +265,26 @@ export function ReportDocument({ model }: { model: ReportDocumentModel }) {
             <Text style={styles.detailLabel}>Address</Text>
             <Text style={styles.detailValue}>{jobDetails.jobAddress || "Not given"}</Text>
           </View>
+          {/* Production hardening (2026-08-14) — the real, live Work
+           * Card status. Always shown once there's a linked Work Card
+           * to read it from (model.isJobCompleted itself defaults to
+           * false with no linked card, but the STATUS row only claims
+           * something when there's a real card behind it — see
+           * report-content.ts). */}
+          <View style={styles.detailItem}>
+            <Text style={styles.detailLabel}>Status</Text>
+            <Text style={model.isJobCompleted ? styles.statusValueCompleted : styles.statusValueInProgress}>
+              {model.isJobCompleted ? "COMPLETED" : "IN PROGRESS"}
+            </Text>
+          </View>
         </View>
+
+        {model.issueReported && (
+          <View style={styles.section}>
+            <Text style={styles.sectionLabel}>Issue Reported</Text>
+            <Text style={styles.sectionText}>{model.issueReported}</Text>
+          </View>
+        )}
 
         {model.jobSummary && (
           <View style={styles.section}>
@@ -251,22 +293,37 @@ export function ReportDocument({ model }: { model: ReportDocumentModel }) {
           </View>
         )}
 
-        {model.workPerformed && (
-          <View style={styles.section}>
-            <Text style={styles.sectionLabel}>Work Performed</Text>
-            <Text style={styles.sectionText}>{model.workPerformed.text}</Text>
-          </View>
-        )}
-
         {model.observations.length > 0 && (
           <View style={styles.section}>
-            <Text style={styles.sectionLabel}>Observations</Text>
+            <Text style={styles.sectionLabel}>Findings</Text>
             {model.observations.map((observation, i) => (
               <View key={i} style={styles.observationRow}>
                 <Text style={styles.observationBullet}>•</Text>
                 <Text style={styles.observationText}>{observation.text}</Text>
               </View>
             ))}
+          </View>
+        )}
+
+        {/* Production hardening (2026-08-14) — grounded strictly in the
+         * live Work Card status (model.isJobCompleted), never in
+         * whether AI-generated text happens to exist. Only a genuinely
+         * completed job shows real "what was done" content; every other
+         * state shows the same deterministic, non-AI notice — this
+         * section can never claim finished work on a job that isn't. */}
+        <View style={styles.section}>
+          <Text style={styles.sectionLabel}>Work Completed</Text>
+          {model.isJobCompleted && model.workPerformed ? (
+            <Text style={styles.sectionText}>{model.workPerformed.text}</Text>
+          ) : (
+            <Text style={styles.notCompletedNotice}>Not yet completed — this job is still in progress.</Text>
+          )}
+        </View>
+
+        {model.nextSteps && (
+          <View style={styles.section}>
+            <Text style={styles.sectionLabel}>Outcome / Next Steps</Text>
+            <Text style={styles.sectionText}>{model.nextSteps.text}</Text>
           </View>
         )}
 
@@ -283,7 +340,7 @@ export function ReportDocument({ model }: { model: ReportDocumentModel }) {
         <Page key={pageIndex} size="A4" style={styles.page} wrap>
           <RunningHeader businessName={header.businessName} jobTitle={jobDetails.title} />
           {pageIndex === 0 && (
-            <Text style={styles.sectionLabel}>Photo Record</Text>
+            <Text style={styles.sectionLabel}>Photos</Text>
           )}
           <View style={styles.photoGrid}>
             {pagePhotos.map((photo) => (

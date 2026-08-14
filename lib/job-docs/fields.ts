@@ -14,6 +14,11 @@ export const OBSERVATION_FIELD_PREFIX = "observation_";
  * silently reconciled; surfaced for the owner to resolve (see
  * lib/job-docs/generate-draft.ts). */
 export const DIVERGENCE_NOTE_FIELD_KEY = "divergence_note";
+/** Production hardening (2026-08-14) — "Outcome / Next Steps": what the
+ * customer needs to know is still outstanding or coming next. Added to
+ * the existing provenance-tracked job_doc_fields vocabulary, not a new
+ * table — this system was already built to grow by field_key. */
+export const NEXT_STEPS_FIELD_KEY = "next_steps";
 
 export const SECTION = {
   intake: "intake",
@@ -21,6 +26,7 @@ export const SECTION = {
   workPerformed: "work_performed",
   observations: "observations",
   divergence: "divergence",
+  nextSteps: "next_steps",
 } as const;
 
 export function observationFieldKey(index: number): string {
@@ -46,6 +52,7 @@ export function isReportContentFieldKey(fieldKey: string): boolean {
     fieldKey === JOB_SUMMARY_FIELD_KEY ||
     fieldKey === WORK_PERFORMED_FIELD_KEY ||
     fieldKey === DIVERGENCE_NOTE_FIELD_KEY ||
+    fieldKey === NEXT_STEPS_FIELD_KEY ||
     isObservationFieldKey(fieldKey)
   );
 }

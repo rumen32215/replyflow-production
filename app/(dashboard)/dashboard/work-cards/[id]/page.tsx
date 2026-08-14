@@ -93,8 +93,11 @@ export default async function WorkCardDetailPage({ params }: { params: { id: str
         : Promise.resolve({ data: [] }),
     // ReplyFlow V4 — the Work Card → Job Record link
     // (0030_link_job_docs_to_work_cards.sql). At most one, by the
-    // unique index on job_docs.work_card_id.
-    supabase.from("job_docs").select("id").eq("work_card_id", workCard.id).maybeSingle(),
+    // unique index on job_docs.work_card_id. Production hardening
+    // (2026-08-14) — status is now selected too, not just id, so "View
+    // report" can route straight to the approved report instead of
+    // always reopening the generate/edit workflow.
+    supabase.from("job_docs").select("id, status").eq("work_card_id", workCard.id).maybeSingle(),
   ]);
 
   // Signed URLs, generated server-side with the service role — same
@@ -181,6 +184,7 @@ export default async function WorkCardDetailPage({ params }: { params: { id: str
       photos={workCardPhotos}
       simplifiedStatus={simplifiedStatus}
       linkedJobDocId={linkedJobDoc?.id ?? null}
+      linkedJobDocStatus={linkedJobDoc?.status ?? null}
     />
   );
 }

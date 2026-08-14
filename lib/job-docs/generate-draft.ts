@@ -27,6 +27,12 @@ export interface JobReportDraft {
   jobSummary: DraftField;
   workPerformed: DraftField;
   observations: DraftField[];
+  /** Production hardening (2026-08-14) — "what's still outstanding or
+   * happens next," grounded in the notes alone. Always attempted,
+   * regardless of job status — a completed job might still have a
+   * follow-up note (e.g. a warranty), an in-progress one almost always
+   * does. Never invented if the notes don't support one. */
+  nextSteps: DraftField;
   /** ReplyFlow 2.0, Phase 2A — set only when the photos and the notes
    * appear to describe different things. Never auto-resolved; the
    * caller writes this as its own field for the owner to read and
@@ -52,6 +58,8 @@ const RESPONSE_SCHEMA = {
     job_summary_confidence: { type: "string", enum: ["low", "medium", "high"] },
     work_performed: { type: "string" },
     work_performed_confidence: { type: "string", enum: ["low", "medium", "high"] },
+    next_steps: { type: "string" },
+    next_steps_confidence: { type: "string", enum: ["low", "medium", "high"] },
     observations: {
       type: "array",
       items: {
@@ -71,36 +79,68 @@ const RESPONSE_SCHEMA = {
     "job_summary_confidence",
     "work_performed",
     "work_performed_confidence",
+    "next_steps",
+    "next_steps_confidence",
     "observations",
     "divergence_note",
   ],
 } as const;
 
-const SYSTEM_PROMPT =
-  "You are drafting a professional job report for a UK trade/service business, from the tradesperson's own raw " +
-  "notes about a job they just completed or visited, and (when provided) already-analysed context from photos " +
-  "they took. Produce exactly these things:\n" +
-  "- job_summary: one or two plain sentences describing what the job was, in professional language.\n" +
-  "- work_performed: a clear, factual account of what was actually done, in the notes' own terms — never add a " +
-  "step, part, or action that wasn't mentioned.\n" +
-  "- observations: a short list (0-5) of specific, useful observations genuinely present in the notes or photo " +
-  "context (e.g. condition found, cause identified, anything the customer should know) — omit this entirely if " +
-  "neither supports any.\n" +
-  "- divergence_note: empty unless the photo context and the notes appear to describe something genuinely " +
-  "different (e.g. the notes say a part was replaced but a photo context describes the old part still in place). " +
-  "If so, describe BOTH what the notes say and what the photo context shows, plainly and separately — never " +
-  "silently pick one as correct, never rewrite the notes to match the photo or vice versa, never state which one " +
-  "is right. That decision belongs to the owner, not you.\n\n" +
-  "Absolute rules — never invent, guess, or estimate any of the following unless the notes state it explicitly:\n" +
-  "measurements, quantities, test results, registration or certificate numbers, signatures or names of who signed " +
-  "anything, compliance verdicts (pass/fail/satisfactory), or safety classifications. If the notes don't mention " +
-  "one of these, simply don't write it — do not write a placeholder, an estimate, or a plausible-sounding guess. " +
-  "The same restriction applies to anything from the photo context — it has already been through its own " +
-  "grounding checks, but never add to it or treat a hedged 'possible' observation as a confirmed fact.\n\n" +
-  "Mark your own confidence honestly for each field: high only when the notes directly and clearly support what " +
-  "you wrote; low when you had to infer or organise loosely-stated information. If the notes genuinely don't " +
-  "support a field at all, return an empty string for it rather than inventing content.\n\n" +
-  "Write in plain, professional British English. No marketing language, no filler, no unnecessary adjectives.";
+/**
+ * Production hardening (2026-08-14) — the real, live Work Card status is
+ * now told to the model explicitly, and work_performed's own
+ * instruction branches on it. This is a defence-in-depth *first* layer,
+ * not the only one: app/api/job-docs/[id]/draft/route.ts applies a
+ * deterministic backstop afterwards that discards whatever the model
+ * wrote for work_performed whenever the job isn't genuinely completed,
+ * regardless of how well this prompt was followed — the same
+ * "never trust the model alone for a safety-relevant fact" discipline
+ * this codebase already applies to photo analysis and message safety.
+ */
+function buildSystemPrompt(isJobCompleted: boolean): string {
+  const statusLine = isJobCompleted
+    ? "This job's real status, from the business's own job record, is COMPLETED — the work described in the notes has genuinely finished."
+    : "This job's real status, from the business's own job record, is NOT YET COMPLETED (still in progress, booked, or otherwise open) — " +
+      "regardless of what the notes describe doing, the job itself is not finished from the business's own records.";
+  const workPerformedRule = isJobCompleted
+    ? "- work_performed: a clear, factual account of what was actually done, in the notes' own terms — never add a step, part, or action " +
+      "that wasn't mentioned."
+    : "- work_performed: since this job is NOT yet completed, do not describe finished work here at all — leave this an empty string. Put " +
+      "whatever progress or diagnosis the notes describe under observations instead, worded as what has been found/done so far, never as " +
+      "a finished job.";
+
+  return (
+    "You are drafting a professional job report for a UK trade/service business, from the tradesperson's own raw " +
+    "notes about a job, and (when provided) already-analysed context from photos they took. " +
+    statusLine +
+    " Produce exactly these things:\n" +
+    "- job_summary: one or two plain sentences describing what the job was, in professional language. Never state " +
+    "or imply the job is finished unless it genuinely is.\n" +
+    workPerformedRule +
+    "\n" +
+    "- next_steps: what's still outstanding or happens next, grounded strictly in the notes — e.g. a follow-up " +
+    "visit, a part on order, or (for a genuinely completed job) a warranty note if the notes mention one. Empty " +
+    "string if the notes don't support anything here.\n" +
+    "- observations: a short list (0-5) of specific, useful observations genuinely present in the notes or photo " +
+    "context (e.g. condition found, cause identified, anything the customer should know) — omit this entirely if " +
+    "neither supports any. Describe what was found, never as an action taken.\n" +
+    "- divergence_note: empty unless the photo context and the notes appear to describe something genuinely " +
+    "different (e.g. the notes say a part was replaced but a photo context describes the old part still in place). " +
+    "If so, describe BOTH what the notes say and what the photo context shows, plainly and separately — never " +
+    "silently pick one as correct, never rewrite the notes to match the photo or vice versa, never state which one " +
+    "is right. That decision belongs to the owner, not you.\n\n" +
+    "Absolute rules — never invent, guess, or estimate any of the following unless the notes state it explicitly:\n" +
+    "measurements, quantities, test results, registration or certificate numbers, signatures or names of who signed " +
+    "anything, compliance verdicts (pass/fail/satisfactory), or safety classifications. If the notes don't mention " +
+    "one of these, simply don't write it — do not write a placeholder, an estimate, or a plausible-sounding guess. " +
+    "The same restriction applies to anything from the photo context — it has already been through its own " +
+    "grounding checks, but never add to it or treat a hedged 'possible' observation as a confirmed fact.\n\n" +
+    "Mark your own confidence honestly for each field: high only when the notes directly and clearly support what " +
+    "you wrote; low when you had to infer or organise loosely-stated information. If the notes genuinely don't " +
+    "support a field at all, return an empty string for it rather than inventing content.\n\n" +
+    "Write in plain, professional British English. No marketing language, no filler, no unnecessary adjectives."
+  );
+}
 
 function buildPhotoContextBlock(photos: PhotoContext[]): string {
   if (photos.length === 0) return "";
@@ -126,6 +166,11 @@ export async function generateJobReportDraft(input: {
   jobAddress: string | null;
   rawNotes: string;
   photos?: PhotoContext[];
+  /** Production hardening (2026-08-14) — the real Work Card status,
+   * live-fetched by the caller via job_docs.work_card_id, never a
+   * stored copy. Defaults to false (never claim completion without
+   * explicit confirmation) when there's no linked Work Card at all. */
+  isJobCompleted?: boolean;
 }): Promise<JobReportDraft | null> {
   try {
     const result = await getCompletion({
@@ -135,7 +180,7 @@ export async function generateJobReportDraft(input: {
       maxOutputTokens: 800,
       jsonSchema: { name: "job_report_draft", schema: RESPONSE_SCHEMA },
       messages: [
-        { role: "system", content: SYSTEM_PROMPT },
+        { role: "system", content: buildSystemPrompt(Boolean(input.isJobCompleted)) },
         {
           role: "user",
           content:
@@ -168,6 +213,7 @@ function parseDraft(raw: unknown): JobReportDraft | null {
 
   const jobSummaryConfidence = toConfidence(r.job_summary_confidence);
   const workPerformedConfidence = toConfidence(r.work_performed_confidence);
+  const nextStepsConfidence = toConfidence(r.next_steps_confidence);
 
   const observations: DraftField[] = Array.isArray(r.observations)
     ? r.observations
@@ -179,6 +225,7 @@ function parseDraft(raw: unknown): JobReportDraft | null {
   return {
     jobSummary: { text: r.job_summary.trim(), confidence: jobSummaryConfidence },
     workPerformed: { text: r.work_performed.trim(), confidence: workPerformedConfidence },
+    nextSteps: { text: typeof r.next_steps === "string" ? r.next_steps.trim() : "", confidence: nextStepsConfidence },
     observations,
     divergenceNote: typeof r.divergence_note === "string" ? r.divergence_note.trim() : "",
   };

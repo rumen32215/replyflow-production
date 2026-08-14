@@ -63,8 +63,14 @@ export interface ReportDocumentModel {
   jobDocId: string;
   header: ReportDocumentHeader;
   jobDetails: ReportDocumentJobDetails;
+  /** Production hardening (2026-08-14) — verbatim from Stage 4
+   * (selectReportContent). The document renderer's own STATUS line and
+   * its Work Completed section both read from this, never infer it. */
+  isJobCompleted: boolean;
+  issueReported: string | null;
   jobSummary: ReportContentField | null;
   workPerformed: ReportContentField | null;
+  nextSteps: ReportContentField | null;
   observations: ReportContentField[];
   /** Already paginated — see paginatePhotos. Empty array (not a
    * single empty page) when there are no eligible photos. */
@@ -132,8 +138,11 @@ export function buildReportDocumentModel(input: {
     },
     // Verbatim from Stage 4 — never re-filtered, re-ordered, or
     // re-validated here.
+    isJobCompleted: input.content.isJobCompleted,
+    issueReported: input.content.issueReported,
     jobSummary: input.content.jobSummary,
     workPerformed: input.content.workPerformed,
+    nextSteps: input.content.nextSteps,
     observations: input.content.observations,
     photoPages: paginatePhotos(photosWithUrls),
     hasPhotos: photosWithUrls.length > 0,

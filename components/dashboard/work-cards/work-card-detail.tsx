@@ -78,6 +78,7 @@ export function WorkCardDetail({
   photos = [],
   simplifiedStatus,
   linkedJobDocId,
+  linkedJobDocStatus,
 }: {
   workCard: WorkCardDetailData;
   conversationGroup: ConversationGroup | null;
@@ -104,6 +105,12 @@ export function WorkCardDetail({
    * report" below; never re-fetched client-side, only set once here
    * or by generateOrOpenReport's own response. */
   linkedJobDocId: string | null;
+  /** Production hardening (2026-08-14) — the linked Job Record's own
+   * report status (job_docs.status), so "View report" can tell an
+   * already-approved report apart from one still being drafted. Never
+   * re-fetched client-side, same one-time-set convention as
+   * linkedJobDocId itself. */
+  linkedJobDocStatus?: string | null;
 }) {
   const router = useRouter();
   const supabase = createClient();
@@ -116,6 +123,7 @@ export function WorkCardDetail({
   const [showSentPreview, setShowSentPreview] = useState(false);
   const [sentPreviewText, setSentPreviewText] = useState<string | null>(null);
   const [jobDocId, setJobDocId] = useState(linkedJobDocId);
+  const [jobDocStatus] = useState(linkedJobDocStatus ?? null);
   const [generatingReport, setGeneratingReport] = useState(false);
 
   const [issue, setIssue] = useState(card.issue);
@@ -236,7 +244,13 @@ export function WorkCardDetail({
   async function generateOrOpenReport() {
     if (generatingReport) return;
     if (jobDocId) {
-      router.push(`/dashboard/job-records/${jobDocId}`);
+      // Production hardening (2026-08-14) — an already-approved report
+      // goes straight to the approved report/download area, not back
+      // through the generate/edit workflow. Anything not yet approved
+      // (draft/review) still opens the Job Record, exactly as before.
+      router.push(
+        jobDocStatus === "approved" ? `/dashboard/job-records/${jobDocId}/report` : `/dashboard/job-records/${jobDocId}`
+      );
       return;
     }
     setGeneratingReport(true);
@@ -448,9 +462,11 @@ export function WorkCardDetail({
           <SettleCard delay={0} className="rounded-2xl border border-border bg-card p-5 shadow-sm">
             <h2 className={SECTION_HEADING}>Report</h2>
             <p className="mb-3 text-[13px] text-muted-foreground">
-              {jobDocId
-                ? "The customer-facing report for this job."
-                : "Turn this completed job into a professional, customer-facing report — nothing here gets retyped."}
+              {jobDocStatus === "approved"
+                ? "This report has been reviewed and approved — ready to download or share."
+                : jobDocId
+                  ? "The customer-facing report for this job."
+                  : "Turn this completed job into a professional, customer-facing report — nothing here gets retyped."}
             </p>
             <motion.button
               {...press}
@@ -459,7 +475,13 @@ export function WorkCardDetail({
               className="flex items-center gap-1.5 rounded-xl bg-primary px-4 py-2 text-[13px] font-semibold text-primary-foreground disabled:opacity-50"
             >
               <FileText className="h-4 w-4" />
-              {generatingReport ? "Generating…" : jobDocId ? "View report" : "Generate report"}
+              {generatingReport
+                ? "Generating…"
+                : jobDocStatus === "approved"
+                  ? "View approved report"
+                  : jobDocId
+                    ? "View report"
+                    : "Generate report"}
             </motion.button>
           </SettleCard>
         )}

@@ -105,8 +105,11 @@ test("(d) approval fields are cleared together — never left half-cleared", asy
 function emptyContent(overrides: Partial<JobReportContent> = {}): JobReportContent {
   return {
     jobDocId: "job-1",
+    isJobCompleted: false,
+    issueReported: null,
     jobSummary: null,
     workPerformed: null,
+    nextSteps: null,
     observations: [],
     photos: [],
     ...overrides,

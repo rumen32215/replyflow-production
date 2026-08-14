@@ -24,6 +24,7 @@ import { BANNED_PATTERNS } from "./banned-patterns";
 export interface ValidatedJobReportDraft {
   jobSummary: DraftField;
   workPerformed: DraftField;
+  nextSteps: DraftField;
   observations: DraftField[];
   divergenceNote: string;
   /** True if any field was blanked for containing disallowed content
@@ -48,14 +49,17 @@ function scrubField(field: DraftField): { field: DraftField; flagged: boolean } 
 export function validateJobReportDraft(draft: JobReportDraft): ValidatedJobReportDraft {
   const jobSummary = scrubField(draft.jobSummary);
   const workPerformed = scrubField(draft.workPerformed);
+  const nextSteps = scrubField(draft.nextSteps);
   const observations = draft.observations.map(scrubField);
   const divergenceNote = scrub(draft.divergenceNote);
 
   return {
     jobSummary: jobSummary.field,
     workPerformed: workPerformed.field,
+    nextSteps: nextSteps.field,
     observations: observations.map((o) => o.field),
     divergenceNote: divergenceNote.text,
-    flagged: jobSummary.flagged || workPerformed.flagged || observations.some((o) => o.flagged) || divergenceNote.flagged,
+    flagged:
+      jobSummary.flagged || workPerformed.flagged || nextSteps.flagged || observations.some((o) => o.flagged) || divergenceNote.flagged,
   };
 }

@@ -6,8 +6,11 @@ import type { JobReportContent, ReportContentPhoto } from "./report-content";
 function emptyContent(overrides: Partial<JobReportContent> = {}): JobReportContent {
   return {
     jobDocId: "job-1",
+    isJobCompleted: false,
+    issueReported: null,
     jobSummary: null,
     workPerformed: null,
+    nextSteps: null,
     observations: [],
     photos: [],
     ...overrides,
@@ -59,6 +62,18 @@ test("selected report content (job summary, work performed, observations) passes
   assert.deepEqual(model.jobSummary, { text: "Repaired a leaking valve.", provenance: "ai_structured" });
   assert.deepEqual(model.workPerformed, { text: "Replaced the valve.", provenance: "user_fact" });
   assert.deepEqual(model.observations, [{ text: "No further leaks found.", provenance: "ai_structured" }]);
+});
+
+test("isJobCompleted, issueReported, and nextSteps pass through verbatim (production hardening, 2026-08-14)", () => {
+  const content = emptyContent({
+    isJobCompleted: true,
+    issueReported: "Leaking toilet.",
+    nextSteps: { text: "Follow-up in 6 months.", provenance: "ai_structured" },
+  });
+  const model = buildReportDocumentModel({ jobDocId: "job-1", business: BUSINESS, jobDoc: JOB_DOC, content, photoUrls: NO_PHOTO_URLS });
+  assert.equal(model.isJobCompleted, true);
+  assert.equal(model.issueReported, "Leaking toilet.");
+  assert.deepEqual(model.nextSteps, { text: "Follow-up in 6 months.", provenance: "ai_structured" });
 });
 
 test("content already excluded upstream (null fields) stays excluded — the model never invents a fallback", () => {

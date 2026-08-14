@@ -7,6 +7,7 @@ function draft(overrides: Partial<JobReportDraft> = {}): JobReportDraft {
   return {
     jobSummary: { text: "Repaired a leaking radiator valve at the customer's property.", confidence: "high" },
     workPerformed: { text: "Replaced the valve and tested the heating system afterwards.", confidence: "high" },
+    nextSteps: { text: "No further action needed.", confidence: "medium" },
     observations: [
       { text: "The old valve showed signs of wear.", confidence: "medium" },
       { text: "No further leaks were found after the repair.", confidence: "high" },
@@ -90,6 +91,12 @@ test("empty fields (nothing genuinely supported by the notes) pass through as va
   assert.equal(result.flagged, false);
   assert.equal(result.jobSummary.text, "");
   assert.equal(result.observations.length, 0);
+});
+
+test("a banned pattern in next_steps is stripped, same as any other field (production hardening, 2026-08-14)", () => {
+  const result = validateJobReportDraft(draft({ nextSteps: { text: "A follow-up visit will cost £45.", confidence: "medium" } }));
+  assert.equal(result.nextSteps.text, "");
+  assert.equal(result.flagged, true);
 });
 
 test("legitimately hedged, clean language is preserved, not over-blocked", () => {

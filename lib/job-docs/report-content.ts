@@ -1,4 +1,11 @@
-import { JOB_SUMMARY_FIELD_KEY, WORK_PERFORMED_FIELD_KEY, isObservationFieldKey, type JobDocFieldRow, type Provenance } from "./fields";
+import {
+  JOB_SUMMARY_FIELD_KEY,
+  WORK_PERFORMED_FIELD_KEY,
+  NEXT_STEPS_FIELD_KEY,
+  isObservationFieldKey,
+  type JobDocFieldRow,
+  type Provenance,
+} from "./fields";
 import { ANALYSIS_ERROR_MARKER, type PhotoConfidence, type PhotoPhase } from "./photo-schema";
 
 /**
@@ -89,8 +96,27 @@ export interface ReportContentPhoto {
 
 export interface JobReportContent {
   jobDocId: string;
+  /** Production hardening (2026-08-14) — the real, live Work Card
+   * completion status. Never stored on job_docs itself; the caller
+   * fetches it fresh via job_docs.work_card_id and passes it in here,
+   * same "no I/O in this function" discipline as everything else below.
+   * false whenever there's no linked Work Card at all — absence of
+   * confirmation is never treated as confirmation. */
+  isJobCompleted: boolean;
+  /** The customer's own original issue, straight from work_cards.issue
+   * — not a new stored or AI-generated field. Null only when there's
+   * no linked Work Card to read it from. */
+  issueReported: string | null;
   jobSummary: ReportContentField | null;
+  /** Deliberately not gated by CUSTOMER_READY_PROVENANCE the way the
+   * other fields are — see selectReportContent's own note: this field
+   * is null outright whenever the job isn't completed, regardless of
+   * what (if anything) is stored, so a caller can never accidentally
+   * render stale "work performed" text against a job that has since
+   * reverted to in-progress. */
   workPerformed: ReportContentField | null;
+  /** Production hardening (2026-08-14) — "Outcome / Next Steps." */
+  nextSteps: ReportContentField | null;
   observations: ReportContentField[];
   photos: ReportContentPhoto[];
 }
@@ -185,11 +211,29 @@ export function selectReportContent(input: {
   jobDocId: string;
   fields: JobDocFieldRow[];
   photos: ReportContentPhotoRow[];
+  /** Production hardening (2026-08-14) — live-fetched by the caller via
+   * job_docs.work_card_id, never a stored copy. See JobReportContent's
+   * own field comments for why this gates workPerformed specifically. */
+  isJobCompleted: boolean;
+  issueReported: string | null;
 }): JobReportContent {
+  // Defence in depth (production hardening, 2026-08-14): the draft-
+  // generation route already refuses to write real work_performed
+  // content while the job isn't completed, but this is the render-time
+  // backstop behind that — even if some other write path ever left
+  // content in this field, it is structurally impossible for it to
+  // reach the report while the live Work Card status says the job
+  // isn't done. AI cannot invent completion state; this function
+  // enforces that a second, independent way.
+  const workPerformed = input.isJobCompleted ? selectTextField(input.fields, WORK_PERFORMED_FIELD_KEY) : null;
+
   return {
     jobDocId: input.jobDocId,
+    isJobCompleted: input.isJobCompleted,
+    issueReported: input.issueReported,
     jobSummary: selectTextField(input.fields, JOB_SUMMARY_FIELD_KEY),
-    workPerformed: selectTextField(input.fields, WORK_PERFORMED_FIELD_KEY),
+    workPerformed,
+    nextSteps: selectTextField(input.fields, NEXT_STEPS_FIELD_KEY),
     observations: selectObservations(input.fields),
     photos: selectPhotos(input.photos),
   };

@@ -106,10 +106,19 @@ export default async function JobReportPreviewPage({ params }: { params: { id: s
 
   const { data: jobDoc } = await supabase
     .from("job_docs")
-    .select("id, business_id, title, customer_name, job_address, job_date, status, approved_by, approved_at")
+    .select("id, business_id, title, customer_name, job_address, job_date, status, approved_by, approved_at, work_card_id")
     .eq("id", params.id)
     .maybeSingle();
   if (!jobDoc) notFound();
+
+  // Production hardening (2026-08-14) — the real, live Work Card
+  // status/issue, never a stored copy — see report-content.ts's own
+  // header comment for why this is passed in rather than cached.
+  const { data: workCard } = jobDoc.work_card_id
+    ? await supabase.from("work_cards").select("status, issue").eq("id", jobDoc.work_card_id).maybeSingle()
+    : { data: null };
+  const isJobCompleted = workCard?.status === "completed";
+  const issueReported = workCard?.issue ?? null;
 
   const { data: business } = await supabase
     .from("businesses")
@@ -153,7 +162,13 @@ export default async function JobReportPreviewPage({ params }: { params: { id: s
     )
   );
 
-  const content = selectReportContent({ jobDocId: jobDoc.id, fields: allFields, photos: allPhotos });
+  const content = selectReportContent({
+    jobDocId: jobDoc.id,
+    fields: allFields,
+    photos: allPhotos,
+    isJobCompleted,
+    issueReported,
+  });
 
   // Approval summary (Stage 6) — built entirely from the same content
   // just selected above; never a second fetch or a second content
@@ -164,6 +179,7 @@ export default async function JobReportPreviewPage({ params }: { params: { id: s
     hasWorkPerformed: Boolean(content.workPerformed),
     observationCount: content.observations.length,
     photoCount: content.photos.length,
+    isJobCompleted,
   };
 
   const model = buildReportDocumentModel({
@@ -195,7 +211,14 @@ export default async function JobReportPreviewPage({ params }: { params: { id: s
         </p>
       </div>
 
-      <ReportApproval jobDocId={jobDoc.id} status={jobDoc.status} approvedAt={jobDoc.approved_at} summary={approvalSummary} />
+      <ReportApproval
+        jobDocId={jobDoc.id}
+        status={jobDoc.status}
+        approvedAt={jobDoc.approved_at}
+        summary={approvalSummary}
+        model={model}
+        fileName={`${jobDoc.title.replace(/[^a-z0-9]+/gi, "-").replace(/^-+|-+$/g, "") || "job-report"}.pdf`}
+      />
 
       <div className="min-h-[80vh] flex-1 overflow-hidden rounded-2xl border border-border bg-card">
         <ReportPreview model={model} />

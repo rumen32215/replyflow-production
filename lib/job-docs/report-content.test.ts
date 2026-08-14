@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   JOB_SUMMARY_FIELD_KEY,
   WORK_PERFORMED_FIELD_KEY,
+  NEXT_STEPS_FIELD_KEY,
   RAW_NOTES_FIELD_KEY,
   DIVERGENCE_NOTE_FIELD_KEY,
   observationFieldKey,
@@ -10,6 +11,19 @@ import {
 } from "./fields";
 import { ANALYSIS_ERROR_MARKER } from "./photo-schema";
 import { selectReportContent, type ReportContentPhotoRow } from "./report-content";
+
+// Production hardening (2026-08-14) — every existing test below is about
+// selection/ordering/eligibility logic that predates and is independent
+// of the isJobCompleted/issueReported gate, so they default to a
+// completed job (isJobCompleted: true) unless a test overrides it —
+// that keeps them testing exactly what they always tested. The gate
+// itself gets its own dedicated tests further down.
+function selectContent(
+  input: Omit<Parameters<typeof selectReportContent>[0], "isJobCompleted" | "issueReported"> &
+    Partial<Pick<Parameters<typeof selectReportContent>[0], "isJobCompleted" | "issueReported">>
+) {
+  return selectReportContent({ isJobCompleted: true, issueReported: null, ...input });
+}
 
 function field(overrides: Partial<JobDocFieldRow> = {}): JobDocFieldRow {
   return {
@@ -45,7 +59,7 @@ function photo(overrides: Partial<ReportContentPhotoRow> = {}): ReportContentPho
 }
 
 test("user-authored report content is included with provenance 'user_fact'", () => {
-  const result = selectReportContent({
+  const result = selectContent({
     jobDocId: "job-1",
     fields: [field({ provenance: "user_fact", updated_by: "engineer" })],
     photos: [],
@@ -55,7 +69,7 @@ test("user-authored report content is included with provenance 'user_fact'", () 
 });
 
 test("valid, confident AI-drafted content is included with provenance 'ai_structured'", () => {
-  const result = selectReportContent({
+  const result = selectContent({
     jobDocId: "job-1",
     fields: [field({ field_key: WORK_PERFORMED_FIELD_KEY, provenance: "ai_structured" })],
     photos: [],
@@ -65,7 +79,7 @@ test("valid, confident AI-drafted content is included with provenance 'ai_struct
 });
 
 test("an unresolved AI suggestion (low confidence) is excluded", () => {
-  const result = selectReportContent({
+  const result = selectContent({
     jobDocId: "job-1",
     fields: [field({ provenance: "ai_suggestion", field_value: "Possibly replaced a part.", confidence: "low" })],
     photos: [],
@@ -74,7 +88,7 @@ test("an unresolved AI suggestion (low confidence) is excluded", () => {
 });
 
 test("an unresolved observation is excluded while a resolved sibling observation survives", () => {
-  const result = selectReportContent({
+  const result = selectContent({
     jobDocId: "job-1",
     fields: [
       field({
@@ -99,7 +113,7 @@ test("an unresolved observation is excluded while a resolved sibling observation
 });
 
 test("raw_notes is never surfaced, no matter its provenance", () => {
-  const result = selectReportContent({
+  const result = selectContent({
     jobDocId: "job-1",
     fields: [field({ field_key: RAW_NOTES_FIELD_KEY, provenance: "user_fact", field_value: "Customer called about a leak." })],
     photos: [],
@@ -110,7 +124,7 @@ test("raw_notes is never surfaced, no matter its provenance", () => {
 });
 
 test("divergence_note is never surfaced even as owner-authored (user_fact), even non-empty", () => {
-  const result = selectReportContent({
+  const result = selectContent({
     jobDocId: "job-1",
     fields: [
       field({ field_key: DIVERGENCE_NOTE_FIELD_KEY, provenance: "user_fact", field_value: "The notes and photos disagree about the part." }),
@@ -123,7 +137,7 @@ test("divergence_note is never surfaced even as owner-authored (user_fact), even
 });
 
 test("excluded photos (included_in_report = false) never appear", () => {
-  const result = selectReportContent({
+  const result = selectContent({
     jobDocId: "job-1",
     fields: [],
     photos: [photo({ id: "excluded-photo", included_in_report: false })],
@@ -132,7 +146,7 @@ test("excluded photos (included_in_report = false) never appear", () => {
 });
 
 test("included photos (included_in_report = true) appear with their analysis text", () => {
-  const result = selectReportContent({
+  const result = selectContent({
     jobDocId: "job-1",
     fields: [],
     photos: [photo({ id: "included-photo", included_in_report: true })],
@@ -144,7 +158,7 @@ test("included photos (included_in_report = true) appear with their analysis tex
 });
 
 test("a still-analysing photo (analyzed_at null) is still included if included_in_report is true", () => {
-  const result = selectReportContent({
+  const result = selectContent({
     jobDocId: "job-1",
     fields: [],
     photos: [photo({ analyzed_at: null, visible_summary: "", possible_summary: "", unknown_note: "" })],
@@ -154,7 +168,7 @@ test("a still-analysing photo (analyzed_at null) is still included if included_i
 });
 
 test("an analysis-errored photo is included with its unknown_note translated to empty, not the internal marker", () => {
-  const result = selectReportContent({
+  const result = selectContent({
     jobDocId: "job-1",
     fields: [],
     photos: [photo({ unknown_note: ANALYSIS_ERROR_MARKER })],
@@ -164,7 +178,7 @@ test("an analysis-errored photo is included with its unknown_note translated to 
 });
 
 test("ordering: photos are grouped by phase (before -> during -> after -> other) regardless of input order", () => {
-  const result = selectReportContent({
+  const result = selectContent({
     jobDocId: "job-1",
     fields: [],
     photos: [
@@ -181,7 +195,7 @@ test("ordering: photos are grouped by phase (before -> during -> after -> other)
 });
 
 test("ordering: within the same phase, sort_order (chronological/upload order) decides", () => {
-  const result = selectReportContent({
+  const result = selectContent({
     jobDocId: "job-1",
     fields: [],
     photos: [
@@ -197,7 +211,7 @@ test("ordering: within the same phase, sort_order (chronological/upload order) d
 });
 
 test("ordering: a tied phase and sort_order falls back to created_at", () => {
-  const result = selectReportContent({
+  const result = selectContent({
     jobDocId: "job-1",
     fields: [],
     photos: [
@@ -212,7 +226,7 @@ test("ordering: a tied phase and sort_order falls back to created_at", () => {
 });
 
 test("observations preserve sort_order regardless of input array order", () => {
-  const result = selectReportContent({
+  const result = selectContent({
     jobDocId: "job-1",
     fields: [
       field({ field_key: observationFieldKey(2), sort_order: 2, provenance: "user_fact", field_value: "Third observation." }),
@@ -228,18 +242,21 @@ test("observations preserve sort_order regardless of input array order", () => {
 });
 
 test("empty/missing content: no fields and no photos produces a fully empty, still-valid structure", () => {
-  const result = selectReportContent({ jobDocId: "job-1", fields: [], photos: [] });
+  const result = selectContent({ jobDocId: "job-1", fields: [], photos: [] });
   assert.deepEqual(result, {
     jobDocId: "job-1",
+    isJobCompleted: true,
+    issueReported: null,
     jobSummary: null,
     workPerformed: null,
+    nextSteps: null,
     observations: [],
     photos: [],
   });
 });
 
 test("a field with provenance 'missing' and null field_value is excluded", () => {
-  const result = selectReportContent({
+  const result = selectContent({
     jobDocId: "job-1",
     fields: [field({ provenance: "missing", field_value: null, confidence: "none" })],
     photos: [],
@@ -253,7 +270,7 @@ test("safety-rejected content: a field the report validator blanked (provenance 
   // app/api/job-docs/[id]/draft/route.ts. The selector deliberately
   // never re-runs BANNED_PATTERNS itself; this proves it correctly
   // honours the state that enforcement already left behind.
-  const result = selectReportContent({
+  const result = selectContent({
     jobDocId: "job-1",
     fields: [
       field({ field_key: JOB_SUMMARY_FIELD_KEY, provenance: "missing", field_value: null, confidence: "none" }),
@@ -266,7 +283,7 @@ test("safety-rejected content: a field the report validator blanked (provenance 
 });
 
 test("mixed user/AI provenance: each field keeps its own real provenance, independently of the others", () => {
-  const result = selectReportContent({
+  const result = selectContent({
     jobDocId: "job-1",
     fields: [
       field({ field_key: JOB_SUMMARY_FIELD_KEY, provenance: "user_fact", field_value: "Owner-written summary." }),
@@ -294,5 +311,85 @@ test("the returned structure is deterministic across repeated calls with the sam
     ],
     photos: [photo(), photo({ id: "photo-2", phase: "after", sort_order: 1 })],
   };
-  assert.deepEqual(selectReportContent(input), selectReportContent(input));
+  assert.deepEqual(selectContent(input), selectContent(input));
+});
+
+/* -------- Production hardening (2026-08-14) — isJobCompleted / issueReported / nextSteps -------- */
+
+test("workPerformed is included when the job is genuinely completed, regardless of provenance", () => {
+  const result = selectReportContent({
+    jobDocId: "job-1",
+    fields: [field({ field_key: WORK_PERFORMED_FIELD_KEY, provenance: "ai_structured", field_value: "Replaced the valve." })],
+    photos: [],
+    isJobCompleted: true,
+    issueReported: null,
+  });
+  assert.equal(result.workPerformed?.text, "Replaced the valve.");
+});
+
+test("workPerformed is null when the job is not completed, even if a real, well-provenanced value is stored", () => {
+  // The exact live bug this closes: a stored, otherwise-eligible
+  // work_performed value must never surface while the real Work Card
+  // status says the job isn't done — this is the render-time backstop
+  // behind the draft-generation route's own deterministic gate.
+  const result = selectReportContent({
+    jobDocId: "job-1",
+    fields: [
+      field({ field_key: WORK_PERFORMED_FIELD_KEY, provenance: "user_fact", field_value: "Replaced the valve and tested it." }),
+    ],
+    photos: [],
+    isJobCompleted: false,
+    issueReported: null,
+  });
+  assert.equal(result.workPerformed, null);
+});
+
+test("isJobCompleted is passed through verbatim on the returned structure", () => {
+  const completed = selectReportContent({ jobDocId: "job-1", fields: [], photos: [], isJobCompleted: true, issueReported: null });
+  const inProgress = selectReportContent({ jobDocId: "job-1", fields: [], photos: [], isJobCompleted: false, issueReported: null });
+  assert.equal(completed.isJobCompleted, true);
+  assert.equal(inProgress.isJobCompleted, false);
+});
+
+test("issueReported is passed through verbatim, not derived from any field", () => {
+  const result = selectReportContent({
+    jobDocId: "job-1",
+    fields: [],
+    photos: [],
+    isJobCompleted: false,
+    issueReported: "Leaking toilet, kitchen tap dripping.",
+  });
+  assert.equal(result.issueReported, "Leaking toilet, kitchen tap dripping.");
+});
+
+test("issueReported is null when there's no linked Work Card to read it from", () => {
+  const result = selectReportContent({ jobDocId: "job-1", fields: [], photos: [], isJobCompleted: false, issueReported: null });
+  assert.equal(result.issueReported, null);
+});
+
+test("nextSteps follows the exact same provenance-eligibility rule as the other text fields", () => {
+  const ready = selectContent({
+    jobDocId: "job-1",
+    fields: [field({ field_key: NEXT_STEPS_FIELD_KEY, provenance: "ai_structured", field_value: "Follow-up visit booked for Thursday." })],
+    photos: [],
+  });
+  assert.equal(ready.nextSteps?.text, "Follow-up visit booked for Thursday.");
+
+  const unresolved = selectContent({
+    jobDocId: "job-1",
+    fields: [field({ field_key: NEXT_STEPS_FIELD_KEY, provenance: "ai_suggestion", field_value: "Possibly needs a follow-up.", confidence: "low" })],
+    photos: [],
+  });
+  assert.equal(unresolved.nextSteps, null);
+});
+
+test("nextSteps is independent of the isJobCompleted gate — a completed job can still have a next step (e.g. a warranty note)", () => {
+  const result = selectReportContent({
+    jobDocId: "job-1",
+    fields: [field({ field_key: NEXT_STEPS_FIELD_KEY, provenance: "ai_structured", field_value: "12-month workmanship guarantee applies." })],
+    photos: [],
+    isJobCompleted: true,
+    issueReported: null,
+  });
+  assert.equal(result.nextSteps?.text, "12-month workmanship guarantee applies.");
 });

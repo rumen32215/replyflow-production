@@ -7,9 +7,11 @@ import {
   RAW_NOTES_FIELD_KEY,
   JOB_SUMMARY_FIELD_KEY,
   WORK_PERFORMED_FIELD_KEY,
+  NEXT_STEPS_FIELD_KEY,
   DIVERGENCE_NOTE_FIELD_KEY,
   OBSERVATION_FIELD_PREFIX,
   observationFieldKey,
+  isObservationFieldKey,
   SECTION,
   type Provenance,
 } from "@/lib/job-docs/fields";
@@ -73,7 +75,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
 
   const { data: jobDoc } = await service
     .from("job_docs")
-    .select("id, business_id, customer_name, job_address")
+    .select("id, business_id, customer_name, job_address, work_card_id")
     .eq("id", params.id)
     .maybeSingle();
   if (!jobDoc) return NextResponse.json({ error: "Job record not found" }, { status: 404 });
@@ -81,6 +83,18 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
   const { data: business } = await service.from("businesses").select("id, owner_id").eq("id", jobDoc.business_id).maybeSingle();
   if (!business || business.owner_id !== user.id) {
     return NextResponse.json({ error: "Not authorized" }, { status: 403 });
+  }
+
+  // Production hardening (2026-08-14) — the real, live Work Card status
+  // is the one source of truth for whether this job is actually done;
+  // never stored/cached on job_docs itself (that would just create a
+  // second status to drift out of sync). No linked Work Card at all
+  // (a manually-created Job Record) defaults to "not completed" — the
+  // absence of confirmation is never treated as confirmation.
+  let isJobCompleted = false;
+  if (jobDoc.work_card_id) {
+    const { data: workCard } = await service.from("work_cards").select("status").eq("id", jobDoc.work_card_id).maybeSingle();
+    isJobCompleted = workCard?.status === "completed";
   }
 
   const { data: notesField } = await service
@@ -133,6 +147,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       customerName: jobDoc.customer_name ?? "",
       jobAddress: jobDoc.job_address,
       rawNotes,
+      isJobCompleted,
       photos: settledPhotos
         .filter((p) => p.visible_summary || p.possible_summary || p.unknown_note)
         .map((p) => ({
@@ -151,6 +166,20 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     // generate-draft.ts's own system prompt, run once here on the
     // freshly-generated AI output, never against an owner's own edits.
     const validated = validateJobReportDraft(draft);
+
+    // Layer 4 — the deterministic status backstop (production hardening,
+    // 2026-08-14). buildSystemPrompt() in generate-draft.ts already asks
+    // the model to leave work_performed empty when the job isn't
+    // completed, but this codebase never trusts a prompt alone for a
+    // safety-relevant fact (same reasoning as the photo/message safety
+    // layers) — so whatever the model actually wrote is discarded here,
+    // unconditionally, whenever the real Work Card status says the job
+    // isn't done. The AI cannot invent completion state past this point,
+    // full stop.
+    if (!isJobCompleted) {
+      validated.workPerformed = { text: "", confidence: "low" };
+    }
+
     if (validated.flagged) {
       await recordErrorEvent({
         severity: "warning",
@@ -182,42 +211,91 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       };
     };
 
+    // Provenance-safe regeneration (production hardening, 2026-08-14) —
+    // "AI should regenerate the draft/report presentation, not rewrite
+    // the underlying truth": once the tradesperson has edited a field
+    // (PATCH /api/job-docs/[id]/fields sets provenance: "user_fact"),
+    // Generate/Regenerate Draft must never silently overwrite it. Read
+    // the current provenance for every field this route could touch,
+    // before writing anything.
+    const { data: existingRows } = await service
+      .from("job_doc_fields")
+      .select("field_key, provenance")
+      .eq("job_doc_id", jobDoc.id);
+    const existing = existingRows ?? [];
+    const protectedKeys = new Set(existing.filter((f) => f.provenance === "user_fact").map((f) => f.field_key));
+
     const rows = [
-      fieldRow(SECTION.summary, 0, JOB_SUMMARY_FIELD_KEY, validated.jobSummary),
-      fieldRow(SECTION.workPerformed, 0, WORK_PERFORMED_FIELD_KEY, validated.workPerformed),
-      ...validated.observations.map((o, i) => fieldRow(SECTION.observations, i, observationFieldKey(i), o)),
+      !protectedKeys.has(JOB_SUMMARY_FIELD_KEY) ? fieldRow(SECTION.summary, 0, JOB_SUMMARY_FIELD_KEY, validated.jobSummary) : null,
+      !protectedKeys.has(WORK_PERFORMED_FIELD_KEY)
+        ? fieldRow(SECTION.workPerformed, 0, WORK_PERFORMED_FIELD_KEY, validated.workPerformed)
+        : null,
+      !protectedKeys.has(NEXT_STEPS_FIELD_KEY) ? fieldRow(SECTION.nextSteps, 1, NEXT_STEPS_FIELD_KEY, validated.nextSteps) : null,
       // Never auto-resolved (spec) — confidence "low" forces this
       // through fieldRow's own ai_suggestion branch whenever it's
       // present, so it always reads as something to check, never as
       // an asserted fact.
-      fieldRow(SECTION.divergence, 0, DIVERGENCE_NOTE_FIELD_KEY, { text: validated.divergenceNote, confidence: "low" }),
-    ];
+      !protectedKeys.has(DIVERGENCE_NOTE_FIELD_KEY)
+        ? fieldRow(SECTION.divergence, 0, DIVERGENCE_NOTE_FIELD_KEY, { text: validated.divergenceNote, confidence: "low" })
+        : null,
+    ].filter((r): r is NonNullable<typeof r> => r !== null);
+
+    // Observations: a protected (user_fact) observation keeps its exact
+    // field_key, value, and provenance untouched — it is neither deleted
+    // nor overwritten. Fresh AI observations are only ever written into
+    // the indices a protected observation isn't already using, so an
+    // upsert can never collide with (and silently overwrite) one.
+    const protectedObsIndices = new Set(
+      existing
+        .filter((f) => isObservationFieldKey(f.field_key) && f.provenance === "user_fact")
+        .map((f) => Number(f.field_key.slice(OBSERVATION_FIELD_PREFIX.length)))
+    );
+    let nextObsIndex = 0;
+    function allocateObsIndex(): number {
+      while (protectedObsIndices.has(nextObsIndex)) nextObsIndex++;
+      return nextObsIndex++;
+    }
+    const observationRows = validated.observations.map((o, i) => fieldRow(SECTION.observations, i, observationFieldKey(allocateObsIndex()), o));
+    rows.push(...observationRows);
 
     // Regenerating can produce fewer observations than last time — clear
-    // the old set first so a stale observation_3 from a previous draft
-    // can never survive a regeneration that only produced two this time.
-    const { error: deleteError } = await service
-      .from("job_doc_fields")
-      .delete()
-      .eq("job_doc_id", jobDoc.id)
-      .like("field_key", `${OBSERVATION_FIELD_PREFIX}%`);
-    if (deleteError) throw deleteError;
+    // the old (non-protected) set first so a stale observation_3 from a
+    // previous draft can never survive a regeneration that only produced
+    // two this time. Protected observations are excluded from this
+    // delete entirely — they're never removed, only ever left as-is.
+    const deletableObsKeys = existing
+      .filter((f) => isObservationFieldKey(f.field_key) && f.provenance !== "user_fact")
+      .map((f) => f.field_key);
+    if (deletableObsKeys.length > 0) {
+      const { error: deleteError } = await service
+        .from("job_doc_fields")
+        .delete()
+        .eq("job_doc_id", jobDoc.id)
+        .in("field_key", deletableObsKeys);
+      if (deleteError) throw deleteError;
+    }
 
-    const { error: upsertError } = await service
-      .from("job_doc_fields")
-      .upsert(rows, { onConflict: "job_doc_id,field_key" });
-    if (upsertError) throw upsertError;
+    if (rows.length > 0) {
+      const { error: upsertError } = await service
+        .from("job_doc_fields")
+        .upsert(rows, { onConflict: "job_doc_id,field_key" });
+      if (upsertError) throw upsertError;
+    }
 
-    // Approval integrity (Stage 3): a fresh draft always rewrites the
-    // report's actual content, so any existing approval is voided in
-    // the same write — unconditionally, since this status transition
-    // to 'review' already runs regardless of the job_doc's prior
-    // status (draft, review, or approved alike). Reuses the exact
-    // shape lib/job-docs/approval.ts's invalidateReportApproval()
-    // applies elsewhere, so "cleared together" is one definition, not
-    // two independently-maintained ones.
-    const { error: statusError } = await service.from("job_docs").update(APPROVAL_INVALIDATION_UPDATE).eq("id", jobDoc.id);
-    if (statusError) throw statusError;
+    // Approval integrity (Stage 3): a fresh draft rewrites the report's
+    // actual content, so any existing approval is voided in the same
+    // write. Only when something was actually written, though — if
+    // every touched field was already protected (user_fact), this
+    // regeneration changed nothing, and an approval must never be
+    // invalidated for a no-op (production hardening, 2026-08-14).
+    // Reuses the exact shape lib/job-docs/approval.ts's
+    // invalidateReportApproval() applies elsewhere, so "cleared
+    // together" is one definition, not two independently-maintained
+    // ones.
+    if (rows.length > 0) {
+      const { error: statusError } = await service.from("job_docs").update(APPROVAL_INVALIDATION_UPDATE).eq("id", jobDoc.id);
+      if (statusError) throw statusError;
+    }
 
     return NextResponse.json({ ok: true, excludedPhotos });
   } catch (err) {

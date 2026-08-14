@@ -17,7 +17,15 @@ export interface JobDocPhoto {
 }
 
 const POLL_INTERVAL_MS = 4000;
-const POLL_BUDGET_MS = 60000;
+// Production hardening (2026-08-14) — 60s was shorter than the Job
+// Record's own photo analysis (lib/job-docs/analysis.ts) can genuinely
+// take: a longer safety-boundary check than the WhatsApp photo
+// analyzer, on top of normal vision-call latency and any cold start.
+// When analysis ran past 60s, polling stopped while the photo was
+// still genuinely mid-analysis — a manual refresh (which resets this
+// budget) was the only thing that ever caught the real result. Still
+// bounded, just realistic for this pipeline specifically.
+const POLL_BUDGET_MS = 180000;
 
 async function fetchJobDocPhotos(jobDocId: string): Promise<JobDocPhoto[] | null> {
   try {

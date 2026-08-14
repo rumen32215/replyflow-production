@@ -47,13 +47,19 @@ export function JobReportDraft({
   jobDocId,
   jobSummary,
   workPerformed,
+  nextSteps,
   observations,
   divergenceNote,
   hasPhotos,
+  isJobCompleted,
+  hasLinkedWorkCard,
 }: {
   jobDocId: string;
   jobSummary: DraftFieldData | null;
   workPerformed: DraftFieldData | null;
+  /** Production hardening (2026-08-14) — "Outcome / Next Steps," the
+   * same provenance-tracked field pattern as the others above. */
+  nextSteps: DraftFieldData | null;
   observations: DraftFieldData[];
   /** ReplyFlow 2.0, Phase 2A — set only when the notes and the photos
    * appear to describe different things. Never auto-resolved; shown
@@ -64,13 +70,26 @@ export function JobReportDraft({
    * Draft waits for still-analysing ones (bounded, same 60s budget)
    * before drafting, rather than racing an in-progress analysis. */
   hasPhotos?: boolean;
+  /** Production hardening (2026-08-14) — the real, live Work Card
+   * status. When there's a linked Work Card and it isn't completed,
+   * Work Performed is locked (never freely typed as "done" while the
+   * job itself says otherwise) — the same rule the draft-generation
+   * route already enforces server-side; this is the editor honouring
+   * it too, not a second, independent rule. */
+  isJobCompleted?: boolean;
+  /** A standalone Job Record with no linked Work Card at all has no
+   * real status to lock against — Work Performed stays freely
+   * editable, exactly as it always has. */
+  hasLinkedWorkCard?: boolean;
 }) {
   const router = useRouter();
+  const workPerformedLocked = Boolean(hasLinkedWorkCard) && !isJobCompleted;
   const [generating, setGenerating] = useState(false);
   const [waitingForPhotos, setWaitingForPhotos] = useState(false);
   const [saving, setSaving] = useState(false);
   const [summaryText, setSummaryText] = useState(jobSummary?.value ?? "");
   const [workText, setWorkText] = useState(workPerformed?.value ?? "");
+  const [nextStepsText, setNextStepsText] = useState(nextSteps?.value ?? "");
   const [observationTexts, setObservationTexts] = useState(observations.map((o) => o.value));
 
   // Bug fix (production, ReplyFlow 2.0 Phase 2): useState's initial value
@@ -92,11 +111,14 @@ export function JobReportDraft({
     setWorkText(workPerformed?.value ?? "");
   }, [workPerformed?.value]);
   useEffect(() => {
+    setNextStepsText(nextSteps?.value ?? "");
+  }, [nextSteps?.value]);
+  useEffect(() => {
     setObservationTexts(observations.map((o) => o.value));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [observationsSnapshot]);
 
-  const hasDraft = Boolean(jobSummary || workPerformed || observations.length > 0);
+  const hasDraft = Boolean(jobSummary || workPerformed || nextSteps || observations.length > 0);
 
   async function generate() {
     if (generating) return;
@@ -141,7 +163,11 @@ export function JobReportDraft({
     try {
       const fields: Record<string, string> = {};
       if (jobSummary) fields[jobSummary.key] = summaryText;
-      if (workPerformed) fields[workPerformed.key] = workText;
+      // Locked while the job isn't completed (see workPerformedLocked
+      // above) — never send an edit for a field the owner couldn't
+      // actually type into.
+      if (workPerformed && !workPerformedLocked) fields[workPerformed.key] = workText;
+      if (nextSteps) fields[nextSteps.key] = nextStepsText;
       observations.forEach((o, i) => {
         fields[o.key] = observationTexts[i] ?? "";
       });
@@ -200,17 +226,9 @@ export function JobReportDraft({
         <Textarea id="jobSummary" value={summaryText} onChange={(e) => setSummaryText(e.target.value)} disabled={saving} rows={2} />
       </div>
 
-      <div className="space-y-1.5">
-        <div className="flex items-center justify-between gap-2">
-          <Label htmlFor="workPerformed">Work Performed</Label>
-          {workPerformed && <ProvenanceTag provenance={workPerformed.provenance} />}
-        </div>
-        <Textarea id="workPerformed" value={workText} onChange={(e) => setWorkText(e.target.value)} disabled={saving} rows={4} />
-      </div>
-
       {observations.length > 0 && (
         <div className="space-y-2.5">
-          <Label>Observations</Label>
+          <Label>Findings</Label>
           {observations.map((o, i) => (
             <div key={o.key} className="space-y-1">
               <div className="flex justify-end">
@@ -228,6 +246,37 @@ export function JobReportDraft({
               />
             </div>
           ))}
+        </div>
+      )}
+
+      <div className="space-y-1.5">
+        <div className="flex items-center justify-between gap-2">
+          <Label htmlFor="workPerformed">Work Completed</Label>
+          {workPerformedLocked ? (
+            <span className="shrink-0 rounded-full bg-attention/15 px-2 py-0.5 text-[10.5px] font-semibold text-attention">
+              Job still in progress
+            </span>
+          ) : (
+            workPerformed && <ProvenanceTag provenance={workPerformed.provenance} />
+          )}
+        </div>
+        {workPerformedLocked ? (
+          <p className="rounded-xl border border-dashed border-border bg-muted/40 px-3.5 py-3 text-[13px] leading-relaxed text-muted-foreground">
+            This job hasn&apos;t been marked completed on the Work Card yet, so nothing can be reported as finished
+            here. Mark the Work Card completed, then regenerate, to describe what was done.
+          </p>
+        ) : (
+          <Textarea id="workPerformed" value={workText} onChange={(e) => setWorkText(e.target.value)} disabled={saving} rows={4} />
+        )}
+      </div>
+
+      {nextSteps && (
+        <div className="space-y-1.5">
+          <div className="flex items-center justify-between gap-2">
+            <Label htmlFor="nextSteps">Outcome / Next Steps</Label>
+            <ProvenanceTag provenance={nextSteps.provenance} />
+          </div>
+          <Textarea id="nextSteps" value={nextStepsText} onChange={(e) => setNextStepsText(e.target.value)} disabled={saving} rows={2} />
         </div>
       )}
 

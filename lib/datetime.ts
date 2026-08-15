@@ -12,6 +12,8 @@
  * part of this that must never be left to the server's own default.
  */
 
+import * as chrono from "chrono-node";
+
 const LONDON_TZ = "Europe/London";
 
 /** A plain, human-readable "right now" — grounds the model's own
@@ -103,4 +105,78 @@ export function londonWallClockToUtcIso(localWallClock: string): string | null {
   // Step 3: subtract that offset from the guess — this is the real UTC
   // instant whose London-local wall-clock time is exactly what was asked for.
   return new Date(guessUtcMs - offsetMs).toISOString();
+}
+
+/** `messageTimestamp`'s own London wall-clock digits, packed into a
+ * plain UTC-labelled Date — the same "borrow Date's UTC getters/setters
+ * to do calendar arithmetic that's actually London-local" trick
+ * londonWallClockToUtcIso uses, needed here so chrono-node's own
+ * relative-date math ("tomorrow", "next Monday") runs against the
+ * calendar day it actually was in London, not whatever day UTC says it
+ * was — those can differ for part of every day, all year round. */
+function londonWallClockPartsAsUtcDate(date: Date): Date {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: LONDON_TZ,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(date);
+  const part = (type: string) => Number(parts.find((p) => p.type === type)?.value ?? "0");
+  return new Date(Date.UTC(part("year"), part("month") - 1, part("day"), part("hour"), part("minute"), part("second")));
+}
+
+/**
+ * Deterministically resolves a customer's own free-text timing ("2pm
+ * Monday", "tomorrow morning", "next Friday") into a real UTC instant —
+ * replacing what used to be the classification model's own mental date
+ * arithmetic (lib/reply-engine/understanding/classify.ts, before this
+ * change), which had no reliable way to get "which Monday" or DST-
+ * correct offsets right and was never asked to check its own work.
+ * chrono-node is a plain, well-tested calendar-math library, not a
+ * second AI call — the same "deterministic wherever the task is
+ * deterministic" discipline londonWallClockToUtcIso above already
+ * follows for the timezone half of this same problem.
+ *
+ * Reads chrono's own parsed *components* (year/month/day/hour/minute)
+ * rather than the Date instant chrono.parseDate() would hand back —
+ * deliberately: that Date-round-trip turned out to depend on the
+ * running process's own local timezone in a way that only shows up
+ * when the process isn't running in UTC (caught by this function's own
+ * tests failing on a machine whose local zone happens to be Europe/
+ * London — exactly the class of bug this whole file exists to prevent
+ * happening in production, where the server does run in UTC).
+ * Component extraction has no such dependency: the numbers chrono
+ * parsed are read directly, then handed to the existing, already-
+ * correct londonWallClockToUtcIso for the actual DST-aware conversion.
+ *
+ * Only ever resolves when chrono marks the hour component "certain" —
+ * i.e. the customer actually stated a time ("at 2pm", "around 4pm").
+ * "next Monday" alone, with no time, correctly returns null rather
+ * than inventing a default hour — the same "never assume a time of day
+ * that wasn't stated" rule the classification prompt used to state to
+ * the model now enforced deterministically instead. A date left
+ * unstated (just "around 4pm", no day mentioned) is the one place a
+ * default is legitimate — chrono then reads it off the reference
+ * date's own calendar day, i.e. "today" relative to the message.
+ */
+export function resolvePreferredDateTime(text: string, messageTimestamp: Date): string | null {
+  const referenceAsLondonCalendar = londonWallClockPartsAsUtcDate(messageTimestamp);
+  const results = chrono.parse(text, referenceAsLondonCalendar, { forwardDate: true });
+  const component = results[0]?.start;
+  if (!component || !component.isCertain("hour")) return null;
+
+  const year = component.get("year");
+  const month = component.get("month");
+  const day = component.get("day");
+  const hour = component.get("hour");
+  if (year == null || month == null || day == null || hour == null) return null;
+  const minute = component.get("minute") ?? 0;
+  const second = component.get("second") ?? 0;
+
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return londonWallClockToUtcIso(`${year}-${pad(month)}-${pad(day)}T${pad(hour)}:${pad(minute)}:${pad(second)}`);
 }

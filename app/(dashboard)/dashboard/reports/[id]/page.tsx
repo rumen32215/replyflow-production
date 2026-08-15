@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { JobReportDraft, type DraftFieldData } from "@/components/dashboard/reports/job-report-draft";
 import { PhotoSection } from "@/components/dashboard/reports/photo-section";
+import { ReportCharges } from "@/components/dashboard/reports/report-charges";
 import type { JobDocPhoto } from "@/hooks/use-job-doc-photos";
 import { JOB_DOC_MEDIA_BUCKET } from "@/lib/job-docs/photo-storage";
 import { CUSTOMER_MEDIA_BUCKET } from "@/lib/reply-engine/media-storage";
@@ -39,7 +40,9 @@ export default async function ReportDetailPage({ params }: { params: { id: strin
   // RLS (0025_job_docs.sql) scopes this to the signed-in owner's business.
   const { data: jobDoc } = await supabase
     .from("job_docs")
-    .select("id, title, status, customer_name, customer_phone, customer_email, job_address, job_date, created_at, work_card_id, conversation_id")
+    .select(
+      "id, title, status, customer_name, customer_phone, customer_email, job_address, job_date, created_at, work_card_id, conversation_id, charge_labour, charge_materials"
+    )
     .eq("id", params.id)
     .maybeSingle();
   if (!jobDoc) notFound();
@@ -226,6 +229,15 @@ export default async function ReportDetailPage({ params }: { params: { id: strin
          * initialPhotos — the previous job's photos can never bleed
          * into or duplicate onto this one. */}
         <PhotoSection key={jobDoc.id} jobDocId={jobDoc.id} initialPhotos={initialPhotos} />
+      </section>
+
+      {/* 0038 — always the owner's own figures, never AI-touched; its own
+       * section, deliberately separate from Report below, since it has
+       * nothing to do with the AI draft and shouldn't wait on one. */}
+      <section className="rounded-2xl border border-border bg-card p-5">
+        <h2 className="mb-1 text-[13px] font-bold uppercase tracking-wide text-muted-foreground">Charges (optional)</h2>
+        <p className="mb-4 text-[12.5px] text-muted-foreground">Only shown on the report if you enter something here.</p>
+        <ReportCharges key={jobDoc.id} jobDocId={jobDoc.id} initialLabour={jobDoc.charge_labour} initialMaterials={jobDoc.charge_materials} />
       </section>
 
       <section className="rounded-2xl border border-border bg-card p-5">

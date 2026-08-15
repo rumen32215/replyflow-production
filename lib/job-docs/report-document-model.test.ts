@@ -13,6 +13,7 @@ function emptyContent(overrides: Partial<JobReportContent> = {}): JobReportConte
     nextSteps: null,
     observations: [],
     photos: [],
+    charges: null,
     ...overrides,
   };
 }
@@ -171,4 +172,26 @@ test("a photo missing from the photoUrls lookup resolves to url: null, not an er
     photoUrls: NO_PHOTO_URLS,
   });
   assert.equal(model.photoPages[0]?.[0]?.url, null);
+});
+
+test("charges (0038) is carried through from content to the document model verbatim", () => {
+  const model = buildReportDocumentModel({
+    jobDocId: "job-1",
+    business: BUSINESS,
+    jobDoc: JOB_DOC,
+    content: emptyContent({ charges: { labour: 80, materials: 20, total: 100 } }),
+    photoUrls: NO_PHOTO_URLS,
+  });
+  assert.deepEqual(model.charges, { labour: 80, materials: 20, total: 100 });
+});
+
+test("charges is null on the model when the job has none, not an empty object", () => {
+  const model = buildReportDocumentModel({
+    jobDocId: "job-1",
+    business: BUSINESS,
+    jobDoc: JOB_DOC,
+    content: emptyContent(),
+    photoUrls: NO_PHOTO_URLS,
+  });
+  assert.equal(model.charges, null);
 });

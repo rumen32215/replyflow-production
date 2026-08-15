@@ -197,7 +197,14 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
     : { data: null };
 
   const service = createServiceClient();
-  const rows = await fetchJobPhotos(service, { jobDocId: jobDoc.id, episodeId: workCard?.episode_id ?? null });
+  const allRows = await fetchJobPhotos(service, { jobDocId: jobDoc.id, episodeId: workCard?.episode_id ?? null });
+  // A photo the owner has excluded from the report (see DELETE below —
+  // exclude, not delete, for a WhatsApp-sourced photo) simply doesn't
+  // show up here either, the same one-way "it's gone" behaviour as a
+  // real delete for a manually-uploaded photo — the underlying
+  // conversation evidence still exists, it's just not part of this
+  // owner-facing photo list any more.
+  const rows = allRows.filter((r) => r.included_in_report);
   const signedResults = await Promise.all(
     rows.map((r) => {
       const bucket = r.source === "job_doc" ? JOB_DOC_MEDIA_BUCKET : CUSTOMER_MEDIA_BUCKET;

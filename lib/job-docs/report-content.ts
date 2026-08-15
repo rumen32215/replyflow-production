@@ -119,6 +119,19 @@ export interface JobReportContent {
   nextSteps: ReportContentField | null;
   observations: ReportContentField[];
   photos: ReportContentPhoto[];
+  /** 0038 — always owner-entered, never AI. Null whenever the owner
+   * hasn't entered a charge at all (both amounts null) — an omitted
+   * section, never a "£0.00" that looks like a real, deliberate price. */
+  charges: ReportContentCharges | null;
+}
+
+export interface ReportContentCharges {
+  labour: number | null;
+  materials: number | null;
+  /** labour + materials — null only when both are null. Computed here,
+   * never separately entered, so a report can never show a total that
+   * doesn't match its own breakdown. */
+  total: number | null;
 }
 
 /** The exact job_doc_photos columns this function needs — deliberately
@@ -201,6 +214,16 @@ function selectPhotos(photos: ReportContentPhotoRow[]): ReportContentPhoto[] {
     .map(toReportPhoto);
 }
 
+/** 0038 — labour/materials are read verbatim (already owner-entered,
+ * never AI-generated, so there's no provenance/eligibility decision to
+ * make the way there is for the text fields above); this only computes
+ * the total and decides whether there's anything to show at all. */
+function selectCharges(input: { labour: number | null; materials: number | null }): ReportContentCharges | null {
+  if (input.labour == null && input.materials == null) return null;
+  const total = (input.labour ?? 0) + (input.materials ?? 0);
+  return { labour: input.labour, materials: input.materials, total };
+}
+
 /**
  * The single source of truth. Takes exactly two already job-scoped
  * arrays (mirroring how every existing route already fetches them —
@@ -216,6 +239,12 @@ export function selectReportContent(input: {
    * own field comments for why this gates workPerformed specifically. */
   isJobCompleted: boolean;
   issueReported: string | null;
+  /** 0038 — the owner's own entered charge, straight from job_docs.
+   * charge_labour/charge_materials. Never AI-generated; there is no
+   * write path for this anywhere except the owner's own edit. Optional
+   * for callers that don't need to think about pricing at all — most
+   * jobs won't have one. */
+  charges?: { labour: number | null; materials: number | null };
 }): JobReportContent {
   // Defence in depth (production hardening, 2026-08-14): the draft-
   // generation route already refuses to write real work_performed
@@ -236,5 +265,6 @@ export function selectReportContent(input: {
     nextSteps: selectTextField(input.fields, NEXT_STEPS_FIELD_KEY),
     observations: selectObservations(input.fields),
     photos: selectPhotos(input.photos),
+    charges: selectCharges(input.charges ?? { labour: null, materials: null }),
   };
 }

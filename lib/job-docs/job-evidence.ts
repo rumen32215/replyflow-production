@@ -52,6 +52,7 @@ interface ConversationPhotoRow {
   unknown_note: string;
   analysis_confidence: "low" | "medium" | "high";
   created_at: string;
+  included_in_report: boolean;
 }
 
 interface PendingImageMessageRow {
@@ -95,7 +96,13 @@ function fromConversationPhoto(row: ConversationPhotoRow): JobEvidencePhoto {
     // mere existence means analyzed, no separate flag needed.
     analyzed_at: row.created_at,
     created_at: row.created_at,
-    included_in_report: true,
+    // 0037 — the owner's own inclusion decision, same column/meaning as
+    // job_doc_photos.included_in_report; defaults true until explicitly
+    // excluded (see the photo-removal route). The `?? true` mirrors the
+    // column's own DB-level default for any caller that hasn't selected
+    // it explicitly, rather than turning an absent value into a silent
+    // exclusion.
+    included_in_report: row.included_in_report ?? true,
     source: "conversation",
   };
 }
@@ -142,7 +149,9 @@ export async function fetchJobPhotos(
     input.episodeId
       ? supabase
           .from("conversation_photos")
-          .select("id, message_id, storage_path, visible_summary, possible_summary, unknown_note, analysis_confidence, created_at")
+          .select(
+            "id, message_id, storage_path, visible_summary, possible_summary, unknown_note, analysis_confidence, created_at, included_in_report"
+          )
           .eq("episode_id", input.episodeId)
       : Promise.resolve({ data: [] as ConversationPhotoRow[] }),
     input.episodeId

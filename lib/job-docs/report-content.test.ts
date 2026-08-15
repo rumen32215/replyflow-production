@@ -252,6 +252,7 @@ test("empty/missing content: no fields and no photos produces a fully empty, sti
     nextSteps: null,
     observations: [],
     photos: [],
+    charges: null,
   });
 });
 
@@ -392,4 +393,31 @@ test("nextSteps is independent of the isJobCompleted gate — a completed job ca
     issueReported: null,
   });
   assert.equal(result.nextSteps?.text, "12-month workmanship guarantee applies.");
+});
+
+/* -------- charges (0038) — always owner-entered, never AI -------- */
+
+test("charges is null when neither labour nor materials was entered — no fabricated £0.00", () => {
+  const result = selectContent({ jobDocId: "job-1", fields: [], photos: [], charges: { labour: null, materials: null } });
+  assert.equal(result.charges, null);
+});
+
+test("charges is null when the input is omitted entirely (a caller that doesn't care about pricing)", () => {
+  const result = selectContent({ jobDocId: "job-1", fields: [], photos: [] });
+  assert.equal(result.charges, null);
+});
+
+test("charges computes the total as labour + materials", () => {
+  const result = selectContent({ jobDocId: "job-1", fields: [], photos: [], charges: { labour: 80, materials: 25.5 } });
+  assert.deepEqual(result.charges, { labour: 80, materials: 25.5, total: 105.5 });
+});
+
+test("charges with only labour entered still produces a real total, materials stays null (not zero)", () => {
+  const result = selectContent({ jobDocId: "job-1", fields: [], photos: [], charges: { labour: 60, materials: null } });
+  assert.deepEqual(result.charges, { labour: 60, materials: null, total: 60 });
+});
+
+test("charges with only materials entered still produces a real total, labour stays null (not zero)", () => {
+  const result = selectContent({ jobDocId: "job-1", fields: [], photos: [], charges: { labour: null, materials: 15 } });
+  assert.deepEqual(result.charges, { labour: null, materials: 15, total: 15 });
 });

@@ -1,6 +1,6 @@
 import "server-only";
 import { getCompletion } from "../llm/client";
-import { formatNowLondon, londonWallClockToUtcIso } from "@/lib/datetime";
+import { formatNowLondon, resolvePreferredDateTime } from "@/lib/datetime";
 import { extractPatternEntities, withPostcodeBackstop } from "./entities";
 import {
   INTENTS,
@@ -66,9 +66,8 @@ const RESPONSE_SCHEMA = {
             location: { type: ["string", "null"] },
             preferred_time: { type: ["string", "null"] },
             customer_name: { type: ["string", "null"] },
-            preferred_time_resolved: { type: ["string", "null"] },
           },
-          required: ["issue", "location", "preferred_time", "customer_name", "preferred_time_resolved"],
+          required: ["issue", "location", "preferred_time", "customer_name"],
         },
         open_question: { type: ["string", "null"] },
         greeting_given: { type: "boolean" },
@@ -129,6 +128,8 @@ const RESPONSE_SCHEMA = {
 
 const SYSTEM_PROMPT = `You do two jobs for one inbound WhatsApp message to a UK trade/service business (e.g. plumber, electrician, heating engineer):
 
+The literal text "[image message]" is a placeholder this application inserts when a customer sends a photo with no caption — it is not something the customer typed. Never treat it as real wording: it must never become part of issue, last_topic, a commitment's text, or any other slot or summary field. A message that is only this placeholder carries no new textual information at all — judge intent/urgency/etc. from the actual conversation context instead, and leave every slot exactly as PREVIOUS STATE had it.
+
 1) CLASSIFY the message:
 - primary_intent: the single best-fitting category for what THIS message actually says, judged on its own — never biased toward "whatever we were already doing" just because PREVIOUS STATE shows a stage in progress. A customer can ask a genuinely new question (e.g. the call-out fee) in the middle of an in-progress booking — that message is PRICING_INQUIRY even though the conversation is mid-collect, not BOOKING_REQUEST just because that's the thread's current stage. PREVIOUS STATE is for updating conversation_state below, not for classifying this message. Watch for sarcasm: positive-sounding words describing a negative situation ("great, three days without water, really impressed") is a COMPLAINT, not SOCIAL — judge the actual situation being described, not just the surface words used to describe it.
 - secondary_intents: any other categories genuinely also present (compound messages are real, e.g. "Thanks for yesterday, what's your call-out fee?" = SOCIAL + PRICING_INQUIRY). Empty array if none. Long or rambling messages are real too, and a genuine complaint (something already went wrong, a previous visit that failed) buried in the middle of a longer message about something else entirely — a new booking, a pricing question — is still a real complaint: always include COMPLAINT in secondary_intents when one is present anywhere in the message, however minor the language or however much other content surrounds it. Never let the most prominent or most recent request in a long message crowd out a genuine complaint earlier in the same message.
@@ -138,7 +139,7 @@ const SYSTEM_PROMPT = `You do two jobs for one inbound WhatsApp message to a UK 
 
 2) UPDATE the conversation state. You are given the PREVIOUS state (where this conversation already was) — your job is to move it forward, not to re-derive it from nothing:
 - stage: understand (first contact, nothing established yet) -> diagnose (working out what the problem/need actually is) -> collect (gathering the specific details still needed: location, timing, etc.) -> quote_or_book (enough is known to offer a price or a visit) -> confirm (a booking has been proposed/made) -> waiting (confirmed, nothing further needed until the job happens) -> completed (the job has happened) -> closed (the conversation ended without becoming a job, or is genuinely finished). Never advance to quote_or_book or confirm while slots.issue is still null — a booking needs to know what the job actually is before it can be offered, even if timing/location came up first. You do not need to decide whether the previous state's stage still applies if the customer has started a brand new, unrelated request — that decision is handled separately by episode_continuity below; just answer the stage question honestly for the request PREVIOUS STATE actually describes.
-- slots: carry forward every slot value from the previous state unchanged unless this message adds or corrects one. issue = the problem/job in a few words. location = postcode/area if given. preferred_time = whatever day/time the customer has proposed, in their own words (e.g. "tomorrow morning", "around 4pm") — if the customer gives a new time, replace the old one; if they haven't mentioned timing yet, keep it null. preferred_time_resolved = the same proposed time, but as a real date and time, computed against CURRENT DATE/TIME given below — only when you are genuinely confident and unambiguous about both the date and the time; null whenever there's real ambiguity (no year-round guessing about which "Tuesday" someone means, no assuming a time of day that wasn't stated). Write it as the LOCAL Europe/London wall-clock time, in the exact form "YYYY-MM-DDTHH:MM:SS" with NO "Z" and no timezone offset at the end (e.g. "10am tomorrow" on the date given below becomes "2026-08-13T10:00:00", not "2026-08-13T10:00:00.000Z" and not any other timezone's equivalent) — the application converts this to UTC itself; adding your own "Z" or offset would silently double-convert it and get the customer's requested time wrong. This never overrides preferred_time, which always stays in the customer's own words regardless.
+- slots: carry forward every slot value from the previous state unchanged unless this message adds or corrects one. issue = the problem/job in a few words. location = postcode/area if given. preferred_time = whatever day/time the customer has proposed, in their own words, exactly as they said it (e.g. "tomorrow morning", "around 4pm", "next Monday afternoon") — if the customer gives a new time, replace the old one; if they haven't mentioned timing yet, keep it null. Never resolve this into a calendar date yourself — the application does that deterministically from your literal wording, not from your own arithmetic.
 - open_question: your best guess at what will still be outstanding after this turn, in a few words (e.g. "preferred time", "postcode"), or null if you expect nothing to be outstanding. This is a provisional estimate — the actual reply-writing step may ask something different and will correct this afterward, so don't overthink it.
 - greeting_given: true if a greeting has already happened anywhere in this thread (including the previous state already being true) — once true, it stays true.
 - last_topic: a short label for what the live exchange is actually about right now (e.g. "radiator repair booking", "call-out fee question", "casual chat") — replace it when the topic genuinely changes, keep it when it doesn't.
@@ -187,28 +188,31 @@ function isIntent(value: unknown): value is Intent {
   return typeof value === "string" && (INTENTS as readonly string[]).includes(value);
 }
 
-/** Timezone fix (see lib/datetime.ts's londonWallClockToUtcIso doc
- * comment for the full story) — the model is asked for a London local
- * wall-clock time, but even if it still attaches a "Z" out of habit,
- * this only ever trusts the literal digits, never a suffix, and
- * converts them to the real UTC instant here, deterministically. */
-function resolvePreferredTime(rawConversationState: unknown): unknown {
-  if (!rawConversationState || typeof rawConversationState !== "object") return rawConversationState;
-  const cs = rawConversationState as Record<string, unknown>;
-  if (!cs.slots || typeof cs.slots !== "object") return rawConversationState;
-  const slots = cs.slots as Record<string, unknown>;
-  const raw = slots.preferred_time_resolved;
-  if (typeof raw !== "string") return rawConversationState;
-  return {
-    ...cs,
-    slots: { ...slots, preferred_time_resolved: londonWallClockToUtcIso(raw) },
-  };
+/**
+ * Production hardening — replaces what used to be the model's own
+ * mental date arithmetic for preferred_time_resolved. The model is
+ * still asked for preferred_time (the customer's literal wording,
+ * genuinely a classification/extraction task); resolving that wording
+ * into a real calendar date and time is deterministic calendar math,
+ * not something a language model should be asked to compute and grade
+ * its own confidence on — lib/datetime.ts's resolvePreferredDateTime
+ * (chrono-node, DST-aware) does it the same way for every call, with
+ * no risk of picking the wrong Tuesday or getting BST/GMT wrong.
+ * `referenceNow` is the moment this message is actually being
+ * classified — the same "CURRENT DATE/TIME" instant already given to
+ * the model in the prompt above, so "tomorrow" means the same day to
+ * both.
+ */
+function resolvePreferredTime(state: ConversationState, referenceNow: Date): ConversationState {
+  const resolved = state.slots.preferredTime ? resolvePreferredDateTime(state.slots.preferredTime, referenceNow) : null;
+  if (resolved === state.slots.preferredTimeResolved) return state;
+  return { ...state, slots: { ...state.slots, preferredTimeResolved: resolved } };
 }
 
 /** Defensive parsing — the model's output is never trusted blindly.
  * Anything that doesn't validate falls back to the safe, wide UNCLEAR
  * classification rather than propagating a malformed value downstream. */
-function toUnderstandingResult(raw: unknown, messageText: string, priorState: ConversationState): UnderstandingResult {
+function toUnderstandingResult(raw: unknown, messageText: string, priorState: ConversationState, referenceNow: Date): UnderstandingResult {
   const patternEntities = extractPatternEntities(messageText);
   const fallback: UnderstandingResult = {
     primaryIntent: "UNCLEAR",
@@ -256,7 +260,7 @@ function toUnderstandingResult(raw: unknown, messageText: string, priorState: Co
     },
     safetyTag,
     conversationState: {
-      ...withPostcodeBackstop(toConversationState(resolvePreferredTime(r.conversation_state)), patternEntities),
+      ...resolvePreferredTime(withPostcodeBackstop(toConversationState(r.conversation_state), patternEntities), referenceNow),
       // Carried forward mechanically, not by the model's own
       // conversation_state schema — see state.ts's own doc comment on
       // ConversationState.urgency.
@@ -275,6 +279,10 @@ export async function classifyMessage(
   priorState: ConversationState = EMPTY_CONVERSATION_STATE,
   recentHistory: { direction: "inbound" | "outbound"; body: string }[] = []
 ): Promise<UnderstandingResult> {
+  // Captured once — the model's prompt and the deterministic date/time
+  // resolver below must reason about exactly the same "now", never two
+  // instants a few hundred milliseconds apart.
+  const referenceNow = new Date();
   try {
     const historyBlock =
       recentHistory.length > 0
@@ -283,7 +291,7 @@ export async function classifyMessage(
             .join("\n")}`
         : "";
 
-    const userContent = `CURRENT DATE/TIME (Europe/London): ${formatNowLondon()}\n\nPREVIOUS STATE: ${JSON.stringify(priorState)}${historyBlock}\n\nNEW MESSAGE from the customer: "${messageText}"`;
+    const userContent = `CURRENT DATE/TIME (Europe/London): ${formatNowLondon(referenceNow)}\n\nPREVIOUS STATE: ${JSON.stringify(priorState)}${historyBlock}\n\nNEW MESSAGE from the customer: "${messageText}"`;
 
     const result = await getCompletion({
       tier: "small",
@@ -296,7 +304,7 @@ export async function classifyMessage(
       businessId,
       callSite: "understanding.classify",
     });
-    return toUnderstandingResult(result.data, messageText, priorState);
+    return toUnderstandingResult(result.data, messageText, priorState, referenceNow);
   } catch (err) {
     // A classification failure must never block the pipeline outright —
     // it degrades to the safe, wide fallback (fetch everything bounded,

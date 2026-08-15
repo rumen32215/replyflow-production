@@ -1,4 +1,4 @@
-import type { JobReportContent, ReportContentField, ReportContentPhoto } from "./report-content";
+import type { JobReportContent, ReportContentField, ReportContentPhoto, ReportContentCharges } from "./report-content";
 
 /**
  * ReplyFlow 2.0, Phase 2D — the pure, deterministic view model behind
@@ -76,6 +76,8 @@ export interface ReportDocumentModel {
    * single empty page) when there are no eligible photos. */
   photoPages: ReportDocumentPhoto[][];
   hasPhotos: boolean;
+  /** 0038 — verbatim from Stage 4, same as every other field above. */
+  charges: ReportContentCharges | null;
 }
 
 /** A clean, readable density for one A4 report page (3 rows of 2). */
@@ -146,5 +148,6 @@ export function buildReportDocumentModel(input: {
     observations: input.content.observations,
     photoPages: paginatePhotos(photosWithUrls),
     hasPhotos: photosWithUrls.length > 0,
+    charges: input.content.charges,
   };
 }

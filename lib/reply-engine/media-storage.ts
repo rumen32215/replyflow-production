@@ -41,4 +41,21 @@ export async function storeCustomerMedia(
   return path;
 }
 
+/**
+ * Re-reads an already-stored customer photo's bytes. Needed wherever a
+ * report photo has to be re-encoded (e.g. WebP -> JPEG for PDF
+ * rendering, lib/job-docs/report photo pipeline) rather than just
+ * linked via a signed URL — mirrors lib/job-docs/photo-storage.ts's
+ * downloadJobDocPhoto exactly, for the sibling bucket.
+ */
+export async function downloadCustomerMedia(
+  supabase: ServiceClient,
+  storagePath: string
+): Promise<{ bytes: Uint8Array; mimeType: string }> {
+  const { data, error } = await supabase.storage.from(BUCKET).download(storagePath);
+  if (error || !data) throw new Error(`Failed to download customer media: ${error?.message ?? "no data returned"}`);
+  const arrayBuffer = await data.arrayBuffer();
+  return { bytes: new Uint8Array(arrayBuffer), mimeType: data.type || "image/jpeg" };
+}
+
 export { BUCKET as CUSTOMER_MEDIA_BUCKET };

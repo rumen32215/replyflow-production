@@ -40,7 +40,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
 
   const { data: jobDoc } = await service
     .from("job_docs")
-    .select("id, business_id, title, status, work_card_id")
+    .select("id, business_id, title, status, work_card_id, charge_labour, charge_materials")
     .eq("id", params.id)
     .maybeSingle();
   if (!jobDoc) return NextResponse.json({ error: "Job record not found" }, { status: 404 });
@@ -96,6 +96,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
         : null,
       fields: (fields ?? []) as JobDocFieldRow[],
       photos,
+      charges: { labour: jobDoc.charge_labour, materials: jobDoc.charge_materials },
     });
 
     if (!hasApprovableContent(source.content)) {

@@ -131,6 +131,7 @@ function emptyContent(overrides: Partial<JobReportContent> = {}): JobReportConte
     nextSteps: null,
     observations: [],
     photos: [],
+    charges: null,
     ...overrides,
   };
 }

@@ -50,6 +50,9 @@ export function buildReportSource(input: {
   workCard: ReportSourceWorkCard | null;
   fields: JobDocFieldRow[];
   photos: ReportContentPhotoRow[];
+  /** 0038 — the owner's own entered charge, straight from job_docs.
+   * Optional — most callers/tests don't need to think about pricing. */
+  charges?: { labour: number | null; materials: number | null };
 }): ReportSource {
   const isJobCompleted = input.workCard?.status === "completed";
   const issueReported = input.workCard?.issue ?? null;
@@ -60,6 +63,7 @@ export function buildReportSource(input: {
     photos: input.photos,
     isJobCompleted,
     issueReported,
+    charges: input.charges,
   });
 
   return {

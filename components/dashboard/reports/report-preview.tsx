@@ -4,6 +4,7 @@ import dynamic from "next/dynamic";
 import { Loader2, Download } from "lucide-react";
 import { ReportDocument } from "@/lib/job-docs/report-document";
 import type { ReportDocumentModel } from "@/lib/job-docs/report-document-model";
+import { formatDate } from "@/lib/work-card-format";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -42,6 +43,167 @@ export function ReportPreview({ model }: { model: ReportDocumentModel }) {
     <PDFViewer style={{ width: "100%", height: "100%", minHeight: "80vh", border: "none" }} showToolbar>
       <ReportDocument model={model} />
     </PDFViewer>
+  );
+}
+
+/**
+ * Production hardening (2026-08-15) — a genuinely responsive on-screen
+ * read of the report, for a phone. PDFViewer above renders the real
+ * PDF engine's own output — accurate, but a fixed A4 page embedded in
+ * an iframe is uncomfortable to actually read on a phone (a live
+ * production test found exactly this). Rather than trying to make a
+ * fixed-page PDF viewer responsive, this is a second, plain HTML render
+ * of the identical ReportDocumentModel — same content, same photos,
+ * same section order, just laid out as ordinary flowing cards instead
+ * of a printed page. Nothing here decides what's included; every field
+ * is read verbatim off the model, exactly like ReportDocument itself.
+ *
+ * ResponsiveReportPreview and ReportPreview are shown together (see the
+ * preview page's own md:hidden / hidden md:block split) — a phone gets
+ * this one, a wider screen gets the real PDF preview. Neither replaces
+ * Download PDF, which always renders the actual file either way.
+ */
+export function ResponsiveReportPreview({ model }: { model: ReportDocumentModel }) {
+  const jobDate = formatDate(model.jobDetails.jobDate);
+  const hasTextContent = Boolean(
+    model.jobSummary || model.workPerformed || model.nextSteps || model.observations.length > 0 || model.issueReported || model.charges
+  );
+  const allPhotos = model.photoPages.flat();
+
+  return (
+    <div className="space-y-4 rounded-2xl border border-border bg-card p-4">
+      <div className="flex items-center gap-3 border-b border-border pb-4">
+        {model.header.logoUrl && (
+          // eslint-disable-next-line @next/next/no-img-element -- a signed, business-specific logo URL, not an optimizable static asset
+          <img src={model.header.logoUrl} alt="" className="h-10 w-10 shrink-0 rounded-md object-cover" />
+        )}
+        <div className="min-w-0">
+          <p className="truncate text-[15px] font-bold">{model.header.businessName}</p>
+          <p className="truncate text-[12px] text-muted-foreground">
+            {[model.header.trade, model.header.businessPhone].filter(Boolean).join(" · ") || " "}
+          </p>
+        </div>
+      </div>
+
+      <div>
+        <p className="text-[11px] font-bold uppercase tracking-wide text-primary">Job Report</p>
+        <h2 className="mt-0.5 text-[17px] font-bold">{model.jobDetails.title}</h2>
+      </div>
+
+      <dl className="grid grid-cols-2 gap-x-4 gap-y-3 border-b border-border pb-4 text-[13px]">
+        <div>
+          <dt className="text-[11px] text-muted-foreground">Date</dt>
+          <dd className="font-medium">{jobDate ?? "Not given"}</dd>
+        </div>
+        <div>
+          <dt className="text-[11px] text-muted-foreground">Customer</dt>
+          <dd className="font-medium">{model.jobDetails.customerName || "Not given"}</dd>
+        </div>
+        <div className="col-span-2">
+          <dt className="text-[11px] text-muted-foreground">Address</dt>
+          <dd className="font-medium">{model.jobDetails.jobAddress || "Not given"}</dd>
+        </div>
+        <div>
+          <dt className="text-[11px] text-muted-foreground">Status</dt>
+          <dd className={cn("font-bold", model.isJobCompleted ? "text-success" : "text-attention")}>
+            {model.isJobCompleted ? "COMPLETED" : "IN PROGRESS"}
+          </dd>
+        </div>
+      </dl>
+
+      {model.issueReported && (
+        <section>
+          <h3 className="text-[11px] font-bold uppercase tracking-wide text-primary">Issue Reported</h3>
+          <p className="mt-1.5 whitespace-pre-wrap text-[13.5px] leading-relaxed">{model.issueReported}</p>
+        </section>
+      )}
+
+      {model.jobSummary && (
+        <section>
+          <h3 className="text-[11px] font-bold uppercase tracking-wide text-primary">Job Summary</h3>
+          <p className="mt-1.5 whitespace-pre-wrap text-[13.5px] leading-relaxed">{model.jobSummary.text}</p>
+        </section>
+      )}
+
+      {model.observations.length > 0 && (
+        <section>
+          <h3 className="text-[11px] font-bold uppercase tracking-wide text-primary">Findings</h3>
+          <ul className="mt-1.5 space-y-1">
+            {model.observations.map((observation, i) => (
+              <li key={i} className="flex gap-2 text-[13.5px] leading-relaxed">
+                <span className="text-primary">•</span>
+                <span>{observation.text}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      <section>
+        <h3 className="text-[11px] font-bold uppercase tracking-wide text-primary">Work Completed</h3>
+        {model.isJobCompleted && model.workPerformed ? (
+          <p className="mt-1.5 whitespace-pre-wrap text-[13.5px] leading-relaxed">{model.workPerformed.text}</p>
+        ) : (
+          <p className="mt-1.5 text-[13.5px] italic text-muted-foreground">Not yet completed — this job is still in progress.</p>
+        )}
+      </section>
+
+      {model.nextSteps && (
+        <section>
+          <h3 className="text-[11px] font-bold uppercase tracking-wide text-primary">Outcome / Next Steps</h3>
+          <p className="mt-1.5 whitespace-pre-wrap text-[13.5px] leading-relaxed">{model.nextSteps.text}</p>
+        </section>
+      )}
+
+      {model.charges && (
+        <section>
+          <h3 className="text-[11px] font-bold uppercase tracking-wide text-primary">Charges</h3>
+          <div className="mt-1.5 divide-y divide-border rounded-lg border border-border text-[13.5px]">
+            {model.charges.labour != null && (
+              <div className="flex justify-between px-3 py-2">
+                <span>Labour / Work</span>
+                <span className="tabular-nums">£{model.charges.labour.toFixed(2)}</span>
+              </div>
+            )}
+            {model.charges.materials != null && (
+              <div className="flex justify-between px-3 py-2">
+                <span>Materials</span>
+                <span className="tabular-nums">£{model.charges.materials.toFixed(2)}</span>
+              </div>
+            )}
+            <div className="flex justify-between px-3 py-2 font-bold">
+              <span>Total</span>
+              <span className="tabular-nums">£{model.charges.total!.toFixed(2)}</span>
+            </div>
+          </div>
+        </section>
+      )}
+
+      {!hasTextContent && !model.hasPhotos && (
+        <p className="text-[13.5px] text-muted-foreground">This job report doesn&apos;t have any content ready yet.</p>
+      )}
+
+      {allPhotos.length > 0 && (
+        <section>
+          <h3 className="text-[11px] font-bold uppercase tracking-wide text-primary">Photos</h3>
+          <div className="mt-1.5 grid grid-cols-2 gap-2.5">
+            {allPhotos.map((photo) => (
+              <div key={photo.id}>
+                {photo.url ? (
+                  // eslint-disable-next-line @next/next/no-img-element -- a per-photo signed URL, not an optimizable static asset
+                  <img src={photo.url} alt={photo.caption ?? ""} className="aspect-square w-full rounded-lg border border-border object-cover" />
+                ) : (
+                  <div className="flex aspect-square w-full items-center justify-center rounded-lg border border-border bg-muted text-[11px] text-muted-foreground">
+                    Photo unavailable
+                  </div>
+                )}
+                {photo.caption && <p className="mt-1 truncate text-[11px] text-muted-foreground">{photo.caption}</p>}
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+    </div>
   );
 }
 

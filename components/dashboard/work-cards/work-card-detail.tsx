@@ -554,6 +554,19 @@ export function WorkCardDetail({
                   ? "The customer-facing report for this job."
                   : "Turn this completed job into a professional, customer-facing report — nothing here gets retyped."}
             </p>
+            {/* Production hardening (2026-08-15) — the AI can only write
+             * a real "Work Completed" section from what's actually in
+             * Notes; marking a job completed captures no text on its
+             * own, so a job with nothing in Notes yet gets a genuinely
+             * weak draft, not a wrong one. A one-line nudge here, right
+             * before Generate report, is cheaper and more honest than
+             * trying to make the AI infer finished work it was never
+             * told about. */}
+            {!card.notes?.trim() && !jobDocId && (
+              <p className="mb-3 text-[12.5px] text-muted-foreground">
+                Tip: a quick note above about what you actually did makes for a much better report.
+              </p>
+            )}
             <motion.button
               {...press}
               onClick={generateOrOpenReport}
@@ -711,11 +724,12 @@ export function WorkCardDetail({
                     className="w-full rounded-lg border border-border bg-background px-3 py-2 text-[13.5px] outline-none focus:border-primary"
                   />
                 </Field>
-                <Field label="Notes">
+                <Field label="Notes (e.g. what you found or did on site)">
                   <textarea
                     value={notes}
                     onChange={(e) => setNotes(e.target.value)}
                     rows={3}
+                    placeholder="Anything worth remembering — this feeds the report draft once the job's done."
                     className="w-full rounded-lg border border-border bg-background px-3 py-2 text-[13.5px] outline-none focus:border-primary"
                   />
                 </Field>
@@ -743,7 +757,7 @@ export function WorkCardDetail({
                 <Row label="Collected details" value={card.collectedDetails} placeholder="Nothing volunteered yet." />
                 <Row label="Appointment" value={formatDateTime(card.scheduledFor)} placeholder="No time set." />
                 <Row label="Estimated value" value={card.estimatedValue != null ? `£${card.estimatedValue.toFixed(2)}` : null} placeholder="Not set." />
-                <Row label="Notes" value={card.notes} placeholder="Nothing added." />
+                <Row label="Notes" value={card.notes} placeholder="Nothing added yet — what you did on site helps write a better report." />
               </div>
             )}
           </div>

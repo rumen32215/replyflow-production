@@ -179,6 +179,43 @@ const styles = StyleSheet.create({
     lineHeight: 1.5,
     color: COLORS.dark,
   },
+  chargesTable: {
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 6,
+  },
+  chargeRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingVertical: 7,
+    paddingHorizontal: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+  },
+  chargeRowTotal: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+  },
+  chargeLabel: {
+    fontSize: 10.5,
+    color: COLORS.dark,
+  },
+  chargeLabelTotal: {
+    fontSize: 10.5,
+    fontWeight: 700,
+    color: COLORS.dark,
+  },
+  chargeAmount: {
+    fontSize: 10.5,
+    color: COLORS.dark,
+  },
+  chargeAmountTotal: {
+    fontSize: 10.5,
+    fontWeight: 700,
+    color: COLORS.dark,
+  },
   photoGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
@@ -226,7 +263,7 @@ export function ReportDocument({ model }: { model: ReportDocumentModel }) {
   const { header, jobDetails } = model;
   const jobDate = formatDate(jobDetails.jobDate);
   const hasTextContent = Boolean(
-    model.jobSummary || model.workPerformed || model.nextSteps || model.observations.length > 0 || model.issueReported
+    model.jobSummary || model.workPerformed || model.nextSteps || model.observations.length > 0 || model.issueReported || model.charges
   );
 
   return (
@@ -324,6 +361,33 @@ export function ReportDocument({ model }: { model: ReportDocumentModel }) {
           <View style={styles.section}>
             <Text style={styles.sectionLabel}>Outcome / Next Steps</Text>
             <Text style={styles.sectionText}>{model.nextSteps.text}</Text>
+          </View>
+        )}
+
+        {/* 0038 — always the owner's own entered figures, never AI. Omitted
+         * entirely (not a "£0.00" row) whenever neither amount was entered —
+         * see selectCharges in lib/job-docs/report-content.ts. */}
+        {model.charges && (
+          <View style={styles.section}>
+            <Text style={styles.sectionLabel}>Charges</Text>
+            <View style={styles.chargesTable}>
+              {model.charges.labour != null && (
+                <View style={styles.chargeRow}>
+                  <Text style={styles.chargeLabel}>Labour / Work</Text>
+                  <Text style={styles.chargeAmount}>£{model.charges.labour.toFixed(2)}</Text>
+                </View>
+              )}
+              {model.charges.materials != null && (
+                <View style={styles.chargeRow}>
+                  <Text style={styles.chargeLabel}>Materials</Text>
+                  <Text style={styles.chargeAmount}>£{model.charges.materials.toFixed(2)}</Text>
+                </View>
+              )}
+              <View style={styles.chargeRowTotal}>
+                <Text style={styles.chargeLabelTotal}>Total</Text>
+                <Text style={styles.chargeAmountTotal}>£{model.charges.total!.toFixed(2)}</Text>
+              </View>
+            </View>
           </View>
         )}
 

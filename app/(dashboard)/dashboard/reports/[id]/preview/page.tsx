@@ -10,10 +10,11 @@ import { parseReportSnapshot } from "@/lib/job-docs/report-snapshot";
 import { fetchJobPhotos } from "@/lib/job-docs/job-evidence";
 import { buildReportDocumentModel } from "@/lib/job-docs/report-document-model";
 import { JOB_DOC_MEDIA_BUCKET, downloadJobDocPhoto } from "@/lib/job-docs/photo-storage";
+import { CUSTOMER_MEDIA_BUCKET, downloadCustomerMedia } from "@/lib/reply-engine/media-storage";
 import { recordErrorEvent } from "@/lib/error-events";
 import type { JobDocFieldRow } from "@/lib/job-docs/fields";
 import type { ReportContentPhoto } from "@/lib/job-docs/report-content";
-import { ReportPreview } from "@/components/dashboard/reports/report-preview";
+import { ReportPreview, ResponsiveReportPreview } from "@/components/dashboard/reports/report-preview";
 import { ReportApproval, type ReportApprovalSummary } from "@/components/dashboard/reports/report-approval";
 
 export const metadata: Metadata = { title: "Report Preview — ReplyFlow" };
@@ -42,6 +43,40 @@ function isWebpPhoto(storagePath: string): boolean {
 const PDF_PHOTO_JPEG_QUALITY = 85;
 
 /**
+ * Production hardening — a report photo's storagePath can live in
+ * either private bucket depending on where the photo actually came
+ * from (job-doc-media for a manual upload, customer-media for a
+ * WhatsApp photo — lib/job-docs/job-evidence.ts's own JobEvidenceSource
+ * discriminator), but neither ReportContentPhoto nor a frozen, already-
+ * approved report_snapshot carries that source forward — an approved
+ * snapshot must go on rendering correctly forever, long after the live
+ * evidence that produced it could tell you which bucket to use. Trying
+ * job-doc-media first, then customer-media, is a deterministic, side-
+ * effect-free two-bucket lookup that works identically for a live draft
+ * and a historical frozen snapshot, with no schema change and no risk
+ * to already-approved reports. This was the actual root cause of photos
+ * silently missing from the PDF: every photo in a real production test
+ * was WhatsApp-sourced, so the old job-doc-media-only lookup found
+ * nothing for either of them.
+ */
+async function signEitherBucket(service: ServiceClient, storagePath: string): Promise<string | null> {
+  const jobDocResult = await service.storage.from(JOB_DOC_MEDIA_BUCKET).createSignedUrl(storagePath, 3600);
+  if (jobDocResult.data?.signedUrl) return jobDocResult.data.signedUrl;
+  const conversationResult = await service.storage.from(CUSTOMER_MEDIA_BUCKET).createSignedUrl(storagePath, 3600);
+  return conversationResult.data?.signedUrl ?? null;
+}
+
+/** Same two-bucket fallback as signEitherBucket, for the WebP download
+ * path — see that function's doc comment for the full reasoning. */
+async function downloadFromEitherBucket(service: ServiceClient, storagePath: string): Promise<{ bytes: Uint8Array; mimeType: string }> {
+  try {
+    return await downloadJobDocPhoto(service, storagePath);
+  } catch {
+    return await downloadCustomerMedia(service, storagePath);
+  }
+}
+
+/**
  * For the one format react-pdf can't decode, downloads the already-
  * private bytes server-side (the same service-role storage access
  * already used to sign every other photo — no new trust boundary) and
@@ -64,7 +99,7 @@ async function resolveWebpPhotoAsJpegDataUri(
   storagePath: string
 ): Promise<string | null> {
   try {
-    const { bytes } = await downloadJobDocPhoto(service, storagePath);
+    const { bytes } = await downloadFromEitherBucket(service, storagePath);
     const jpeg = await sharp(Buffer.from(bytes)).jpeg({ quality: PDF_PHOTO_JPEG_QUALITY }).toBuffer();
     return `data:image/jpeg;base64,${jpeg.toString("base64")}`;
   } catch (err) {
@@ -99,8 +134,8 @@ async function resolvePhotoUrls(service: ServiceClient, businessId: string, phot
           const dataUri = await resolveWebpPhotoAsJpegDataUri(service, businessId, p.id, p.storagePath);
           return [p.id, dataUri];
         }
-        const { data } = await service.storage.from(JOB_DOC_MEDIA_BUCKET).createSignedUrl(p.storagePath, 3600);
-        return [p.id, data?.signedUrl ?? null];
+        const url = await signEitherBucket(service, p.storagePath);
+        return [p.id, url];
       })
     )
   );
@@ -135,7 +170,7 @@ export default async function JobReportPreviewPage({ params }: { params: { id: s
 
   const { data: jobDoc } = await supabase
     .from("job_docs")
-    .select("id, business_id, title, status, approved_by, approved_at, work_card_id")
+    .select("id, business_id, title, status, approved_by, approved_at, work_card_id, charge_labour, charge_materials")
     .eq("id", params.id)
     .maybeSingle();
   if (!jobDoc) notFound();
@@ -191,6 +226,7 @@ export default async function JobReportPreviewPage({ params }: { params: { id: s
         : null,
       fields: (fields ?? []) as JobDocFieldRow[],
       photos,
+      charges: { labour: jobDoc.charge_labour, materials: jobDoc.charge_materials },
     });
   }
 
@@ -243,7 +279,17 @@ export default async function JobReportPreviewPage({ params }: { params: { id: s
         fileName={`${jobDoc.title.replace(/[^a-z0-9]+/gi, "-").replace(/^-+|-+$/g, "") || "job-report"}.pdf`}
       />
 
-      <div className="min-h-[80vh] flex-1 overflow-hidden rounded-2xl border border-border bg-card">
+      {/* Production hardening (2026-08-15) — a real production test
+       * found the embedded, fixed-A4 PDF preview genuinely uncomfortable
+       * to read on a phone. Same underlying model either way, just two
+       * presentations: a phone gets a plain, flowing HTML read; a
+       * wider screen keeps the exact PDF-engine preview. Download PDF
+       * above always produces the real file regardless of which one is
+       * showing. */}
+      <div className="md:hidden">
+        <ResponsiveReportPreview model={model} />
+      </div>
+      <div className="hidden min-h-[80vh] flex-1 overflow-hidden rounded-2xl border border-border bg-card md:block">
         <ReportPreview model={model} />
       </div>
     </div>

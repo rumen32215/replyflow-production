@@ -106,6 +106,49 @@ test("a WhatsApp-analysed photo flows in from conversation_photos with no manual
   assert.ok(photos[0]!.analyzed_at, "a conversation_photos row's mere existence means it's already analysed");
 });
 
+test("a WhatsApp photo the owner has excluded from the report carries included_in_report: false through, not deleted or hidden here", async () => {
+  // Real production bug (2026-08-15): a WhatsApp photo had no way to be
+  // excluded from the report at all — this is the column (0037) and
+  // plumbing that closes that gap. fetchJobPhotos itself stays
+  // unfiltered (the owner-facing photo list and the report's own
+  // selectPhotos() are the two places that decide what to do with the
+  // flag), so this only asserts the value flows through correctly.
+  const supabase = new FakeSupabase();
+  supabase.tables.conversation_photos.push({
+    id: "cp1",
+    episode_id: "ep-1",
+    message_id: "msg-1",
+    storage_path: "customer-media/ep-1/msg-1.jpg",
+    visible_summary: "An unrelated screenshot",
+    possible_summary: "",
+    unknown_note: "",
+    analysis_confidence: "low",
+    created_at: "2026-08-10T09:05:00.000Z",
+    included_in_report: false,
+  });
+  const photos = await fetchJobPhotos(supabase as any, { jobDocId: null, episodeId: "ep-1" });
+  assert.equal(photos.length, 1);
+  assert.equal(photos[0]!.included_in_report, false);
+});
+
+test("a conversation_photos row with no included_in_report selected (an older caller) defaults to true, never a silent exclusion", async () => {
+  const supabase = new FakeSupabase();
+  supabase.tables.conversation_photos.push({
+    id: "cp1",
+    episode_id: "ep-1",
+    message_id: "msg-1",
+    storage_path: "a.jpg",
+    visible_summary: "A real job photo",
+    possible_summary: "",
+    unknown_note: "",
+    analysis_confidence: "low",
+    created_at: "2026-08-10T09:05:00.000Z",
+    // included_in_report deliberately omitted
+  });
+  const photos = await fetchJobPhotos(supabase as any, { jobDocId: null, episodeId: "ep-1" });
+  assert.equal(photos[0]!.included_in_report, true);
+});
+
 test("photos never leak between episodes — a different job's WhatsApp photos are excluded", async () => {
   const supabase = new FakeSupabase();
   supabase.tables.conversation_photos.push(

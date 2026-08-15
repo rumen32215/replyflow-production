@@ -3,17 +3,15 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { motion } from "framer-motion";
-import { Home, MessagesSquare, ClipboardList, Users, Headset, MessageCircle, ClipboardCheck, FileText, CalendarDays, Settings, type LucideIcon } from "lucide-react";
+import { Home, MessagesSquare, ClipboardList, Users, Headset, MessageCircle, CalendarDays, Settings, type LucideIcon } from "lucide-react";
 import { Logo } from "@/components/shared/logo";
 import { DASHBOARD_NAV } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 
 /**
- * Desktop-only sidebar. All six destinations (ReplyFlow v1 Product
- * Blueprint) — desktop has room for the complete navigation; mobile's
- * bottom bar shows only the four `primary` ones. Navigation never
- * flashes: the active highlight gently slides between items via a
- * shared layoutId.
+ * Desktop-only sidebar. Mobile's bottom bar shows only the four
+ * `primary` destinations. Navigation never flashes: the active
+ * highlight gently slides between items via a shared layoutId.
  */
 
 const ICONS: Record<(typeof DASHBOARD_NAV)[number]["icon"], LucideIcon> = {
@@ -23,8 +21,6 @@ const ICONS: Record<(typeof DASHBOARD_NAV)[number]["icon"], LucideIcon> = {
   Users,
   Headset,
   MessageCircle,
-  ClipboardCheck,
-  FileText,
   CalendarDays,
   Settings,
 };
@@ -35,11 +31,10 @@ function isActive(pathname: string, href: string) {
 }
 
 /**
- * Master Execution Plan 2.4 — Approvals is always in the list, not
- * conditionally shown "only when non-empty" (Experience Architecture
- * §9's original wording): a nav item that vanishes is a location the
- * owner can never learn. The count badge carries the "only when there's
- * something to do" signal instead, without ever moving the item itself.
+ * Plumber Reset — Phase 3 step 7 (UI transition). Approvals no longer
+ * has its own nav destination (it was a genuine duplicate of Home's
+ * own attention queue) — the same "things need you" count now shows
+ * on Home's own icon instead, so the signal is folded in, not lost.
  */
 export function Sidebar({ approvalsCount = 0 }: { approvalsCount?: number }) {
   const pathname = usePathname();
@@ -73,7 +68,7 @@ export function Sidebar({ approvalsCount = 0 }: { approvalsCount?: number }) {
               )}
               <Icon className="relative h-4 w-4" />
               <span className="relative truncate">{item.label}</span>
-              {item.href === "/dashboard/approvals" && approvalsCount > 0 && (
+              {item.href === "/dashboard" && approvalsCount > 0 && (
                 <span className="relative ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-attention px-1 text-[10.5px] font-bold text-attention-foreground">
                   {approvalsCount}
                 </span>

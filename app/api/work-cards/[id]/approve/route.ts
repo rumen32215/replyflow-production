@@ -5,6 +5,14 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { sendReplyToCustomer } from "@/lib/reply-engine/send";
 import { recordErrorEvent } from "@/lib/error-events";
 import { markEpisodeBooked } from "@/lib/reply-engine/episode";
+import { createBooking } from "@/lib/booking/engine";
+
+/** No per-job duration data exists yet (Phase 2 Architecture §9 — a
+ * per-business default was proposed, never built) — matches the same
+ * fixed 60-minute default lib/reply-engine/tools/execute.ts already
+ * uses for the AI booking path, so a manually-approved job and an
+ * AI-proposed one read the same real slot length, not two guesses. */
+const DEFAULT_BOOKING_DURATION_MINUTES = 60;
 
 export const runtime = "nodejs";
 
@@ -36,7 +44,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
 
   const { data: workCard } = await service
     .from("work_cards")
-    .select("id, business_id, conversation_id, episode_id, customer_name, issue, scheduled_for, status")
+    .select("id, business_id, conversation_id, episode_id, customer_id, customer_name, issue, scheduled_for, status")
     .eq("id", params.id)
     .maybeSingle();
   if (!workCard) return NextResponse.json({ error: "Work Card not found" }, { status: 404 });
@@ -67,6 +75,38 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       context: { workCardId: workCard.id },
     });
     return NextResponse.json({ error: workCardError.message }, { status: 500 });
+  }
+
+  // Plumber Reset Phase 3 step 7 — the owner's manual approval now
+  // creates a real, confirmed booking through the same deterministic
+  // engine the AI's own booking tools use (lib/booking/engine.ts),
+  // rather than leaving the new bookings table populated only for the
+  // rare AI-confirmed case. Best-effort: a real conflict here (or any
+  // other failure) is logged and never blocks the approval itself —
+  // the Work Card is already genuinely booked past this point either
+  // way; a missing bookings row just means the Job page falls back to
+  // its plain scheduled_for display instead of a richer booking card.
+  if (workCard.scheduled_for) {
+    const start = new Date(workCard.scheduled_for);
+    const end = new Date(start.getTime() + DEFAULT_BOOKING_DURATION_MINUTES * 60_000);
+    const bookingResult = await createBooking(service, {
+      businessId: workCard.business_id,
+      jobId: workCard.id,
+      customerId: workCard.customer_id,
+      start,
+      end,
+      status: "confirmed",
+      source: "owner",
+    });
+    if (!bookingResult.ok) {
+      await recordErrorEvent({
+        severity: "warning",
+        source: "work-cards.approve_booking_create_failed",
+        businessId: workCard.business_id,
+        message: "A Work Card was approved, but a real booking record could not be created for it.",
+        context: { workCardId: workCard.id, reason: bookingResult.reason },
+      });
+    }
   }
 
   // ReplyFlow V4 — Conversation Episodes (Contract §A): booked is not

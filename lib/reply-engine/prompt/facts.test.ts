@@ -48,6 +48,7 @@ function contextWith(overrides: Partial<BusinessProfileContext>): ReplyContext {
     customerJobs: null,
     currentBooking: null,
     photoAnalysis: null,
+    toolResults: [],
     newMessage: { body: "test", customerName: null, customerPhone: "" },
   };
 }
@@ -61,6 +62,7 @@ const UNDERSTANDING: UnderstandingResult = {
   safetyTag: null,
   conversationState: EMPTY_CONVERSATION_STATE,
   episodeContinuity: "same_job",
+  bookingAcceptance: "none",
 };
 
 function emergencyFactText(context: ReplyContext): string {
@@ -126,4 +128,97 @@ test("a photo's visible/possible/unknown analysis each become their own citable 
   assert.ok(possible?.text.includes("May be a loose pipe connection"));
   assert.ok(possible?.text.toLowerCase().includes("not certain"), "possible fact must be explicitly hedged");
   assert.ok(unknown?.text.includes("The exact cause without an in-person look"));
+});
+
+// ---------------------------------------------------------------------
+// Tool-result facts (Plumber Reset Phase 3 step 4)
+
+function contextWithTools(toolResults: ReplyContext["toolResults"]): ReplyContext {
+  return { ...contextWith({}), toolResults };
+}
+
+test("no tool results produce no tool.* facts", () => {
+  const facts = collectFacts(contextWithTools([]), UNDERSTANDING);
+  assert.ok(!facts.some((f) => f.id.startsWith("tool.")));
+});
+
+test("a proposed booking is never phrased as confirmed", () => {
+  const context = contextWithTools([
+    { name: "create_booking", result: { ok: true, data: { start: "2026-09-01T09:00:00.000Z", end: "2026-09-01T10:00:00.000Z", status: "proposed" } } },
+  ]);
+  const fact = collectFacts(context, UNDERSTANDING).find((f) => f.id === "tool.create_booking.0")!;
+  assert.ok(/not yet confirmed/i.test(fact.text));
+  assert.ok(!/you may tell the customer they're booked/i.test(fact.text));
+});
+
+test("a confirmed booking may genuinely be told to the customer as booked", () => {
+  const context = contextWithTools([
+    { name: "update_booking", result: { ok: true, data: { start: "2026-09-01T09:00:00.000Z", end: "2026-09-01T10:00:00.000Z", status: "confirmed" } } },
+  ]);
+  const fact = collectFacts(context, UNDERSTANDING).find((f) => f.id === "tool.update_booking.0")!;
+  assert.ok(/you may tell the customer they're booked/i.test(fact.text));
+});
+
+test("a booking conflict explicitly forbids claiming success and offers only real alternatives", () => {
+  const context = contextWithTools([
+    { name: "create_booking", result: { ok: false, reason: "conflict", alternatives: [{ start: "2026-09-02T13:00:00.000Z", end: "2026-09-02T14:00:00.000Z" }] } },
+  ]);
+  const fact = collectFacts(context, UNDERSTANDING).find((f) => f.id === "tool.create_booking.0")!;
+  assert.ok(/do not tell the customer it's booked or moved/i.test(fact.text));
+  assert.ok(fact.text.includes("2026") || /alternative times/i.test(fact.text));
+});
+
+test("a tool execution failure explicitly forbids telling the customer it succeeded", () => {
+  const context = contextWithTools([{ name: "create_booking", result: { ok: false, reason: "execution_failed" } }]);
+  const fact = collectFacts(context, UNDERSTANDING).find((f) => f.id === "tool.create_booking.0")!;
+  assert.ok(/do not tell the customer it succeeded/i.test(fact.text));
+});
+
+test("no real availability found never invents a time", () => {
+  const context = contextWithTools([{ name: "check_availability", result: { ok: true, data: { slots: [] } } }]);
+  const fact = collectFacts(context, UNDERSTANDING).find((f) => f.id === "tool.check_availability.0")!;
+  assert.ok(/do not invent a time/i.test(fact.text));
+});
+
+test("real availability slots are listed exactly, with an instruction to offer only those", () => {
+  const context = contextWithTools([
+    { name: "check_availability", result: { ok: true, data: { slots: [{ start: "2026-09-01T09:00:00.000Z", end: "2026-09-01T10:00:00.000Z" }] } } },
+  ]);
+  const fact = collectFacts(context, UNDERSTANDING).find((f) => f.id === "tool.check_availability.0")!;
+  assert.ok(/and only these/i.test(fact.text));
+});
+
+test("no prior customer history is honestly reported, never a fabricated memory", () => {
+  const context = contextWithTools([{ name: "get_customer_context", result: { ok: true, data: { customer: null, recentJobs: [] } } }]);
+  const fact = collectFacts(context, UNDERSTANDING).find((f) => f.id === "tool.get_customer_context.0")!;
+  assert.ok(/treat them as new/i.test(fact.text));
+  assert.ok(/do not claim to remember/i.test(fact.text));
+});
+
+test("a genuine cancellation may be told to the customer as cancelled", () => {
+  const context = contextWithTools([
+    { name: "update_booking", result: { ok: true, data: { start: "2026-09-01T09:00:00.000Z", end: "2026-09-01T10:00:00.000Z", status: "cancelled" } } },
+  ]);
+  const fact = collectFacts(context, UNDERSTANDING).find((f) => f.id === "tool.update_booking.0")!;
+  assert.ok(/genuinely just been cancelled/i.test(fact.text));
+});
+
+test("an escalation tool result instructs the model not to attempt to resolve it itself", () => {
+  const context = contextWithTools([{ name: "escalate_to_owner", result: { ok: true, data: { reason: "Ambiguous request" } } }]);
+  const fact = collectFacts(context, UNDERSTANDING).find((f) => f.id === "tool.escalate_to_owner.0")!;
+  assert.ok(/do not attempt to resolve it yourself/i.test(fact.text));
+});
+
+test("the build.ts system block only mentions tool-result facts when at least one is present", async () => {
+  const { buildPrompt } = await import("./build");
+  const withoutTools = buildPrompt(contextWithTools([]), UNDERSTANDING);
+  const systemWithout = withoutTools.messages[0]!.content as string;
+  assert.ok(!systemWithout.includes("Tool-result facts"));
+
+  const withTools = buildPrompt(
+    contextWithTools([{ name: "escalate_to_owner", result: { ok: true, data: { reason: "test" } } }]),
+    UNDERSTANDING
+  );
+  const systemWith = withTools.messages[0]!.content as string;
+  assert.ok(systemWith.includes("Tool-result facts"));
 });

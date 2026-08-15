@@ -16,6 +16,8 @@ import {
   XCircle,
   Navigation,
   FileText,
+  CalendarClock,
+  ImageOff,
 } from "lucide-react";
 import { press, SettleCard, Reveal, EASE } from "@/components/shared/motion";
 import { Acknowledgement, useAcknowledgement } from "@/components/shared/acknowledgement";
@@ -65,6 +67,43 @@ export interface WorkCardPhoto {
   possibleSummary: string;
   unknownNote: string;
   confidence: "low" | "medium" | "high";
+  /** Plumber Reset Phase 3 step 7 — honest analysis state. A photo
+   * that's still being analysed (or whose analysis failed) is shown as
+   * such, never silently omitted until a refresh happens to catch it. */
+  analyzed: boolean;
+}
+
+/** Plumber Reset Phase 3 step 7 — the Job's real, deterministically
+ * checked booking (lib/booking/engine.ts), when one exists. Proposed
+ * and confirmed are never shown the same way — this is exactly the
+ * distinction the live test found missing. */
+export interface WorkCardBooking {
+  start: string;
+  end: string;
+  status: "proposed" | "confirmed" | "cancelled" | "completed";
+}
+
+const BOOKING_STATUS_STYLE: Record<WorkCardBooking["status"], string> = {
+  proposed: "bg-amber-100 text-amber-700",
+  confirmed: "bg-success/15 text-success",
+  cancelled: "bg-muted text-muted-foreground line-through",
+  completed: "bg-muted text-muted-foreground",
+};
+
+const BOOKING_STATUS_LABEL: Record<WorkCardBooking["status"], string> = {
+  proposed: "Proposed — not yet confirmed",
+  confirmed: "Confirmed",
+  cancelled: "Cancelled",
+  completed: "Completed",
+};
+
+function formatBookingWindow(startIso: string, endIso: string): string {
+  const start = new Date(startIso);
+  const end = new Date(endIso);
+  const day = start.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "short", timeZone: "Europe/London" });
+  const startTime = start.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/London" });
+  const endTime = end.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/London" });
+  return `${day}, ${startTime}–${endTime}`;
 }
 
 const SECTION_HEADING = "mb-3 text-[11px] font-bold uppercase tracking-widest text-muted-foreground";
@@ -79,6 +118,8 @@ export function WorkCardDetail({
   simplifiedStatus,
   linkedJobDocId,
   linkedJobDocStatus,
+  booking,
+  reportStatus,
 }: {
   workCard: WorkCardDetailData;
   conversationGroup: ConversationGroup | null;
@@ -88,29 +129,38 @@ export function WorkCardDetail({
    * exactly nowhere in that case. Already phrased as guidance by the
    * caller (buildCommunicationGuidance), never a raw field value. */
   communicationGuidance: string | null;
-  /** ReplyFlow V2 — real, already-analysed photos for this job.
-   * Empty, not undefined, when the conversation never linked one — no
-   * section renders in that case (see the Photos section below). */
+  /** The Job's full, unified evidence (lib/job-docs/job-evidence.ts) —
+   * WhatsApp photos and anything manually uploaded onto the linked
+   * report, together. Empty, not undefined, when there's none yet —
+   * no section renders in that case (see the Photos section below). */
   photos?: WorkCardPhoto[];
-  /** ReplyFlow V2 — the plain five-stage lifecycle (lib/work-card-
-   * state.ts's simplifiedWorkCardStatus), shown as a quiet secondary
-   * label next to the existing actionable badge below. That badge
-   * answers "what does this need from me" (Needs approval, Waiting
-   * for address, Emergency); this answers the plainer "what stage is
-   * it at" — deliberately kept as two separate signals, not merged. */
+  /** The plain five-stage lifecycle (lib/work-card-state.ts's
+   * simplifiedWorkCardStatus), shown as a quiet secondary label next
+   * to the existing actionable badge below. That badge answers "what
+   * does this need from me" (Needs approval, Waiting for address,
+   * Emergency); this answers the plainer "what stage is it at" —
+   * deliberately kept as two separate signals, not merged. */
   simplifiedStatus: SimplifiedWorkCardStatus;
-  /** ReplyFlow V4 — the linked Job Record's id
-   * (0030_link_job_docs_to_work_cards.sql), or null if this Work Card
-   * hasn't generated one yet. Drives "Generate report" vs "View
-   * report" below; never re-fetched client-side, only set once here
-   * or by generateOrOpenReport's own response. */
+  /** The linked report's id (job_docs.id via work_card_id), or null if
+   * this Job hasn't generated one yet. Drives "Generate report" vs
+   * "View report" below; never re-fetched client-side, only set once
+   * here or by generateOrOpenReport's own response. */
   linkedJobDocId: string | null;
-  /** Production hardening (2026-08-14) — the linked Job Record's own
-   * report status (job_docs.status), so "View report" can tell an
-   * already-approved report apart from one still being drafted. Never
-   * re-fetched client-side, same one-time-set convention as
-   * linkedJobDocId itself. */
+  /** The linked report's own review status (job_docs.status), so
+   * "View report" can tell an already-approved report apart from one
+   * still being drafted. Never re-fetched client-side, same
+   * one-time-set convention as linkedJobDocId itself. */
   linkedJobDocStatus?: string | null;
+  /** Plumber Reset Phase 3 step 7 — the Job's real booking, when one
+   * exists. Null means no booking has been created yet — never
+   * inferred from scheduledFor alone. */
+  booking?: WorkCardBooking | null;
+  /** The Job's own report approval status (work_cards.report_status) —
+   * a genuinely separate axis from `workCard.status` (the plumbing
+   * job's own lifecycle). Never merged into the same badge: approving
+   * a report does not complete the job, and completing the job does
+   * not approve the report. */
+  reportStatus?: string | null;
 }) {
   const router = useRouter();
   const supabase = createClient();
@@ -244,12 +294,14 @@ export function WorkCardDetail({
   async function generateOrOpenReport() {
     if (generatingReport) return;
     if (jobDocId) {
-      // Production hardening (2026-08-14) — an already-approved report
-      // goes straight to the approved report/download area, not back
-      // through the generate/edit workflow. Anything not yet approved
-      // (draft/review) still opens the Job Record, exactly as before.
+      // An already-approved report goes straight to the approved
+      // report/download area, not back through the generate/edit
+      // workflow. Anything not yet approved (draft/review) still opens
+      // the report editor.
       router.push(
-        jobDocStatus === "approved" ? `/dashboard/job-records/${jobDocId}/report` : `/dashboard/job-records/${jobDocId}`
+        reportStatus === "approved" || jobDocStatus === "approved"
+          ? `/dashboard/reports/${jobDocId}/preview`
+          : `/dashboard/reports/${jobDocId}`
       );
       return;
     }
@@ -263,7 +315,7 @@ export function WorkCardDetail({
         return;
       }
       setJobDocId(payload.id);
-      router.push(`/dashboard/job-records/${payload.id}`);
+      router.push(`/dashboard/reports/${payload.id}`);
     } catch {
       setGeneratingReport(false);
       softError();
@@ -451,18 +503,52 @@ export function WorkCardDetail({
           </SettleCard>
         )}
 
-        {/* ReplyFlow V4 (P0.A) — the Work Card → Job Record link. Only
-         * offered once the job is genuinely completed: customer,
-         * address, issue, notes, and analysed photos all flow in
-         * automatically (app/api/work-cards/[id]/job-doc/route.ts) —
-         * nothing here asks the owner to retype anything already
-         * known. Once generated, this becomes "View report" instead,
-         * never a second, competing way to create the same document. */}
+        {/* Plumber Reset Phase 3 step 7 — the Job's real booking. A
+         * proposed slot and a confirmed one are never shown the same
+         * way; this is the exact distinction the live test found
+         * missing entirely. No booking yet falls back to the plain
+         * scheduledFor timestamp (pre-booking-engine jobs, or one still
+         * being worked out in conversation) rather than showing
+         * nothing at all. */}
+        {!isTerminal && (booking || card.scheduledFor) && (
+          <Reveal index={0}>
+            <div className="rounded-2xl border border-border bg-card p-5 shadow-sm">
+              <h2 className={SECTION_HEADING}>Booking</h2>
+              {booking ? (
+                <div className="flex items-center gap-2.5">
+                  <CalendarClock className="h-4 w-4 shrink-0 text-muted-foreground" />
+                  <div className="min-w-0">
+                    <p className="text-[13.5px] font-semibold">{formatBookingWindow(booking.start, booking.end)}</p>
+                    <span className={cn("mt-1 inline-block rounded-full px-2 py-0.5 text-[11px] font-semibold", BOOKING_STATUS_STYLE[booking.status])}>
+                      {BOOKING_STATUS_LABEL[booking.status]}
+                    </span>
+                  </div>
+                </div>
+              ) : (
+                <p className="flex items-center gap-2.5 text-[13.5px] text-muted-foreground">
+                  <CalendarClock className="h-4 w-4 shrink-0" />
+                  {formatDateTime(card.scheduledFor)}
+                </p>
+              )}
+            </div>
+          </Reveal>
+        )}
+
+        {/* The Job's report — a generated view of everything above, not
+         * a second job to manage. Only offered once the job is
+         * genuinely completed: customer, address, issue, notes, and
+         * evidence all flow in automatically — nothing here asks the
+         * owner to retype anything already known. Once generated, this
+         * becomes "View report" instead, never a second, competing way
+         * to create the same document. Report status is deliberately
+         * its own signal here, never merged with the job status badge
+         * at the top of this page — approving a report never means the
+         * job itself is done, and vice versa. */}
         {card.status === "completed" && (
           <SettleCard delay={0} className="rounded-2xl border border-border bg-card p-5 shadow-sm">
             <h2 className={SECTION_HEADING}>Report</h2>
             <p className="mb-3 text-[13px] text-muted-foreground">
-              {jobDocStatus === "approved"
+              {(reportStatus === "approved" || jobDocStatus === "approved")
                 ? "This report has been reviewed and approved — ready to download or share."
                 : jobDocId
                   ? "The customer-facing report for this job."
@@ -477,7 +563,7 @@ export function WorkCardDetail({
               <FileText className="h-4 w-4" />
               {generatingReport
                 ? "Generating…"
-                : jobDocStatus === "approved"
+                : reportStatus === "approved" || jobDocStatus === "approved"
                   ? "View approved report"
                   : jobDocId
                     ? "View report"
@@ -663,9 +749,13 @@ export function WorkCardDetail({
           </div>
         </Reveal>
 
-        {/* ReplyFlow V2 — real, already-analysed customer photos. Never
-         * rendered when there are none, exactly like every other
-         * optional section on this page. */}
+        {/* Plumber Reset Phase 3 step 7 — the Job's full, unified
+         * evidence: WhatsApp photos and anything manually uploaded onto
+         * the report, together, exactly what's real for this job and
+         * nothing else. Never rendered when there are none, exactly
+         * like every other optional section on this page. A photo
+         * still being analysed is shown honestly, not silently omitted
+         * until a refresh happens to catch it. */}
         {photos.length > 0 && (
           <Reveal index={3}>
             <div className="rounded-2xl border border-border bg-card p-5 shadow-sm">
@@ -673,24 +763,32 @@ export function WorkCardDetail({
               <div className="space-y-4">
                 {photos.map((photo) => (
                   <div key={photo.id} className="overflow-hidden rounded-xl border border-border/60">
-                    {photo.url && (
+                    {photo.url ? (
                       // eslint-disable-next-line @next/next/no-img-element -- a per-job signed URL, not an optimizable static asset
-                      <img src={photo.url} alt="Photo sent by the customer" className="max-h-72 w-full object-cover" />
+                      <img src={photo.url} alt="Evidence for this job" className="max-h-72 w-full object-cover" />
+                    ) : (
+                      <div className="flex h-32 w-full items-center justify-center bg-muted/50 text-muted-foreground">
+                        <ImageOff className="h-5 w-5" />
+                      </div>
                     )}
-                    <div className="space-y-1.5 bg-muted/30 px-3.5 py-3 text-[12.5px] leading-snug">
-                      <p>
-                        <span className="font-semibold text-foreground">Visible: </span>
-                        <span className="text-muted-foreground">{photo.visibleSummary}</span>
-                      </p>
-                      <p>
-                        <span className="font-semibold text-foreground">Possible — not certain: </span>
-                        <span className="text-muted-foreground">{photo.possibleSummary}</span>
-                      </p>
-                      <p>
-                        <span className="font-semibold text-foreground">Can&apos;t tell without an in-person look: </span>
-                        <span className="text-muted-foreground">{photo.unknownNote}</span>
-                      </p>
-                    </div>
+                    {photo.analyzed ? (
+                      <div className="space-y-1.5 bg-muted/30 px-3.5 py-3 text-[12.5px] leading-snug">
+                        <p>
+                          <span className="font-semibold text-foreground">Visible: </span>
+                          <span className="text-muted-foreground">{photo.visibleSummary}</span>
+                        </p>
+                        <p>
+                          <span className="font-semibold text-foreground">Possible — not certain: </span>
+                          <span className="text-muted-foreground">{photo.possibleSummary}</span>
+                        </p>
+                        <p>
+                          <span className="font-semibold text-foreground">Can&apos;t tell without an in-person look: </span>
+                          <span className="text-muted-foreground">{photo.unknownNote}</span>
+                        </p>
+                      </div>
+                    ) : (
+                      <p className="bg-muted/30 px-3.5 py-3 text-[12.5px] italic text-muted-foreground">Still analysing this photo…</p>
+                    )}
                   </div>
                 ))}
               </div>

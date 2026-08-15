@@ -36,7 +36,7 @@ export default async function ConversationDetailPage({ params }: { params: { id:
   // RLS (0003) scopes this to the signed-in owner's business.
   const { data: conversation } = await supabase
     .from("conversations")
-    .select("id, business_id, customer_name, customer_phone, status, ai_state, created_at, communication_preference")
+    .select("id, business_id, customer_name, customer_phone, status, ai_state, created_at, communication_preference, customer_id")
     .eq("id", params.id)
     .maybeSingle();
 
@@ -309,6 +309,7 @@ export default async function ConversationDetailPage({ params }: { params: { id:
           status={conversation.status}
           customerName={conversation.customer_name}
           customerPhone={conversation.customer_phone}
+          customerId={conversation.customer_id ?? null}
           messageCount={allMessages.length}
           photoCount={photoCount}
           existingWorkCard={existingWorkCards?.[0] ?? null}

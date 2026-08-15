@@ -9,6 +9,7 @@ import { deriveInboundMessage } from "@/lib/whatsapp/inbound-message";
 import { recordErrorEvent } from "@/lib/error-events";
 import { buildConnectionHealthAlert } from "@/lib/whatsapp/connection-health-alert";
 import { markConnectionRevoked } from "@/lib/whatsapp/connection-revoke";
+import { resolveOrCreateCustomer } from "@/lib/customers/resolve";
 
 // Needs the Node.js runtime (not Edge) for node:crypto in verify-signature.ts.
 export const runtime = "nodejs";
@@ -241,10 +242,36 @@ async function processOneMessage(input: {
       },
       { onConflict: "business_id,customer_phone" }
     )
-    .select("id")
+    .select("id, customer_id")
     .single();
 
   if (!conversation) return;
+
+  // Plumber Reset Phase 3 step 2 — resolve the real, phone-anchored
+  // customer identity the moment a message arrives, once, here, so
+  // every downstream consumer (reply-engine context assembly, the
+  // dashboard) can trust conversations.customer_id instead of matching
+  // names later. Best-effort: a failure here must never drop the
+  // message itself — it's recorded and the pipeline continues; the
+  // next inbound message from this number retries the resolution.
+  try {
+    const customer = await resolveOrCreateCustomer(supabase, {
+      businessId: connection.business_id,
+      phone: message.from,
+      name: customerName,
+    });
+    if (!conversation.customer_id) {
+      await supabase.from("conversations").update({ customer_id: customer.id }).eq("id", conversation.id);
+    }
+  } catch (err) {
+    await recordErrorEvent({
+      severity: "warning",
+      source: "webhook.customer_resolution_failed",
+      businessId: connection.business_id,
+      message: err instanceof Error ? err.message : "Failed to resolve customer identity for an inbound message.",
+      context: { conversationId: conversation.id },
+    });
+  }
 
   // whatsapp_message_id is unique — Meta retries webhook delivery,
   // so this upsert (rather than insert) makes re-delivery a no-op

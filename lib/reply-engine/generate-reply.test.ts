@@ -145,6 +145,29 @@ let nextUnderstanding: unknown;
 let nextGeneration: unknown;
 let nextPhotoAnalysis: { visible: string; possible: string; unknown: string } | null = null;
 
+// Plumber Reset Phase 3 step 5 (autonomy tiers) — the deeper policy
+// logic (Tier 1 eligibility conditions, the final tier decision, the
+// prepared-action summary) is exercised directly and thoroughly by
+// lib/reply-engine/autonomy/policy.test.ts and apply.test.ts; here
+// these are controlled per-test so this file can verify generate-
+// reply.ts's own orchestration — does it call the right things in the
+// right order, gate auto-send correctly per tier, and write the right
+// reply_drafts columns — without re-deriving the policy's own logic.
+let nextToolDecision: { executed: unknown[]; escalateRequested: boolean; escalateReason: string | null } = {
+  executed: [],
+  escalateRequested: false,
+  escalateReason: null,
+};
+let nextTier1Check: { applicable: boolean; eligible: boolean; reasons: string[] } = { applicable: false, eligible: false, reasons: [] };
+let nextTier1Apply: { attempted: boolean; succeeded: boolean; reasons: string[] } = { attempted: false, succeeded: false, reasons: [] };
+let nextAutonomyDecision: { tier: string; reasons: string[]; allowAutoSend: boolean } = {
+  tier: "tier2_prepare",
+  reasons: [],
+  allowAutoSend: false,
+};
+let nextPreparedAction: { actionType: string; summary: string; payload: Record<string, unknown> } | null = null;
+let sendCallCount = 0;
+
 // Product Reset Blueprint D.1 — call spies for the two functions whose
 // invocation (or non-invocation) IS the behaviour under test: a booked
 // episode superseded by an unrelated request must never be abandoned,
@@ -205,6 +228,33 @@ mock.module("./understanding", {
 mock.module("./context/assemble", {
   namedExports: { assembleContext: async () => ({}) },
 });
+// Plumber Reset Phase 3 step 4 — the tool-decision step is exercised
+// directly by lib/reply-engine/tools/decide.test.ts against real
+// execution logic; here it's a pure no-op so every existing scenario
+// in this file keeps testing exactly what it already tested (draft/
+// escalation/silence/auto-send behaviour), unaffected by the new step.
+mock.module("./tools/decide", {
+  namedExports: { decideAndExecuteTools: async () => nextToolDecision },
+});
+mock.module("./tools/execute", {
+  namedExports: { findCurrentJob: async () => null },
+});
+mock.module("./autonomy/policy", {
+  namedExports: {
+    checkTier1Eligibility: () => nextTier1Check,
+    decideAutonomy: () => nextAutonomyDecision,
+    buildPreparedAction: () => nextPreparedAction,
+  },
+});
+mock.module("./autonomy/apply", {
+  namedExports: {
+    applyTier1AutoConfirm: async () => nextTier1Apply,
+    reflectConfirmedBooking: (toolResults: unknown[]) => toolResults,
+  },
+});
+mock.module("@/lib/product-events", {
+  namedExports: { recordProductEvent: async () => {} },
+});
 mock.module("./prompt/generate", {
   namedExports: { generateReplyDraft: async () => ({ generation: nextGeneration, facts: [] }) },
 });
@@ -212,7 +262,12 @@ mock.module("./media-intake", {
   namedExports: { handleCustomerPhoto: async () => nextPhotoAnalysis },
 });
 mock.module("./send", {
-  namedExports: { sendReplyToCustomer: async () => ({ ok: true }) },
+  namedExports: {
+    sendReplyToCustomer: async () => {
+      sendCallCount += 1;
+      return { ok: true };
+    },
+  },
 });
 
 let generateReplyForMessage: (typeof import("./generate-reply"))["generateReplyForMessage"];
@@ -232,6 +287,7 @@ function baseUnderstanding(overrides: Record<string, unknown> = {}) {
     safetyTag: null,
     conversationState: EMPTY_CONVERSATION_STATE,
     episodeContinuity: "same_job",
+    bookingAcceptance: "none",
     ...overrides,
   };
 }
@@ -674,4 +730,336 @@ test("G. supersede/safety behaviour composes correctly with a booked-episode con
   const draft = currentSupabase.tables.reply_drafts.find((d) => d.customer_message_id === "followup-2");
   assert.equal(draft?.status, "pending");
   assert.equal(draft?.episode_id, bookedEpisodeId);
+});
+
+// ---------------------------------------------------------------------
+// Plumber Reset Phase 3 step 5 — Autonomy tiers.
+//
+// The deeper policy logic (exact Tier 1 eligibility conditions, the
+// final tier decision, the prepared-action summary) is exercised
+// directly by lib/reply-engine/autonomy/policy.test.ts and apply.test.ts.
+// These tests verify generate-reply.ts's own orchestration: does it
+// call the tool-decision/eligibility/apply steps in the right order,
+// gate auto-send correctly per tier, and write the right reply_drafts
+// audit columns — never trusting a drafted sentence alone.
+
+function resetAutonomyMocks() {
+  nextToolDecision = { executed: [], escalateRequested: false, escalateReason: null };
+  nextTier1Check = { applicable: false, eligible: false, reasons: [] };
+  nextTier1Apply = { attempted: false, succeeded: false, reasons: [] };
+  nextAutonomyDecision = { tier: "tier2_prepare", reasons: [], allowAutoSend: false };
+  nextPreparedAction = null;
+  sendCallCount = 0;
+}
+
+function autonomyEpisode(id = "ep-autonomy") {
+  return { id, priorState: EMPTY_CONVERSATION_STATE, isNew: false, wasBookedCandidate: false };
+}
+
+test("Autonomy — Tier 0: a safe, general question with auto-reply enabled is sent automatically", async () => {
+  currentSupabase = new FakeSupabase();
+  seedBusiness(currentSupabase);
+  currentSupabase.tables.ai_configurations[0]!.auto_reply_general_enabled = true;
+  resetAutonomyMocks();
+  nextAutonomyDecision = { tier: "tier0_auto", reasons: ["safe"], allowAutoSend: true };
+  nextEpisode = autonomyEpisode();
+  nextUnderstanding = baseUnderstanding({ primaryIntent: "BUSINESS_INFORMATION" });
+  nextGeneration = baseGeneration({ confidence: "high" });
+
+  await generateReplyForMessage({ businessId: BUSINESS_ID, conversationId: CONVERSATION_ID, customerMessageId: "m-tier0-a", messageBody: "Are you open on Saturdays?" });
+
+  const draft = currentSupabase.tables.reply_drafts.find((d) => d.customer_message_id === "m-tier0-a");
+  assert.equal(draft?.status, "sent");
+  assert.equal(sendCallCount, 1);
+  assert.equal(draft?.autonomy_tier, "tier0_auto");
+});
+
+test("Autonomy — Tier 0: a routine conversational follow-up (status check) with auto-reply enabled is sent automatically", async () => {
+  currentSupabase = new FakeSupabase();
+  seedBusiness(currentSupabase);
+  currentSupabase.tables.ai_configurations[0]!.auto_reply_general_enabled = true;
+  resetAutonomyMocks();
+  nextAutonomyDecision = { tier: "tier0_auto", reasons: ["safe"], allowAutoSend: true };
+  nextEpisode = autonomyEpisode();
+  nextUnderstanding = baseUnderstanding({ primaryIntent: "STATUS_CHECK" });
+  nextGeneration = baseGeneration({ confidence: "high" });
+
+  await generateReplyForMessage({ businessId: BUSINESS_ID, conversationId: CONVERSATION_ID, customerMessageId: "m-tier0-b", messageBody: "Just checking in on my job." });
+
+  const draft = currentSupabase.tables.reply_drafts.find((d) => d.customer_message_id === "m-tier0-b");
+  assert.equal(draft?.status, "sent");
+  assert.equal(sendCallCount, 1);
+});
+
+test("Autonomy — owner setting OFF: an explicitly accepted slot is proposed but never auto-confirmed", async () => {
+  currentSupabase = new FakeSupabase();
+  seedBusiness(currentSupabase); // auto_confirm_bookings_enabled is not set — off by default
+  resetAutonomyMocks();
+  nextTier1Check = { applicable: true, eligible: false, reasons: ["automatic booking confirmation is not enabled for this business"] };
+  nextAutonomyDecision = { tier: "tier2_prepare", reasons: nextTier1Check.reasons, allowAutoSend: false };
+  nextPreparedAction = { actionType: "propose_booking", summary: "Sarah wants Tuesday at 10:00am. Job: leaking bathroom P-trap. Confirm booking?", payload: { start: "2026-09-01T09:00:00.000Z", end: "2026-09-01T10:00:00.000Z", customerName: "Sarah" } };
+  nextEpisode = autonomyEpisode();
+  nextUnderstanding = baseUnderstanding({ primaryIntent: "BOOKING_REQUEST", bookingAcceptance: "explicit_accept" });
+  nextGeneration = baseGeneration();
+
+  await generateReplyForMessage({ businessId: BUSINESS_ID, conversationId: CONVERSATION_ID, customerMessageId: "m-owner-off", messageBody: "10am works for me." });
+
+  const draft = currentSupabase.tables.reply_drafts.find((d) => d.customer_message_id === "m-owner-off");
+  assert.equal(draft?.status, "pending");
+  assert.equal(sendCallCount, 0);
+  assert.equal(draft?.autonomy_tier, "tier2_prepare");
+  assert.equal(draft?.action_type, "propose_booking");
+  assert.ok(String(draft?.action_summary ?? "").includes("Confirm booking?"));
+});
+
+test("Autonomy — owner setting ON: an explicitly accepted, genuinely available slot is confirmed and sent automatically", async () => {
+  currentSupabase = new FakeSupabase();
+  seedBusiness(currentSupabase);
+  currentSupabase.tables.ai_configurations[0]!.auto_confirm_bookings_enabled = true;
+  resetAutonomyMocks();
+  nextTier1Check = { applicable: true, eligible: true, reasons: [] };
+  nextTier1Apply = { attempted: true, succeeded: true, reasons: [] };
+  nextAutonomyDecision = { tier: "tier1_auto_action", reasons: ["confirmed"], allowAutoSend: true };
+  nextPreparedAction = { actionType: "confirm_booking", summary: "Sarah's booking for Tuesday 10:00am is confirmed.", payload: { start: "2026-09-01T09:00:00.000Z", end: "2026-09-01T10:00:00.000Z", customerName: "Sarah" } };
+  nextEpisode = autonomyEpisode();
+  nextUnderstanding = baseUnderstanding({ primaryIntent: "BOOKING_REQUEST", bookingAcceptance: "explicit_accept" });
+  nextGeneration = baseGeneration();
+
+  await generateReplyForMessage({ businessId: BUSINESS_ID, conversationId: CONVERSATION_ID, customerMessageId: "m-owner-on", messageBody: "10am works for me." });
+
+  const draft = currentSupabase.tables.reply_drafts.find((d) => d.customer_message_id === "m-owner-on");
+  assert.equal(draft?.status, "sent");
+  assert.equal(sendCallCount, 1);
+  assert.equal(draft?.autonomy_tier, "tier1_auto_action");
+  assert.equal(draft?.action_type, "confirm_booking");
+});
+
+test("Autonomy — a booking request with no slot yet accepted never reaches Tier 1 and is never auto-sent", async () => {
+  currentSupabase = new FakeSupabase();
+  seedBusiness(currentSupabase);
+  currentSupabase.tables.ai_configurations[0]!.auto_confirm_bookings_enabled = true;
+  resetAutonomyMocks();
+  nextEpisode = autonomyEpisode();
+  nextUnderstanding = baseUnderstanding({ primaryIntent: "BOOKING_REQUEST", bookingAcceptance: "asking_availability" });
+  nextGeneration = baseGeneration();
+
+  await generateReplyForMessage({ businessId: BUSINESS_ID, conversationId: CONVERSATION_ID, customerMessageId: "m-no-accept", messageBody: "Can you come tomorrow?" });
+
+  const draft = currentSupabase.tables.reply_drafts.find((d) => d.customer_message_id === "m-no-accept");
+  assert.equal(draft?.status, "pending");
+  assert.equal(sendCallCount, 0);
+  assert.equal(draft?.action_type, null);
+});
+
+test("Autonomy — ambiguous acceptance ('sounds good' with no specific slot on the table) is never treated as explicit acceptance", async () => {
+  currentSupabase = new FakeSupabase();
+  seedBusiness(currentSupabase);
+  currentSupabase.tables.ai_configurations[0]!.auto_confirm_bookings_enabled = true;
+  resetAutonomyMocks();
+  nextTier1Check = { applicable: true, eligible: false, reasons: ["customer has not explicitly accepted a specific slot (signal: expressing_preference)"] };
+  nextAutonomyDecision = { tier: "tier2_prepare", reasons: nextTier1Check.reasons, allowAutoSend: false };
+  nextEpisode = autonomyEpisode();
+  nextUnderstanding = baseUnderstanding({ primaryIntent: "BOOKING_REQUEST", bookingAcceptance: "expressing_preference" });
+  nextGeneration = baseGeneration();
+
+  await generateReplyForMessage({ businessId: BUSINESS_ID, conversationId: CONVERSATION_ID, customerMessageId: "m-ambiguous", messageBody: "Sounds good, mate." });
+
+  const draft = currentSupabase.tables.reply_drafts.find((d) => d.customer_message_id === "m-ambiguous");
+  assert.equal(draft?.status, "pending");
+  assert.equal(sendCallCount, 0);
+});
+
+test("Autonomy — a slot accepted but subsequently unavailable: Tier 1 was eligible, the real confirm attempt failed, and the customer is never told it's confirmed", async () => {
+  currentSupabase = new FakeSupabase();
+  seedBusiness(currentSupabase);
+  currentSupabase.tables.ai_configurations[0]!.auto_confirm_bookings_enabled = true;
+  resetAutonomyMocks();
+  nextTier1Check = { applicable: true, eligible: true, reasons: [] };
+  nextTier1Apply = { attempted: true, succeeded: false, reasons: ["automatic confirmation attempt failed: conflict"] };
+  nextAutonomyDecision = { tier: "tier2_prepare", reasons: nextTier1Apply.reasons, allowAutoSend: false };
+  nextEpisode = autonomyEpisode();
+  nextUnderstanding = baseUnderstanding({ primaryIntent: "BOOKING_REQUEST", bookingAcceptance: "explicit_accept" });
+  nextGeneration = baseGeneration();
+
+  await generateReplyForMessage({ businessId: BUSINESS_ID, conversationId: CONVERSATION_ID, customerMessageId: "m-now-conflict", messageBody: "10am works." });
+
+  const draft = currentSupabase.tables.reply_drafts.find((d) => d.customer_message_id === "m-now-conflict");
+  assert.equal(draft?.status, "pending", "must never read as sent/confirmed once the real slot turned out to be unavailable");
+  assert.equal(sendCallCount, 0);
+  assert.equal(draft?.autonomy_tier, "tier2_prepare");
+});
+
+test("Autonomy — emergency: never auto-sent, always Tier 3, regardless of anything else", async () => {
+  currentSupabase = new FakeSupabase();
+  seedBusiness(currentSupabase);
+  currentSupabase.tables.ai_configurations[0]!.auto_reply_general_enabled = true;
+  currentSupabase.tables.ai_configurations[0]!.auto_confirm_bookings_enabled = true;
+  resetAutonomyMocks();
+  nextAutonomyDecision = { tier: "tier3_owner_required", reasons: ["the deterministic safety gate requires the owner's review"], allowAutoSend: false };
+  nextEpisode = autonomyEpisode();
+  nextUnderstanding = baseUnderstanding({ primaryIntent: "EMERGENCY", meaningEntities: { urgency: "urgent", impliedJobType: null, sentiment: "negative" } });
+  nextGeneration = baseGeneration({ requiresEscalation: true, escalationReason: "Emergency — water damage in progress." });
+
+  await generateReplyForMessage({ businessId: BUSINESS_ID, conversationId: CONVERSATION_ID, customerMessageId: "m-emergency", messageBody: "Water is coming through my ceiling!" });
+
+  const draft = currentSupabase.tables.reply_drafts.find((d) => d.customer_message_id === "m-emergency");
+  assert.equal(draft?.status, "pending");
+  assert.equal(sendCallCount, 0);
+  assert.equal(draft?.requires_escalation, true);
+  assert.equal(draft?.autonomy_tier, "tier3_owner_required");
+});
+
+test("Autonomy — complaint: never auto-sent, always Tier 3", async () => {
+  currentSupabase = new FakeSupabase();
+  seedBusiness(currentSupabase);
+  currentSupabase.tables.ai_configurations[0]!.auto_reply_general_enabled = true;
+  resetAutonomyMocks();
+  nextAutonomyDecision = { tier: "tier3_owner_required", reasons: ["the deterministic safety gate requires the owner's review"], allowAutoSend: false };
+  nextEpisode = autonomyEpisode();
+  nextUnderstanding = baseUnderstanding({ primaryIntent: "COMPLAINT" });
+  nextGeneration = baseGeneration({ requiresEscalation: true, escalationReason: "Customer unhappy with previous work." });
+
+  await generateReplyForMessage({ businessId: BUSINESS_ID, conversationId: CONVERSATION_ID, customerMessageId: "m-complaint", messageBody: "I'm really unhappy — the leak is back and I already paid." });
+
+  const draft = currentSupabase.tables.reply_drafts.find((d) => d.customer_message_id === "m-complaint");
+  assert.equal(draft?.status, "pending");
+  assert.equal(sendCallCount, 0);
+  assert.equal(draft?.autonomy_tier, "tier3_owner_required");
+});
+
+test("Autonomy — low-confidence interpretation is never auto-sent even in an otherwise-safe category", async () => {
+  currentSupabase = new FakeSupabase();
+  seedBusiness(currentSupabase);
+  currentSupabase.tables.ai_configurations[0]!.auto_reply_general_enabled = true;
+  resetAutonomyMocks();
+  // Real safety.wouldAutoSend is false here (confidence "low" never
+  // clears BUSINESS_INFORMATION's real "medium" minConfidence bar) —
+  // Tier 0 eligibility is driven by the real safety layer, not the
+  // mocked autonomy decision, so this proves the gate is genuinely
+  // confidence-driven, not just following whatever the mock says.
+  nextAutonomyDecision = { tier: "tier2_prepare", reasons: ["low confidence"], allowAutoSend: false };
+  nextEpisode = autonomyEpisode();
+  nextUnderstanding = baseUnderstanding({ primaryIntent: "BUSINESS_INFORMATION" });
+  nextGeneration = baseGeneration({ confidence: "low" });
+
+  await generateReplyForMessage({ businessId: BUSINESS_ID, conversationId: CONVERSATION_ID, customerMessageId: "m-low-conf", messageBody: "Do you do boiler repairs too?" });
+
+  const draft = currentSupabase.tables.reply_drafts.find((d) => d.customer_message_id === "m-low-conf");
+  assert.equal(draft?.status, "pending");
+  assert.equal(sendCallCount, 0);
+});
+
+test("Autonomy — a pricing request is never auto-sent, regardless of confidence", async () => {
+  currentSupabase = new FakeSupabase();
+  seedBusiness(currentSupabase);
+  currentSupabase.tables.ai_configurations[0]!.auto_reply_general_enabled = true;
+  resetAutonomyMocks();
+  nextAutonomyDecision = { tier: "tier2_prepare", reasons: ["pricing always requires the owner"], allowAutoSend: false };
+  nextEpisode = autonomyEpisode();
+  nextUnderstanding = baseUnderstanding({ primaryIntent: "PRICING_INQUIRY" });
+  nextGeneration = baseGeneration({ confidence: "high" });
+
+  await generateReplyForMessage({ businessId: BUSINESS_ID, conversationId: CONVERSATION_ID, customerMessageId: "m-pricing", messageBody: "What's your call-out fee?" });
+
+  const draft = currentSupabase.tables.reply_drafts.find((d) => d.customer_message_id === "m-pricing");
+  assert.equal(draft?.status, "pending");
+  assert.equal(sendCallCount, 0);
+});
+
+test("Autonomy — a reschedule request is prepared for the owner, never auto-executed even with auto-confirm enabled", async () => {
+  currentSupabase = new FakeSupabase();
+  seedBusiness(currentSupabase);
+  currentSupabase.tables.ai_configurations[0]!.auto_confirm_bookings_enabled = true;
+  resetAutonomyMocks();
+  nextPreparedAction = { actionType: "reschedule_booking", summary: "Sarah wants Thursday at 2pm instead. Job: leaking tap. Confirm booking?", payload: { start: "2026-09-03T14:00:00.000Z", end: "2026-09-03T15:00:00.000Z", customerName: "Sarah" } };
+  nextAutonomyDecision = { tier: "tier2_prepare", reasons: ["reschedule requires the owner"], allowAutoSend: false };
+  nextEpisode = autonomyEpisode();
+  nextUnderstanding = baseUnderstanding({ primaryIntent: "BOOKING_CHANGE", bookingAcceptance: "explicit_accept" });
+  nextGeneration = baseGeneration();
+
+  await generateReplyForMessage({ businessId: BUSINESS_ID, conversationId: CONVERSATION_ID, customerMessageId: "m-reschedule", messageBody: "Can we move it to Thursday 2pm instead? Yes that works." });
+
+  const draft = currentSupabase.tables.reply_drafts.find((d) => d.customer_message_id === "m-reschedule");
+  assert.equal(draft?.status, "pending");
+  assert.equal(sendCallCount, 0);
+  assert.equal(draft?.action_type, "reschedule_booking");
+});
+
+test("Autonomy — a cancellation request is prepared for the owner, never auto-sent", async () => {
+  currentSupabase = new FakeSupabase();
+  seedBusiness(currentSupabase);
+  resetAutonomyMocks();
+  nextPreparedAction = { actionType: "cancel_booking", summary: "Sarah's booking for Tuesday 10:00am was cancelled.", payload: { start: "2026-09-01T09:00:00.000Z", end: "2026-09-01T10:00:00.000Z", customerName: "Sarah" } };
+  nextAutonomyDecision = { tier: "tier2_prepare", reasons: ["cancellation requires the owner"], allowAutoSend: false };
+  nextEpisode = autonomyEpisode();
+  nextUnderstanding = baseUnderstanding({ primaryIntent: "BOOKING_CANCELLATION" });
+  nextGeneration = baseGeneration({ confidence: "verified" });
+
+  await generateReplyForMessage({ businessId: BUSINESS_ID, conversationId: CONVERSATION_ID, customerMessageId: "m-cancel", messageBody: "Please cancel my booking." });
+
+  const draft = currentSupabase.tables.reply_drafts.find((d) => d.customer_message_id === "m-cancel");
+  assert.equal(draft?.status, "pending");
+  assert.equal(sendCallCount, 0);
+  assert.equal(draft?.action_type, "cancel_booking");
+});
+
+test("Autonomy — a tool failure this turn never results in the customer being told an action succeeded", async () => {
+  currentSupabase = new FakeSupabase();
+  seedBusiness(currentSupabase);
+  currentSupabase.tables.ai_configurations[0]!.auto_confirm_bookings_enabled = true;
+  resetAutonomyMocks();
+  nextToolDecision = {
+    executed: [{ name: "create_booking", result: { ok: false, reason: "execution_failed" } }],
+    escalateRequested: false,
+    escalateReason: null,
+  };
+  nextAutonomyDecision = { tier: "tier2_prepare", reasons: ["does not qualify for automatic handling"], allowAutoSend: false };
+  nextEpisode = autonomyEpisode();
+  nextUnderstanding = baseUnderstanding({ primaryIntent: "BOOKING_REQUEST", bookingAcceptance: "explicit_accept" });
+  nextGeneration = baseGeneration();
+
+  await generateReplyForMessage({ businessId: BUSINESS_ID, conversationId: CONVERSATION_ID, customerMessageId: "m-tool-fail", messageBody: "10am works." });
+
+  const draft = currentSupabase.tables.reply_drafts.find((d) => d.customer_message_id === "m-tool-fail");
+  assert.equal(draft?.status, "pending");
+  assert.equal(sendCallCount, 0);
+});
+
+test("Autonomy — a booking-confirm failure (Tier 1 eligible but the real apply call failed) is logged and never auto-sent", async () => {
+  currentSupabase = new FakeSupabase();
+  seedBusiness(currentSupabase);
+  currentSupabase.tables.ai_configurations[0]!.auto_confirm_bookings_enabled = true;
+  resetAutonomyMocks();
+  nextTier1Check = { applicable: true, eligible: true, reasons: [] };
+  nextTier1Apply = { attempted: true, succeeded: false, reasons: ["automatic confirmation attempt failed: not_found"] };
+  nextAutonomyDecision = { tier: "tier2_prepare", reasons: nextTier1Apply.reasons, allowAutoSend: false };
+  nextEpisode = autonomyEpisode();
+  nextUnderstanding = baseUnderstanding({ primaryIntent: "BOOKING_REQUEST", bookingAcceptance: "explicit_accept" });
+  nextGeneration = baseGeneration();
+
+  await generateReplyForMessage({ businessId: BUSINESS_ID, conversationId: CONVERSATION_ID, customerMessageId: "m-confirm-fail", messageBody: "10am works." });
+
+  const draft = currentSupabase.tables.reply_drafts.find((d) => d.customer_message_id === "m-confirm-fail");
+  assert.equal(draft?.status, "pending");
+  assert.equal(sendCallCount, 0);
+});
+
+test("Autonomy — the customer is never told a booking is confirmed unless Tier 1 genuinely succeeded (draft_text is only auto-sent on real success)", async () => {
+  currentSupabase = new FakeSupabase();
+  seedBusiness(currentSupabase);
+  currentSupabase.tables.ai_configurations[0]!.auto_confirm_bookings_enabled = true;
+  resetAutonomyMocks();
+  nextTier1Check = { applicable: true, eligible: true, reasons: [] };
+  nextTier1Apply = { attempted: true, succeeded: true, reasons: [] };
+  nextAutonomyDecision = { tier: "tier1_auto_action", reasons: ["confirmed"], allowAutoSend: true };
+  nextEpisode = autonomyEpisode();
+  nextUnderstanding = baseUnderstanding({ primaryIntent: "BOOKING_REQUEST", bookingAcceptance: "explicit_accept" });
+  nextGeneration = baseGeneration({ draftReply: "You're all booked in for Tuesday at 10am." });
+
+  await generateReplyForMessage({ businessId: BUSINESS_ID, conversationId: CONVERSATION_ID, customerMessageId: "m-real-success", messageBody: "10am works." });
+
+  const draft = currentSupabase.tables.reply_drafts.find((d) => d.customer_message_id === "m-real-success");
+  assert.equal(draft?.status, "sent");
+  assert.equal(sendCallCount, 1);
+  assert.equal(draft?.draft_text, "You're all booked in for Tuesday at 10am.");
 });

@@ -11,7 +11,7 @@ const nextConfig = {
   // to require() it, which fails ("ESM packages need to be imported").
   // transpilePackages runs it through webpack properly instead —
   // needed for the customer-facing report preview
-  // (components/dashboard/job-records/report-preview.tsx) and the
+  // (components/dashboard/reports/report-preview.tsx) and the
   // future server-side PDF generation stage that will reuse the same
   // lib/job-docs/report-document.tsx.
   transpilePackages: ["@react-pdf/renderer"],

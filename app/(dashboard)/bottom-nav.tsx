@@ -39,7 +39,12 @@ function isActive(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-export function BottomNav() {
+/** Plumber Reset — Phase 3 step 7. Approvals no longer has its own nav
+ * destination (it was a duplicate of Home's own attention queue) — the
+ * same "things need you" count now shows as a badge on Home's own
+ * icon here instead, so the signal is folded in on mobile too, not
+ * just on desktop's sidebar. */
+export function BottomNav({ approvalsCount = 0 }: { approvalsCount?: number }) {
   const pathname = usePathname();
 
   return (
@@ -52,10 +57,12 @@ export function BottomNav() {
         {PRIMARY_NAV.map((item) => {
           const Icon = ICONS[item.icon];
           const active = isActive(pathname, item.href);
+          const showBadge = item.href === "/dashboard" && approvalsCount > 0;
           return (
             <Link
               key={item.href}
               href={item.href}
+              aria-label={showBadge ? `${item.label} (${approvalsCount})` : undefined}
               className={cn(
                 "relative flex min-w-0 flex-1 flex-col items-center gap-0.5 px-1 pb-2 pt-2.5",
                 active ? "text-primary" : "text-muted-foreground"
@@ -68,8 +75,13 @@ export function BottomNav() {
                   className="absolute top-0 h-[2.5px] w-10 rounded-full bg-primary"
                 />
               )}
-              <motion.span whileTap={{ scale: 0.9 }} className="flex flex-col items-center gap-0.5">
+              <motion.span whileTap={{ scale: 0.9 }} className="relative flex flex-col items-center gap-0.5">
                 <Icon className="h-[21px] w-[21px]" strokeWidth={active ? 2.4 : 2} />
+                {showBadge && (
+                  <span className="absolute -right-1.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-attention px-1 text-[9.5px] font-bold text-attention-foreground">
+                    {approvalsCount > 9 ? "9+" : approvalsCount}
+                  </span>
+                )}
                 <span className={cn("truncate text-[10.5px] leading-tight", active ? "font-semibold" : "font-medium")}>
                   {item.label}
                 </span>

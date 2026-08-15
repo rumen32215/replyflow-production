@@ -1,12 +1,9 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { randomUUID } from "crypto";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { recordErrorEvent } from "@/lib/error-events";
 import { buildJobDocSeedFromWorkCard } from "@/lib/job-docs/from-work-card";
 import { RAW_NOTES_FIELD_KEY, SECTION } from "@/lib/job-docs/fields";
-import { CUSTOMER_MEDIA_BUCKET, downloadCustomerMedia } from "@/lib/reply-engine/media-storage";
-import { storeJobDocPhoto } from "@/lib/job-docs/photo-storage";
 
 export const runtime = "nodejs";
 
@@ -51,10 +48,6 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
   const { data: existing } = await service.from("job_docs").select("id").eq("work_card_id", workCard.id).maybeSingle();
   if (existing) return NextResponse.json({ id: existing.id, created: false });
 
-  const { data: conversation } = workCard.conversation_id
-    ? await service.from("conversations").select("customer_phone").eq("id", workCard.conversation_id).maybeSingle()
-    : { data: null };
-
   const seed = buildJobDocSeedFromWorkCard({
     customerName: workCard.customer_name,
     issue: workCard.issue,
@@ -68,6 +61,13 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
 
   let jobDocId: string;
   try {
+    // Plumber Reset Phase 3 step 10 — job_docs.customer_name/job_address/
+    // job_date are deliberately left unwritten (DB defaults apply: ''
+    // and null). Nothing reads them back — buildReportSource() (lib/
+    // job-docs/report-source.ts) sources all three fresh from the live
+    // Work Card every time — so populating them here would only recreate
+    // the exact stale-second-source-of-truth bug Phase 1's audit found
+    // in job_docs.job_date, for zero behavioural benefit.
     const { data: jobDoc, error: insertError } = await service
       .from("job_docs")
       .insert({
@@ -76,10 +76,6 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
         conversation_id: workCard.conversation_id,
         work_card_id: workCard.id,
         title: seed.title,
-        customer_name: seed.customerName,
-        customer_phone: conversation?.customer_phone ?? null,
-        job_address: seed.jobAddress,
-        job_date: seed.jobDate,
       })
       .select("id")
       .single();
@@ -115,50 +111,16 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     return NextResponse.json({ error: "Something went wrong generating this report — please try again." }, { status: 500 });
   }
 
-  // Photos — best-effort, per photo: a customer's already-analysed
-  // WhatsApp photo is copied into job-doc-media so it shows up on the
-  // report without a re-upload. One failed photo must never fail the
-  // whole report; it's just not there to include yet.
-  // ReplyFlow V4 — scoped to this job's own episode: an older,
-  // unrelated job's photos must never end up on this report.
-  if (workCard.episode_id) {
-    const { data: photos } = await service
-      .from("conversation_photos")
-      .select("message_id, storage_path, visible_summary, possible_summary, unknown_note, analysis_confidence")
-      .eq("episode_id", workCard.episode_id)
-      .order("created_at", { ascending: true });
-
-    for (const photo of photos ?? []) {
-      try {
-        const { bytes, mimeType } = await downloadCustomerMedia(service, photo.storage_path);
-        const photoId = randomUUID();
-        const storagePath = await storeJobDocPhoto(service, { businessId: business.id, jobDocId, photoId, bytes, mimeType });
-        await service.from("job_doc_photos").insert({
-          id: photoId,
-          job_doc_id: jobDocId,
-          business_id: business.id,
-          storage_path: storagePath,
-          phase: "other",
-          sort_order: 0,
-          visible_summary: photo.visible_summary,
-          possible_summary: photo.possible_summary,
-          unknown_note: photo.unknown_note,
-          analysis_confidence: photo.analysis_confidence,
-          analyzed_at: new Date().toISOString(),
-          included_in_report: true,
-        });
-      } catch (err) {
-        await recordErrorEvent({
-          severity: "warning",
-          source: "work-cards.job_doc_photo_copy_failed",
-          businessId: business.id,
-          message: "Couldn't copy an already-analysed WhatsApp photo onto a generated Job Record.",
-          error: err,
-          context: { workCardId: workCard.id, jobDocId, messageId: photo.message_id },
-        });
-      }
-    }
-  }
+  // Photos — Plumber Reset Phase 3 step 6: no copy step here anymore.
+  // A customer's WhatsApp photos are read live, straight from
+  // conversation_photos (scoped to this Job's own episode_id), unioned
+  // with any manually-uploaded job_doc_photos, every time the report is
+  // generated or viewed — see lib/job-docs/job-evidence.ts. This is
+  // what closes the exact bug the live test found: a copy-once step
+  // meant any photo sent after this route ran was invisible on the
+  // report until someone thought to re-run it, and a copy could drift
+  // from (or duplicate) the original. There is nothing to do here now;
+  // the Job's evidence is read fresh wherever it's needed.
 
   return NextResponse.json({ id: jobDocId, created: true });
 }

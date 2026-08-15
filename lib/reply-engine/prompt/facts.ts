@@ -2,6 +2,7 @@ import type { ReplyContext } from "../context/types";
 import type { UnderstandingResult } from "../understanding/types";
 import { standingForDate, describeStanding } from "@/lib/availability";
 import { formatNowLondon } from "@/lib/datetime";
+import type { ExecutedTool, CustomerContextData, JobData, AvailabilityData, BookingData } from "../tools/types";
 
 /** One bounded fact, stably identified so the generation LLM can cite
  * exactly which real fact it used (Sprint 9 §5: `facts_used`) and the
@@ -125,6 +126,14 @@ export function collectFacts(context: ReplyContext, understanding: Understanding
     );
   }
 
+  // Tool-result facts (Plumber Reset Phase 3 step 4) — real actions
+  // ReplyFlow's application layer already took or checked THIS turn,
+  // before generation ever ran (lib/reply-engine/tools/decide.ts).
+  // Flows through the exact same citation/grounding machinery as every
+  // other fact: the model must cite one to claim it happened, and the
+  // Safety Layer's fact-grounding check applies identically.
+  context.toolResults.forEach((executed, i) => facts.push(...toolResultFacts(executed, i)));
+
   // Always present (Conversation Design Sprint) — the one fact that
   // exists specifically so the model never has to infer or guess
   // whether this conversation's booking is real. Every branch is
@@ -182,6 +191,103 @@ export function collectFacts(context: ReplyContext, understanding: Understanding
   }
 
   return facts;
+}
+
+function describeSlot(slot: { start: string; end: string }): string {
+  return new Date(slot.start).toLocaleString("en-GB", {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "Europe/London",
+  });
+}
+
+/**
+ * Translates one already-executed tool call (tools/decide.ts) into
+ * plain, honest, citable facts. The one non-negotiable rule every
+ * branch here follows: a failed action must never read as though it
+ * succeeded, and a merely-proposed booking must never read as
+ * confirmed — the exact grounding discipline every other fact in this
+ * file already applies, extended to real actions instead of just
+ * business/customer data.
+ */
+function toolResultFacts(executed: ExecutedTool, index: number): Fact[] {
+  const { name, result } = executed;
+  const id = `tool.${name}.${index}`;
+
+  if (!result.ok) {
+    switch (result.reason) {
+      case "conflict": {
+        const alts = (result.alternatives ?? []).map(describeSlot).join("; ");
+        return [
+          {
+            id,
+            text: `You tried to book or move to a time that is not actually available — do not tell the customer it's booked or moved. ${
+              alts ? `Real alternative times you may offer instead: ${alts}.` : "No alternative times were found nearby — say you'll need to check further out, or the owner will follow up."
+            }`,
+          },
+        ];
+      }
+      case "no_job":
+        return [{ id, text: "No job has been recorded for this conversation yet, so a booking action could not be attempted. Find out what the job actually is first." }];
+      case "no_active_booking":
+        return [{ id, text: "There is no active booking to change for this conversation. Do not tell the customer anything was cancelled or moved." }];
+      case "invalid_window":
+        return [{ id, text: "The requested time could not be used — it's in the past or not a valid time. Ask the customer for a different time, or check availability again." }];
+      case "invalid_arguments":
+        return [{ id, text: "That action could not be attempted — something about it was unclear or incomplete. Do not claim it happened; ask a clarifying question, or escalate if you genuinely can't proceed." }];
+      case "execution_failed":
+      default:
+        return [{ id, text: "A system action was attempted just now but failed. Do not tell the customer it succeeded — apologise briefly and say the owner will follow up if needed." }];
+    }
+  }
+
+  switch (name) {
+    case "get_customer_context": {
+      const data = result.data as CustomerContextData;
+      if (!data.customer && data.recentJobs.length === 0) {
+        return [{ id, text: "No prior history was found for this customer — treat them as new. Do not claim to remember a previous job." }];
+      }
+      const jobLines = data.recentJobs
+        .slice(0, 3)
+        .map((j) => `${j.issue ?? "a job"} (${j.status}${j.completedAt ? `, completed ${new Date(j.completedAt).toLocaleDateString("en-GB")}` : ""})`)
+        .join("; ");
+      return [
+        {
+          id,
+          text: `Real customer history: ${data.customer?.notes ? `${data.customer.notes}. ` : ""}${jobLines ? `Past jobs: ${jobLines}.` : "No past jobs on record."}`,
+        },
+      ];
+    }
+    case "create_or_update_job": {
+      const data = result.data as JobData;
+      return [{ id, text: `The job for this conversation is now recorded as: ${data.issue ?? "not yet specified"}${data.address ? `, at ${data.address}` : ""} (status: ${data.status}).` }];
+    }
+    case "check_availability": {
+      const data = result.data as AvailabilityData;
+      if (data.slots.length === 0) {
+        return [{ id, text: "No real open slots were found in the searched window. Do not invent a time — say you'll need to check further out, or bring the owner in." }];
+      }
+      return [{ id, text: `Real, currently-open slots you may offer — and only these: ${data.slots.slice(0, 6).map(describeSlot).join("; ")}.` }];
+    }
+    case "create_booking":
+    case "update_booking": {
+      const data = result.data as BookingData;
+      if (data.status === "cancelled") return [{ id, text: "The booking has genuinely just been cancelled — you may tell the customer this." }];
+      const verb = name === "create_booking" ? "proposed" : "updated";
+      const confirmedNote =
+        data.status === "confirmed"
+          ? "This is genuinely confirmed — you may tell the customer they're booked."
+          : "This is proposed, not yet confirmed by the owner — tell the customer it's noted and will be confirmed shortly, never that it's definitely booked.";
+      return [{ id, text: `A booking was just ${verb}: ${describeSlot(data)}. ${confirmedNote}` }];
+    }
+    case "escalate_to_owner":
+      return [{ id, text: "This has just been flagged for the owner's personal attention. Acknowledge briefly and say the owner will follow up — do not attempt to resolve it yourself." }];
+    default:
+      return [];
+  }
 }
 
 const STOCK_PHRASES = [

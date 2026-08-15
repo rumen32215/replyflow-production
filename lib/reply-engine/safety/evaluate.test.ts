@@ -17,6 +17,7 @@ function baseUnderstanding(overrides: Partial<UnderstandingResult> = {}): Unders
     conversationState: EMPTY_CONVERSATION_STATE,
     ...overrides,
     episodeContinuity: overrides.episodeContinuity ?? "same_job",
+    bookingAcceptance: overrides.bookingAcceptance ?? "none",
   };
 }
 

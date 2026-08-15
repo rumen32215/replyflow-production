@@ -5,15 +5,16 @@ import { ClipboardList } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { EmptyState } from "@/components/shared/empty-state";
 
-export const metadata: Metadata = { title: "Work Cards — ReplyFlow" };
+export const metadata: Metadata = { title: "Jobs — ReplyFlow" };
 
 /**
- * ReplyFlow V4 (P0.B) — Work Cards finally get a real home. Before
- * this, a Work Card was only reachable by following a link from Front
- * Desk, a Conversation, or a Customer; there was no way to simply see
- * every job. RLS (0013_work_cards.sql) is the real access boundary,
- * same defence-in-depth pattern as every other owner-scoped list in
- * this app (see job-records/page.tsx).
+ * Plumber Reset — Phase 3 step 7 (UI transition). Every Job, one list,
+ * one concept — "Work Card" and "Job Record" no longer exist as
+ * separate things a plumber has to reason about (Phase 2 architecture:
+ * work_cards stays the canonical table, "Job" is the word the product
+ * uses everywhere a plumber sees it). RLS (0013_work_cards.sql) is the
+ * real access boundary, same defence-in-depth pattern as every other
+ * owner-scoped list in this app.
  */
 export default async function WorkCardsPage() {
   const supabase = createClient();
@@ -27,7 +28,7 @@ export default async function WorkCardsPage() {
 
   const { data: workCards } = await supabase
     .from("work_cards")
-    .select("id, customer_name, issue, status, scheduled_for, completed_at, created_at")
+    .select("id, customer_name, issue, status, scheduled_for, completed_at, created_at, report_status")
     .eq("business_id", business.id)
     .order("created_at", { ascending: false });
 
@@ -36,15 +37,15 @@ export default async function WorkCardsPage() {
   return (
     <div className="mx-auto max-w-[1280px] space-y-6">
       <div>
-        <h1 className="text-xl font-bold tracking-tight">Work Cards</h1>
+        <h1 className="text-xl font-bold tracking-tight">Jobs</h1>
         <p className="mt-1 text-[13.5px] text-muted-foreground">Every job, from first enquiry to completed work.</p>
       </div>
 
       {cards.length === 0 ? (
         <EmptyState
           icon={ClipboardList}
-          title="No Work Cards yet."
-          description="A Work Card is created from a conversation once there's a real enquiry to organise — see Conversations."
+          title="No jobs yet."
+          description="A Job is created from a conversation once there's a real enquiry to organise — see Conversations."
         />
       ) : (
         <div className="divide-y divide-border rounded-2xl border border-border bg-card">
@@ -58,9 +59,17 @@ export default async function WorkCardsPage() {
                 <p className="truncate text-[14px] font-semibold">{c.customer_name}</p>
                 <p className="mt-0.5 truncate text-[12.5px] text-muted-foreground">{c.issue}</p>
               </div>
-              <span className="shrink-0 rounded-full bg-muted px-2.5 py-1 text-[11.5px] font-semibold capitalize text-muted-foreground">
-                {c.status.replace(/_/g, " ")}
-              </span>
+              <div className="flex shrink-0 items-center gap-1.5">
+                {/* Report status is a separate axis from job status —
+                    only ever shown once there's something to say, never
+                    implying the job itself is done. */}
+                {c.report_status === "approved" && (
+                  <span className="rounded-full bg-success/10 px-2.5 py-1 text-[11px] font-semibold text-success">Report approved</span>
+                )}
+                <span className="rounded-full bg-muted px-2.5 py-1 text-[11.5px] font-semibold capitalize text-muted-foreground">
+                  {c.status.replace(/_/g, " ")}
+                </span>
+              </div>
             </Link>
           ))}
         </div>

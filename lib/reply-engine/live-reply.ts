@@ -94,6 +94,11 @@ export async function generateLiveReply(
     customerJobs: null,
     currentBooking: null,
     photoAnalysis: null,
+    // Plumber Reset Phase 3 step 4 — this preview path never runs the
+    // real tool-decision step (it's a scripted "try your receptionist"
+    // scenario, not a live conversation), so there's never anything
+    // real to report here.
+    toolResults: [],
     newMessage: { body: scenarioMessage, customerName: null, customerPhone: "" },
   };
 

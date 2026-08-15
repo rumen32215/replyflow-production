@@ -5,10 +5,12 @@ import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { recordErrorEvent } from "@/lib/error-events";
 import { storeJobDocPhoto, JOB_DOC_MEDIA_BUCKET } from "@/lib/job-docs/photo-storage";
+import { CUSTOMER_MEDIA_BUCKET } from "@/lib/reply-engine/media-storage";
 import { compressJobDocPhoto } from "@/lib/job-docs/photo-compression";
 import { analyzeAndStoreJobDocPhoto } from "@/lib/job-docs/analysis";
 import { ANALYSIS_ERROR_MARKER } from "@/lib/job-docs/photo-schema";
 import { invalidateReportApproval } from "@/lib/job-docs/approval";
+import { fetchJobPhotos } from "@/lib/job-docs/job-evidence";
 
 export const runtime = "nodejs";
 
@@ -30,7 +32,7 @@ async function getOwnedJobDoc(service: ServiceClient, jobDocId: string, userId: 
  * Uploads exactly one photo per request (ReplyFlow 2.0, Phase 2A) —
  * deliberately not a batch endpoint, since the spec requires each
  * photo to fail and retry independently; the client's own uploader
- * (components/dashboard/job-records/photo-uploader.tsx) runs up to 3
+ * (components/dashboard/reports/photo-uploader.tsx) runs up to 3
  * of these concurrently. Auth -> ownership check -> service-role write
  * is the same shape draft/route.ts and fields/route.ts already use —
  * job_doc_photos has no client write grant at all.
@@ -171,9 +173,14 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
 
 /**
  * The bounded-polling endpoint (no Supabase Realtime, per the
- * approved spec). RLS alone already scopes job_doc_photos to the
- * signed-in owner's business for the read — the service role is only
- * needed afterward, to generate signed URLs for the private bucket.
+ * approved spec). Plumber Reset Phase 3 step 7 — now the Job's full,
+ * unified evidence (lib/job-docs/job-evidence.ts), not job_doc_photos
+ * alone: a WhatsApp photo that arrives after this report already
+ * exists must show up here too, not just on the next full reload. RLS
+ * already scopes the initial job_docs/work_cards lookup to the
+ * signed-in owner's business; the service role is only needed
+ * afterward, for the evidence read itself and signed URLs into
+ * whichever private bucket each photo's own source actually lives in.
  */
 export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
   const supabase = createClient();
@@ -182,16 +189,20 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
 
-  const { data: photoRows } = await supabase
-    .from("job_doc_photos")
-    .select("id, storage_path, caption, phase, sort_order, visible_summary, possible_summary, unknown_note, analysis_confidence, analyzed_at")
-    .eq("job_doc_id", params.id)
-    .order("sort_order", { ascending: true });
+  const { data: jobDoc } = await supabase.from("job_docs").select("id, work_card_id").eq("id", params.id).maybeSingle();
+  if (!jobDoc) return NextResponse.json({ error: "Job record not found" }, { status: 404 });
 
-  const rows = photoRows ?? [];
+  const { data: workCard } = jobDoc.work_card_id
+    ? await supabase.from("work_cards").select("episode_id").eq("id", jobDoc.work_card_id).maybeSingle()
+    : { data: null };
+
   const service = createServiceClient();
+  const rows = await fetchJobPhotos(service, { jobDocId: jobDoc.id, episodeId: workCard?.episode_id ?? null });
   const signedResults = await Promise.all(
-    rows.map((r) => service.storage.from(JOB_DOC_MEDIA_BUCKET).createSignedUrl(r.storage_path, 3600))
+    rows.map((r) => {
+      const bucket = r.source === "job_doc" ? JOB_DOC_MEDIA_BUCKET : CUSTOMER_MEDIA_BUCKET;
+      return r.storage_path ? service.storage.from(bucket).createSignedUrl(r.storage_path, 3600) : Promise.resolve({ data: null });
+    })
   );
 
   const photos = rows.map((r, i) => {

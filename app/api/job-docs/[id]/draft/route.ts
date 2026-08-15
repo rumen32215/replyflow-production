@@ -19,6 +19,7 @@ import { ANALYSIS_ERROR_MARKER } from "@/lib/job-docs/photo-schema";
 import { draftLockStaleThreshold } from "@/lib/job-docs/draft-lock";
 import { validateJobReportDraft } from "@/lib/job-docs/report-validation";
 import { APPROVAL_INVALIDATION_UPDATE } from "@/lib/job-docs/approval";
+import { fetchJobPhotos } from "@/lib/job-docs/job-evidence";
 
 export const runtime = "nodejs";
 
@@ -73,11 +74,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
 
   const service = createServiceClient();
 
-  const { data: jobDoc } = await service
-    .from("job_docs")
-    .select("id, business_id, customer_name, job_address, work_card_id")
-    .eq("id", params.id)
-    .maybeSingle();
+  const { data: jobDoc } = await service.from("job_docs").select("id, business_id, work_card_id").eq("id", params.id).maybeSingle();
   if (!jobDoc) return NextResponse.json({ error: "Job record not found" }, { status: 404 });
 
   const { data: business } = await service.from("businesses").select("id, owner_id").eq("id", jobDoc.business_id).maybeSingle();
@@ -85,17 +82,18 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     return NextResponse.json({ error: "Not authorized" }, { status: 403 });
   }
 
-  // Production hardening (2026-08-14) — the real, live Work Card status
-  // is the one source of truth for whether this job is actually done;
-  // never stored/cached on job_docs itself (that would just create a
-  // second status to drift out of sync). No linked Work Card at all
-  // (a manually-created Job Record) defaults to "not completed" — the
-  // absence of confirmation is never treated as confirmation.
-  let isJobCompleted = false;
-  if (jobDoc.work_card_id) {
-    const { data: workCard } = await service.from("work_cards").select("status").eq("id", jobDoc.work_card_id).maybeSingle();
-    isJobCompleted = workCard?.status === "completed";
-  }
+  // The Job is the single source of truth (Plumber Reset Phase 3 step
+  // 6) — customer name, address, and completion status are all read
+  // live from the Work Card here, never from job_docs' own (now
+  // unused) customer_name/job_address columns, which is exactly what
+  // used to drift out of sync with what the Work Card actually said.
+  // No linked Work Card at all (a manually-created Job Record) degrades
+  // to honest nulls/false — absence of confirmation is never treated
+  // as confirmation.
+  const { data: workCard } = jobDoc.work_card_id
+    ? await service.from("work_cards").select("customer_name, address, status, episode_id").eq("id", jobDoc.work_card_id).maybeSingle()
+    : { data: null };
+  const isJobCompleted = workCard?.status === "completed";
 
   const { data: notesField } = await service
     .from("job_doc_fields")
@@ -120,20 +118,20 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
   }
 
   try {
-    // Photo context (ReplyFlow 2.0, Phase 2A) — a snapshot at the moment
-    // Generate Draft actually runs. The client is responsible for
+    // Photo context (ReplyFlow 2.0, Phase 2A, widened by Phase 3 step 6)
+    // — a snapshot at the moment Generate Draft actually runs, now
+    // drawn from the Job's full merged evidence (manually-uploaded
+    // job_doc_photos AND the customer's own WhatsApp photos, never just
+    // the subset that happened to get copied at some earlier point) —
+    // see lib/job-docs/job-evidence.ts. The client is responsible for
     // waiting on still-analysing photos beforehand (up to the same
     // 60-second bounded-polling budget — see
     // hooks/use-job-doc-photos.ts's waitForJobDocPhotosSettled), so this
     // route itself never sleeps; it just reports which photos, if any,
     // were still pending and therefore excluded.
-    const { data: photoRows } = await service
-      .from("job_doc_photos")
-      .select("id, caption, visible_summary, possible_summary, unknown_note, analyzed_at")
-      .eq("job_doc_id", jobDoc.id)
-      .order("sort_order", { ascending: true });
+    const photoRows = await fetchJobPhotos(service, { jobDocId: jobDoc.id, episodeId: workCard?.episode_id ?? null });
 
-    const allPhotos = photoRows ?? [];
+    const allPhotos = [...photoRows].sort((a, b) => (a.created_at < b.created_at ? -1 : a.created_at > b.created_at ? 1 : 0));
     const erroredPhotos = allPhotos.filter((p) => p.analyzed_at && p.unknown_note === ANALYSIS_ERROR_MARKER);
     const settledPhotos = allPhotos.filter((p) => p.analyzed_at && p.unknown_note !== ANALYSIS_ERROR_MARKER);
     const pendingExcluded = allPhotos
@@ -144,8 +142,8 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
 
     const draft = await generateJobReportDraft({
       businessId: business.id,
-      customerName: jobDoc.customer_name ?? "",
-      jobAddress: jobDoc.job_address,
+      customerName: workCard?.customer_name ?? "",
+      jobAddress: workCard?.address ?? null,
       rawNotes,
       isJobCompleted,
       photos: settledPhotos

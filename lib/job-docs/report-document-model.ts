@@ -49,7 +49,7 @@ export interface ReportDocumentJobDetails {
  * bucket is real I/O (see lib/job-docs/photo-storage.ts) — this stays
  * out of this pure module by design, the same way selectReportContent()
  * itself never touches storage; the caller resolves URLs up front
- * (mirroring exactly how app/(dashboard)/dashboard/job-records/[id]/page.tsx
+ * (mirroring exactly how app/(dashboard)/dashboard/reports/[id]/page.tsx
  * already does for the owner-facing photo section) and passes them in
  * via photoUrls below. url is null when a signed URL genuinely
  * couldn't be produced — the document renders the photo's caption

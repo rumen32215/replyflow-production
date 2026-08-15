@@ -7,13 +7,18 @@ import type { CustomerListItem } from "@/components/dashboard/customers/customer
 import { TEST_CONVERSATION_PHONE } from "@/lib/test-conversation";
 
 /**
- * Customer Memory (Sprint 7) — there is no dedicated "customers"
- * table; a customer is a real `conversations` row (unique per
- * business_id + customer_phone — see supabase/migrations/0003), and
- * their history is their real `jobs` rows. This layout fetches both
- * once and shapes them into the list every child route shares,
- * exactly the pattern app/(dashboard)/dashboard/conversations/layout.tsx
- * already uses.
+ * Customer Memory — a real, phone-anchored `customers` table exists
+ * (Plumber Reset Phase 3 step 2) and is the customer's durable
+ * identity; this list view is still built from `conversations`
+ * (unique per business_id + customer_phone), since every field this
+ * particular list needs — name, phone, live status, last activity —
+ * already lives there and the two are 1:1 in practice. The customer
+ * detail page (customers/[id]/page.tsx) is what actually reads the
+ * `customers` table itself, for job history and any owner-entered
+ * notes/address. This layout fetches conversations+jobs once and
+ * shapes them into the list every child route shares, exactly the
+ * pattern app/(dashboard)/dashboard/conversations/layout.tsx already
+ * uses.
  */
 export default async function CustomersLayout({ children }: { children: React.ReactNode }) {
   const supabase = createClient();

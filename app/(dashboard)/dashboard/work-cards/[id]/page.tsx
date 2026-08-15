@@ -3,30 +3,31 @@ import { redirect, notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { CUSTOMER_MEDIA_BUCKET } from "@/lib/reply-engine/media-storage";
-import { WorkCardDetail, type WorkCardPhoto } from "@/components/dashboard/work-cards/work-card-detail";
+import { JOB_DOC_MEDIA_BUCKET } from "@/lib/job-docs/photo-storage";
+import { fetchJobPhotos } from "@/lib/job-docs/job-evidence";
+import { WorkCardDetail, type WorkCardPhoto, type WorkCardBooking } from "@/components/dashboard/work-cards/work-card-detail";
 import { groupForStatus, type ConversationGroup } from "@/lib/conversations";
 import { toConversationState } from "@/lib/reply-engine/understanding/state";
 import { computeJobReadiness, simplifiedWorkCardStatus } from "@/lib/work-card-state";
 import { buildCommunicationGuidance } from "@/lib/customer-memory-signals";
 
-export const metadata: Metadata = { title: "Work Card — ReplyFlow" };
+export const metadata: Metadata = { title: "Job — ReplyFlow" };
 
 /**
- * Master Execution Plan 2.1 — the dedicated Work Card page
- * (`DOCS/SPECS/Work-Card-Object.md`, `06-Experience-Architecture.md`
- * §2). Every current reference to a Work Card across Front Desk and
- * Customers now points here instead of the parent conversation. The
- * test this page is built against: could a technician who has never
- * touched ReplyFlow walk out the door with only this screen open and
- * do the job competently?
+ * The Job workspace — one screen, everything about one job (Plumber
+ * Reset Phase 3 step 7). "Work Card" and "Job Record" no longer exist
+ * as separate things a plumber has to reason about; this page absorbs
+ * both. The test this page is built against: could a technician who
+ * has never touched ReplyFlow walk out the door with only this screen
+ * open and do the job competently?
  *
- * ReplyFlow V2 (2026-08-11) — Photos section restored: `conversation_
- * photos` (0024_customer_photos.sql) exists and is real, populated
- * output the receptionist already gathers; the comment this replaced
- * predates that table and was simply never updated. Same signed-URL
- * pattern the conversation detail page already uses (private bucket,
- * RLS-scoped ownership already proven by the work_cards select below,
- * service-role signed URL generated only after that).
+ * Photos are the Job's full, unified evidence (lib/job-docs/job-
+ * evidence.ts) — WhatsApp photos and anything manually uploaded onto
+ * the linked report, together, exactly what P3.8's data layer already
+ * guarantees is scoped correctly (never another job's photos, never a
+ * different customer's). Booking is the Job's real, real-conflict-
+ * checked appointment (lib/booking/engine.ts) when one exists — a
+ * proposed slot and a confirmed one are never shown the same way.
  */
 export default async function WorkCardDetailPage({ params }: { params: { id: string } }) {
   const supabase = createClient();
@@ -39,14 +40,14 @@ export default async function WorkCardDetailPage({ params }: { params: { id: str
   const { data: workCard } = await supabase
     .from("work_cards")
     .select(
-      "id, business_id, conversation_id, episode_id, customer_name, issue, status, estimated_value, scheduled_for, completed_at, notes, created_at, address, address_confirmed, collected_details, conversation_summary, approved_at"
+      "id, business_id, conversation_id, episode_id, customer_name, issue, status, estimated_value, scheduled_for, completed_at, notes, created_at, address, address_confirmed, collected_details, conversation_summary, approved_at, next_booking_id, report_status"
     )
     .eq("id", params.id)
     .maybeSingle();
 
   if (!workCard) notFound();
 
-  const [{ data: conversation }, { data: episode }, { data: siblingCards }, { data: conversationPhotos }, { data: linkedJobDoc }] = await Promise.all([
+  const [{ data: conversation }, { data: episode }, { data: siblingCards }, { data: linkedJobDoc }, { data: bookingRow }] = await Promise.all([
     workCard.conversation_id
       ? supabase
           .from("conversations")
@@ -61,11 +62,10 @@ export default async function WorkCardDetailPage({ params }: { params: { id: str
     workCard.episode_id
       ? supabase.from("conversation_episodes").select("ai_state").eq("id", workCard.episode_id).maybeSingle()
       : Promise.resolve({ data: null }),
-    // Relationship context (Work-Card-Object.md §2: "computed live, not
-    // stored") — other Work Cards from the same conversation thread,
-    // the same scoping `RelationshipOverview` already uses on the
-    // Customer page. Deliberately conversation-wide, not episode-wide —
-    // this is the customer's whole job history, same as elsewhere in V4.
+    // Relationship context — other Jobs from the same conversation
+    // thread, the same scoping `RelationshipOverview` already uses on
+    // the Customer page. Deliberately conversation-wide, not
+    // episode-wide — this is the customer's whole job history.
     workCard.conversation_id
       ? supabase
           .from("work_cards")
@@ -73,57 +73,56 @@ export default async function WorkCardDetailPage({ params }: { params: { id: str
           .eq("conversation_id", workCard.conversation_id)
           .neq("id", workCard.id)
       : Promise.resolve({ data: [] }),
-    // ReplyFlow V2 — the same already-analysed photo output the
-    // conversation detail page reads, surfaced here too so the owner
-    // never has to leave the Work Card to see what was already found.
-    // ReplyFlow V4 — scoped to this job's own episode: an older job's
-    // photos must never appear to belong to this one.
-    workCard.episode_id
-      ? supabase
-          .from("conversation_photos")
-          .select("message_id, storage_path, visible_summary, possible_summary, unknown_note, analysis_confidence, created_at")
-          .eq("episode_id", workCard.episode_id)
-          .order("created_at", { ascending: true })
-      : workCard.conversation_id
-        ? supabase
-            .from("conversation_photos")
-            .select("message_id, storage_path, visible_summary, possible_summary, unknown_note, analysis_confidence, created_at")
-            .eq("conversation_id", workCard.conversation_id)
-            .order("created_at", { ascending: true })
-        : Promise.resolve({ data: [] }),
-    // ReplyFlow V4 — the Work Card → Job Record link
-    // (0030_link_job_docs_to_work_cards.sql). At most one, by the
-    // unique index on job_docs.work_card_id. Production hardening
-    // (2026-08-14) — status is now selected too, not just id, so "View
-    // report" can route straight to the approved report instead of
-    // always reopening the generate/edit workflow.
+    // The linked report (job_docs, Phase 3 step 6 — a thin envelope for
+    // job_doc_fields/photos, never a second source of truth). At most
+    // one, by the unique index on job_docs.work_card_id.
     supabase.from("job_docs").select("id, status").eq("work_card_id", workCard.id).maybeSingle(),
+    // Plumber Reset Phase 3 step 7 — the Job's real, deterministically-
+    // checked booking (lib/booking/engine.ts), when one exists. A
+    // proposed slot and a confirmed one are never shown the same way
+    // (see the Booking section in WorkCardDetail below).
+    workCard.next_booking_id
+      ? supabase.from("bookings").select("scheduled_start, scheduled_end, status").eq("id", workCard.next_booking_id).maybeSingle()
+      : Promise.resolve({ data: null }),
   ]);
+
+  // Plumber Reset Phase 3 step 6/7 — the Job's full, unified evidence:
+  // WhatsApp photos and anything manually uploaded onto the linked
+  // report, together (lib/job-docs/job-evidence.ts). Scoped to this
+  // Job's own episode/report id only — never another job's, never a
+  // different customer's. Needs the service role: job_doc_photos is
+  // write-service-role-only and both private buckets are signed below.
+  const service = createServiceClient();
+  const evidencePhotos = await fetchJobPhotos(service, { jobDocId: linkedJobDoc?.id ?? null, episodeId: workCard.episode_id });
 
   // Signed URLs, generated server-side with the service role — same
   // reasoning as the conversation detail page: the customer-media
   // bucket is private with no policy granted to `authenticated`, so
   // this only happens after the RLS-scoped work_cards select above
   // has already proven this signed-in owner owns this job.
-  const photos = conversationPhotos ?? [];
-  const photoSignedUrlById = new Map<string, string>();
-  if (photos.length > 0) {
-    const service = createServiceClient();
-    const signedResults = await Promise.all(
-      photos.map((p) => service.storage.from(CUSTOMER_MEDIA_BUCKET).createSignedUrl(p.storage_path, 3600))
-    );
-    photos.forEach((p, i) => {
-      const url = signedResults[i]?.data?.signedUrl;
-      if (url) photoSignedUrlById.set(p.message_id, url);
-    });
-  }
-  const workCardPhotos: WorkCardPhoto[] = photos.map((p) => ({
-    id: p.message_id,
-    url: photoSignedUrlById.get(p.message_id) ?? null,
+  // Signed URLs, generated server-side with the service role — resolved
+  // from whichever private bucket each photo's own source actually
+  // lives in (WhatsApp photos: customer-media; manually-uploaded
+  // report photos: job-doc-media). A pending (not-yet-analysed) photo
+  // still gets a real URL — the image itself already exists even
+  // before analysis has finished.
+  const signedResults = await Promise.all(
+    evidencePhotos.map((p) => {
+      const bucket = p.source === "job_doc" ? JOB_DOC_MEDIA_BUCKET : CUSTOMER_MEDIA_BUCKET;
+      return p.storage_path ? service.storage.from(bucket).createSignedUrl(p.storage_path, 3600) : Promise.resolve({ data: null });
+    })
+  );
+  const workCardPhotos: WorkCardPhoto[] = evidencePhotos.map((p, i) => ({
+    id: p.id,
+    url: signedResults[i]?.data?.signedUrl ?? null,
     visibleSummary: p.visible_summary,
     possibleSummary: p.possible_summary,
     unknownNote: p.unknown_note,
-    confidence: p.analysis_confidence as "low" | "medium" | "high",
+    confidence: p.analysis_confidence,
+    // Honest analysis state (Phase 3 step 6/7) — a photo that's still
+    // being analysed (or whose analysis failed) is shown as such,
+    // never silently omitted until a refresh happens to catch it.
+    analyzed: Boolean(p.analyzed_at),
   }));
 
   const conversationState = episode ? toConversationState(episode.ai_state) : null;
@@ -142,7 +141,7 @@ export default async function WorkCardDetailPage({ params }: { params: { id: str
     issue: workCard.issue,
     address: workCard.address,
     conversationState,
-    hasAnalysedPhoto: workCardPhotos.length > 0,
+    hasAnalysedPhoto: workCardPhotos.some((p) => p.analyzed),
   });
   const simplifiedStatus = simplifiedWorkCardStatus(workCard.status, readiness);
 
@@ -157,8 +156,22 @@ export default async function WorkCardDetailPage({ params }: { params: { id: str
     conversation?.communication_preference ?? null
   );
 
+  const booking: WorkCardBooking | null = bookingRow
+    ? { start: bookingRow.scheduled_start, end: bookingRow.scheduled_end, status: bookingRow.status }
+    : null;
+
   return (
     <WorkCardDetail
+      // Plumber Reset Phase 3 step 7 — the same real bug already found
+      // and fixed once on the report editor (reports/[id]/page.tsx):
+      // this is a Client Component with its own internal useState(card)
+      // seeded from the `workCard` prop. Without a key tied to the
+      // Job's own id, navigating directly from one Job to another can
+      // reuse the same component instance and leave the previous Job's
+      // customer/photos/booking on screen until something else forces
+      // a re-render. A genuine remount per Job makes that structurally
+      // impossible, not just unlikely.
+      key={workCard.id}
       workCard={{
         id: workCard.id,
         conversationId: workCard.conversation_id,
@@ -185,6 +198,8 @@ export default async function WorkCardDetailPage({ params }: { params: { id: str
       simplifiedStatus={simplifiedStatus}
       linkedJobDocId={linkedJobDoc?.id ?? null}
       linkedJobDocStatus={linkedJobDoc?.status ?? null}
+      booking={booking}
+      reportStatus={workCard.report_status}
     />
   );
 }

@@ -4,6 +4,7 @@ import { formatNowLondon, londonWallClockToUtcIso } from "@/lib/datetime";
 import { extractPatternEntities, withPostcodeBackstop } from "./entities";
 import {
   INTENTS,
+  type BookingAcceptance,
   type Intent,
   type MeaningEntities,
   type SafetyTag,
@@ -28,6 +29,14 @@ import { recordErrorEvent } from "@/lib/error-events";
 
 const SAFETY_TAGS: readonly NonNullable<SafetyTag>[] = ["spam", "abuse", "scam", "medical", "legal", "unsupported"];
 
+const BOOKING_ACCEPTANCE_VALUES: readonly BookingAcceptance[] = [
+  "none",
+  "asking_availability",
+  "expressing_preference",
+  "proposing_time",
+  "explicit_accept",
+];
+
 const RESPONSE_SCHEMA = {
   type: "object",
   additionalProperties: false,
@@ -40,6 +49,7 @@ const RESPONSE_SCHEMA = {
     sentiment: { type: "string", enum: ["neutral", "positive", "negative"] },
     safety_tag: { type: ["string", "null"], enum: [...SAFETY_TAGS, null] },
     episode_continuity: { type: "string", enum: ["same_job", "new_job"] },
+    booking_acceptance: { type: "string", enum: BOOKING_ACCEPTANCE_VALUES },
     conversation_state: {
       type: "object",
       additionalProperties: false,
@@ -112,6 +122,7 @@ const RESPONSE_SCHEMA = {
     "sentiment",
     "safety_tag",
     "episode_continuity",
+    "booking_acceptance",
     "conversation_state",
   ],
 } as const;
@@ -142,6 +153,13 @@ const SYSTEM_PROMPT = `You do two jobs for one inbound WhatsApp message to a UK 
 - "new_job": only when the customer has clearly, unambiguously started describing a different problem or request that has nothing to do with what PREVIOUS STATE was about (e.g. PREVIOUS STATE is about a boiler repair and this message is "hi, my toilet's now leaking too" — a different fault, not a continuation). A vague or short message ("hi", "quick question") is NOT on its own evidence of a new job — judge the actual content, not the length.
 - If PREVIOUS STATE is empty (a genuinely fresh conversation, nothing collected yet), always answer "same_job" — there is nothing to compare against, and the application does not use this field in that case.
 
+5) DECIDE booking_acceptance — a separate, structural question, used by the application (not you) to decide whether a booking may ever be auto-confirmed. Judge only THIS message, using PREVIOUS STATE and the recent messages for context about what was actually offered:
+- "none": this message has nothing to do with booking timing at all.
+- "asking_availability": the customer is asking WHETHER/WHEN something is possible ("can you come tomorrow?", "do you have anything this week?") — a question, not a commitment to any specific time.
+- "expressing_preference": the customer states a general preference or constraint without accepting a specific offered slot ("mornings are better for me", "I'm free most of next week").
+- "proposing_time": the customer proposes a specific time THEMSELVES, one the business has not yet confirmed as available ("could you do 3pm Thursday?") — a proposal, not an acceptance, even though it names a specific time.
+- "explicit_accept": ONLY when the business has already offered one or more specific slots earlier in this thread (check the recent messages) AND this message clearly, unambiguously accepts one of those specific slots ("10am works", "yes let's do Tuesday at 2", "book me in for that one"). A vague "sounds good" with no specific slot on the table is NOT explicit_accept — use "expressing_preference" instead. Never infer acceptance from ambiguous language; when genuinely unsure, use a weaker category, never explicit_accept.
+
 Never invent facts. You are classifying and tracking state, not drafting a reply.`;
 
 interface RawClassification {
@@ -153,11 +171,16 @@ interface RawClassification {
   sentiment: MeaningEntities["sentiment"];
   safety_tag: SafetyTag;
   episode_continuity: "same_job" | "new_job";
+  booking_acceptance: BookingAcceptance;
   conversation_state: unknown;
 }
 
 function isEpisodeContinuity(value: unknown): value is "same_job" | "new_job" {
   return value === "same_job" || value === "new_job";
+}
+
+function isBookingAcceptance(value: unknown): value is BookingAcceptance {
+  return typeof value === "string" && (BOOKING_ACCEPTANCE_VALUES as readonly string[]).includes(value);
 }
 
 function isIntent(value: unknown): value is Intent {
@@ -199,6 +222,10 @@ function toUnderstandingResult(raw: unknown, messageText: string, priorState: Co
     // mistaken for a confident "this is a new job" — that would close
     // a real episode over a mere parsing failure.
     episodeContinuity: "same_job",
+    // Safe default: a malformed/missing classification must never be
+    // mistaken for explicit acceptance — that would risk auto-
+    // confirming a booking on a parsing failure alone.
+    bookingAcceptance: "none",
   };
 
   if (!raw || typeof raw !== "object") return fallback;
@@ -236,6 +263,9 @@ function toUnderstandingResult(raw: unknown, messageText: string, priorState: Co
       urgency: mergeUrgency(priorState.urgency, urgency),
     },
     episodeContinuity: isEpisodeContinuity(r.episode_continuity) ? r.episode_continuity : "same_job",
+    // Same defensive default as the fallback above — anything not a
+    // recognised value degrades to "none", never treated as acceptance.
+    bookingAcceptance: isBookingAcceptance(r.booking_acceptance) ? r.booking_acceptance : "none",
   };
 }
 
@@ -296,6 +326,7 @@ export async function classifyMessage(
       safetyTag: null,
       conversationState: withPostcodeBackstop(priorState, patternEntities),
       episodeContinuity: "same_job",
+      bookingAcceptance: "none",
     };
   }
 }

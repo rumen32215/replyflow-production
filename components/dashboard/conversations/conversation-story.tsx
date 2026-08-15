@@ -130,6 +130,7 @@ export function ConversationStory({
   status,
   customerName,
   customerPhone,
+  customerId,
   messageCount,
   photoCount,
   existingWorkCard,
@@ -157,6 +158,12 @@ export function ConversationStory({
   status: string;
   customerName: string | null;
   customerPhone: string;
+  /** Plumber Reset Phase 3 step 2 — the real customer identity (0033),
+   * when resolved. A brand-new Work Card is stamped with it at creation
+   * time so it's immediately linked, rather than waiting on the next
+   * backfill pass. Null only for a conversation that somehow predates
+   * the webhook's own resolution step. */
+  customerId: string | null;
   messageCount: number;
   photoCount: number;
   existingWorkCard: ExistingWorkCard | null;
@@ -308,6 +315,7 @@ export function ConversationStory({
         business_id: businessId,
         conversation_id: conversationId,
         episode_id: episodeId,
+        customer_id: customerId,
         customer_name: customerName || customerPhone,
         issue: jobTitle.trim(),
         status: "draft",

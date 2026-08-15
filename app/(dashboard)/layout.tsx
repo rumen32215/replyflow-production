@@ -58,14 +58,14 @@ export default async function DashboardLayout({ children }: { children: React.Re
     <div className="flex h-screen bg-background">
       <Sidebar approvalsCount={approvalsCount} />
       <div className="flex flex-1 flex-col overflow-hidden">
-        <Topbar businessName={business.business_name} logoUrl={business.logo_url} approvalsCount={approvalsCount} />
+        <Topbar businessName={business.business_name} logoUrl={business.logo_url} />
         {/* pb-24 keeps content clear of the mobile tab bar */}
         <main className="flex-1 overflow-y-auto px-4 pb-24 pt-6 md:px-8 md:pb-8 md:pt-8">
           {!isSettingsPath && <SubscriptionBanner message={!gate.blocked ? gate.message : null} />}
           {blocked ? <SubscriptionGate message={gate.message} /> : children}
         </main>
       </div>
-      <BottomNav />
+      <BottomNav approvalsCount={approvalsCount} />
     </div>
   );
 }

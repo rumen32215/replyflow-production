@@ -39,17 +39,28 @@ export default async function CustomerDetailPage({ params }: { params: { id: str
 
   const { data: conversation } = await supabase
     .from("conversations")
-    .select("id, business_id, customer_name, customer_phone, status, last_message_at, created_at, communication_preference")
+    .select("id, business_id, customer_id, customer_name, customer_phone, status, last_message_at, created_at, communication_preference")
     .eq("id", params.id)
     .maybeSingle();
   if (!conversation) notFound();
 
-  const [{ data: jobRows }, { data: business }, { data: config }] = await Promise.all([
-    supabase
-      .from("work_cards")
-      .select("id, issue, status, scheduled_for, completed_at, notes, created_at, estimated_value")
-      .eq("conversation_id", conversation.id)
-      .order("created_at", { ascending: true }),
+  const [{ data: jobRows }, { data: business }, { data: config }, { data: customer }] = await Promise.all([
+    // Plumber Reset Phase 3 step 7 — the customer's real, durable
+    // identity (customers.id, P3.4) is now the job-history key, not
+    // the conversation thread alone. Falls back to conversation_id
+    // only for the rare row that predates the identity backfill —
+    // never a silent gap in job history.
+    conversation.customer_id
+      ? supabase
+          .from("work_cards")
+          .select("id, issue, status, scheduled_for, completed_at, notes, created_at, estimated_value")
+          .eq("customer_id", conversation.customer_id)
+          .order("created_at", { ascending: true })
+      : supabase
+          .from("work_cards")
+          .select("id, issue, status, scheduled_for, completed_at, notes, created_at, estimated_value")
+          .eq("conversation_id", conversation.id)
+          .order("created_at", { ascending: true }),
     supabase
       .from("businesses")
       .select("business_description, services, service_areas, business_knowledge, availability, opening_time, closing_time")
@@ -60,6 +71,12 @@ export default async function CustomerDetailPage({ params }: { params: { id: str
       .select("system_prompt, business_rules, escalation_rules, faqs")
       .eq("business_id", conversation.business_id)
       .maybeSingle(),
+    // The real customer record (P3.4) — notes and a default address the
+    // owner has actually entered, never inferred. Deliberately minimal:
+    // this is memory and continuity, not a CRM.
+    conversation.customer_id
+      ? supabase.from("customers").select("default_address, notes").eq("id", conversation.customer_id).maybeSingle()
+      : Promise.resolve({ data: null }),
   ]);
 
   const jobs: CustomerJob[] = (jobRows ?? []).map((j) => ({
@@ -194,6 +211,24 @@ export default async function CustomerDetailPage({ params }: { params: { id: str
 
       <div className="grid flex-1 grid-cols-1 gap-5 p-5 lg:grid-cols-[1fr_320px] lg:p-6">
         <div className="space-y-5">
+          {/* Memory and continuity, not a CRM — only ever shown when the
+           * owner has actually entered something real. */}
+          {(customer?.default_address || customer?.notes) && (
+            <div className="rounded-2xl border border-border bg-card p-4">
+              {customer.default_address && (
+                <p className="text-[13px]">
+                  <span className="font-semibold text-foreground">Address: </span>
+                  <span className="text-muted-foreground">{customer.default_address}</span>
+                </p>
+              )}
+              {customer.notes && (
+                <p className={cn("text-[13px] leading-relaxed", customer.default_address && "mt-1.5")}>
+                  <span className="font-semibold text-foreground">Notes: </span>
+                  <span className="text-muted-foreground">{customer.notes}</span>
+                </p>
+              )}
+            </div>
+          )}
           <RelationshipOverview
             summary={summary}
             completedJobCount={completedJobCount}

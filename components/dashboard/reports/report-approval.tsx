@@ -103,15 +103,15 @@ export function ReportApproval({
          * end: approval saved correctly, but nothing told the owner
          * what to do next. Download PDF is the primary action (the
          * actual customer-facing file, not just this preview); Back to
-         * Job Record is the only secondary one — deliberately not
+         * Report is the only secondary one — deliberately not
          * overloaded with more choices than that. Share Report is
          * intentionally not built in this pass (job_doc_shares is
          * still schema-only foundation, never written to anywhere). */}
         <div className="mt-3.5 flex flex-wrap gap-2">
           <ReportDownloadButton model={model} fileName={fileName} variant="success" />
-          <Link href={`/dashboard/job-records/${jobDocId}`} className={cn(buttonVariants({ variant: "outline" }), "w-auto")}>
+          <Link href={`/dashboard/reports/${jobDocId}`} className={cn(buttonVariants({ variant: "outline" }), "w-auto")}>
             <ChevronLeft className="h-4 w-4" />
-            Back to Job Record
+            Back to Report
           </Link>
         </div>
       </div>

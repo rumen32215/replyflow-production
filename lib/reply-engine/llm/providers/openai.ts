@@ -43,22 +43,64 @@ export async function complete(request: CompletionRequest): Promise<CompletionRe
       : { role: "user" as const, content: m.content }
   );
 
+  const usesTools = Boolean(request.tools && request.tools.length > 0);
+  if (!usesTools && !request.jsonSchema) {
+    throw new Error("A completion request must specify either jsonSchema or tools.");
+  }
+
   const response = await getClient().chat.completions.create({
     model,
     messages,
     max_tokens: request.maxOutputTokens ?? 700,
     temperature: 0.3,
-    response_format: {
-      type: "json_schema",
-      json_schema: {
-        name: request.jsonSchema.name,
-        schema: request.jsonSchema.schema,
-        strict: true,
-      },
-    },
+    ...(usesTools
+      ? {
+          tools: request.tools!.map((t) => ({
+            type: "function" as const,
+            function: { name: t.name, description: t.description, parameters: t.parameters, strict: true },
+          })),
+          tool_choice: request.toolChoice ?? "auto",
+        }
+      : {
+          response_format: {
+            type: "json_schema" as const,
+            json_schema: {
+              name: request.jsonSchema!.name,
+              schema: request.jsonSchema!.schema,
+              strict: true,
+            },
+          },
+        }),
   });
 
-  const raw = response.choices[0]?.message?.content ?? "";
+  const message = response.choices[0]?.message;
+  if (!message) throw new Error("OpenAI returned no message.");
+  const usage = response.usage
+    ? { inputTokens: response.usage.prompt_tokens, outputTokens: response.usage.completion_tokens }
+    : undefined;
+
+  if (usesTools) {
+    // Tool-calling mode never parses `content` as the answer — a real
+    // tool call reports itself via `tool_calls`, and the model is free
+    // to leave content empty when it requests one. Malformed JSON in a
+    // single call's arguments degrades to `null`, never a thrown
+    // error: lib/reply-engine/tools/validate.ts is what turns that into
+    // a safe "invalid_arguments" outcome, not this adapter.
+    const toolCalls = (message.tool_calls ?? [])
+      .filter((tc): tc is typeof tc & { type: "function" } => tc.type === "function")
+      .map((tc) => {
+        let args: unknown = null;
+        try {
+          args = JSON.parse(tc.function.arguments);
+        } catch {
+          args = null;
+        }
+        return { id: tc.id, name: tc.function.name, arguments: args };
+      });
+    return { data: null, raw: message.content ?? "", model, usage, toolCalls };
+  }
+
+  const raw = message.content ?? "";
   if (!raw) throw new Error("OpenAI returned an empty completion.");
 
   let data: unknown;
@@ -68,12 +110,5 @@ export async function complete(request: CompletionRequest): Promise<CompletionRe
     throw new Error("OpenAI returned non-JSON content despite a structured response_format request.");
   }
 
-  return {
-    data,
-    raw,
-    model,
-    usage: response.usage
-      ? { inputTokens: response.usage.prompt_tokens, outputTokens: response.usage.completion_tokens }
-      : undefined,
-  };
+  return { data, raw, model, usage };
 }

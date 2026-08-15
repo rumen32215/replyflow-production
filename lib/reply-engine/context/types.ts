@@ -1,6 +1,7 @@
 import type { BusinessKnowledge } from "@/lib/knowledge";
 import type { Availability } from "@/lib/availability";
 import type { RelationshipStrength } from "@/lib/customer-memory-signals";
+import type { ExecutedTool } from "../tools/types";
 
 /** Bounded business facts — always sent in full when this category is
  * needed, never filtered (Sprint 9 §4: "realistically 10-30 facts
@@ -91,5 +92,11 @@ export interface ReplyContext {
   customerJobs: CustomerJobsContext | null;
   currentBooking: CurrentBookingContext | null;
   photoAnalysis: PhotoAnalysisContext | null;
+  /** Plumber Reset Phase 3 step 4 — real tool calls already executed
+   * this turn (lib/reply-engine/tools/decide.ts), before generation
+   * ever runs. Always present, empty when none were needed — turned
+   * into citable facts by prompt/facts.ts, the same grounding
+   * machinery every other context category already uses. */
+  toolResults: ExecutedTool[];
   newMessage: { body: string; customerName: string | null; customerPhone: string };
 }

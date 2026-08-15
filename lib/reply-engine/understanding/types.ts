@@ -72,6 +72,21 @@ export interface MeaningEntities {
  * a flag. */
 export type SafetyTag = "spam" | "abuse" | "scam" | "medical" | "legal" | "unsupported" | null;
 
+/**
+ * Plumber Reset Phase 3 step 5 (autonomy tiers) — a dedicated, typed
+ * signal for exactly what the Phase 3 sign-off demanded: the system
+ * must distinguish asking about availability, expressing a preference,
+ * proposing a specific time, and explicitly accepting a specific
+ * slot the business already offered. Only "explicit_accept" can ever
+ * unlock Tier 1 auto-confirmation (lib/reply-engine/autonomy/policy.ts)
+ * — every other value, including a low-confidence guess, is treated
+ * identically to "not yet accepted." Deliberately a sibling of
+ * ConversationState rather than a field inside it: this describes
+ * what THIS message did, not an ongoing fact to carry forward turn by
+ * turn the way stage/slots/goal are.
+ */
+export type BookingAcceptance = "none" | "asking_availability" | "expressing_preference" | "proposing_time" | "explicit_accept";
+
 export interface UnderstandingResult {
   primaryIntent: Intent;
   secondaryIntents: Intent[];
@@ -91,6 +106,10 @@ export interface UnderstandingResult {
    * the model's answer is missing or invalid: ambiguous cases should
    * never fragment a normal conversation into spurious episodes. */
   episodeContinuity: "same_job" | "new_job";
+  /** Plumber Reset Phase 3 step 5 — see BookingAcceptance's own doc
+   * comment. "none" whenever this message has nothing to do with
+   * booking timing at all. */
+  bookingAcceptance: BookingAcceptance;
 }
 
 /** The six context categories the deterministic lookup table (§3)

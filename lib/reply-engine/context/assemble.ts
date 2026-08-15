@@ -5,6 +5,7 @@ import { parseAvailability, describeBookingReply, nextAvailableSlot } from "@/li
 import { buildRelationshipSummary, relationshipStrengthFor, type CustomerJob } from "@/lib/customer-memory-signals";
 import type { ContextNeeds } from "../understanding/types";
 import type { PhotoAnalysisContext, ReplyContext } from "./types";
+import type { ExecutedTool } from "../tools/types";
 
 type ServiceClient = ReturnType<typeof createServiceClient>;
 
@@ -20,6 +21,12 @@ export interface AssembleContextInput {
    * still real, still relevant lifetime context, just a separate
    * concern from what's currently active (Contract §G). */
   episodeId: string;
+  /** Plumber Reset Phase 3 step 2 — the real, phone-anchored customer
+   * identity (0033/0034), when resolved. Null only for a conversation
+   * row that predates the backfill and hasn't yet been touched by the
+   * webhook's resolution step — jobRowsPromise below falls back to the
+   * legacy name-match in that case, never simply returning no history. */
+  customerId: string | null;
   customerPhone: string;
   customerName: string | null;
   conversationStartedAt: string;
@@ -29,6 +36,11 @@ export interface AssembleContextInput {
    * downloaded and analysed (lib/reply-engine/media-intake.ts) before
    * assembleContext was called. */
   photoAnalysis?: PhotoAnalysisContext | null;
+  /** Plumber Reset Phase 3 step 4 — already executed by the caller
+   * (tools/decide.ts) before this function is ever called; this only
+   * plumbs the results through onto ReplyContext, it never fetches or
+   * executes anything itself. */
+  toolResults?: ExecutedTool[];
 }
 
 /**
@@ -39,20 +51,33 @@ export interface AssembleContextInput {
  * detected intent" (Sprint 10A).
  */
 export async function assembleContext(input: AssembleContextInput): Promise<ReplyContext> {
-  const { supabase, businessId, conversationId, episodeId, customerPhone, customerName, conversationStartedAt, needs } = input;
+  const { supabase, businessId, conversationId, episodeId, customerId, customerPhone, customerName, conversationStartedAt, needs } = input;
 
   const displayName = customerName || customerPhone;
 
   // customerMemory and customerJobs both derive from the same real
   // `work_cards` rows — fetched once and shared, never queried twice.
+  // Plumber Reset Phase 3 step 2 — prefer the real customer_id link;
+  // the customer_name string-match is a legacy fallback only, kept for
+  // the narrow case of a conversation row that predates the identity
+  // backfill (Phase 1 Audit §3.1 — this string match is exactly the
+  // bug that made a returning customer with a changed/blank WhatsApp
+  // name silently look new).
   const needsJobRows = needs.customerMemory || needs.customerJobs;
   const jobRowsPromise = needsJobRows
-    ? supabase
-        .from("work_cards")
-        .select("id, issue, status, scheduled_for, completed_at, notes, created_at, estimated_value")
-        .eq("business_id", businessId)
-        .eq("customer_name", displayName)
-        .order("created_at", { ascending: true })
+    ? customerId
+      ? supabase
+          .from("work_cards")
+          .select("id, issue, status, scheduled_for, completed_at, notes, created_at, estimated_value")
+          .eq("business_id", businessId)
+          .eq("customer_id", customerId)
+          .order("created_at", { ascending: true })
+      : supabase
+          .from("work_cards")
+          .select("id, issue, status, scheduled_for, completed_at, notes, created_at, estimated_value")
+          .eq("business_id", businessId)
+          .eq("customer_name", displayName)
+          .order("created_at", { ascending: true })
     : Promise.resolve({ data: null });
 
   const businessRowPromise = needs.businessProfile || needs.diary
@@ -126,6 +151,7 @@ export async function assembleContext(input: AssembleContextInput): Promise<Repl
       ? { jobTitle: currentJobRow.issue, status: currentJobRow.status, scheduledFor: currentJobRow.scheduled_for }
       : null,
     photoAnalysis: input.photoAnalysis ?? null,
+    toolResults: input.toolResults ?? [],
     newMessage: { body: input.messageBody, customerName, customerPhone },
   };
 

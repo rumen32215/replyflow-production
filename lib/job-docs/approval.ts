@@ -1,5 +1,6 @@
 import type { createServiceClient } from "@/lib/supabase/service";
 import type { JobReportContent } from "./report-content";
+import type { ReportSource } from "./report-source";
 
 type ServiceClient = ReturnType<typeof createServiceClient>;
 
@@ -71,6 +72,60 @@ export async function invalidateReportApproval(service: ServiceClient, jobDocId:
     .update(APPROVAL_INVALIDATION_UPDATE)
     .eq("id", jobDocId)
     .eq("status", APPROVED_STATUS);
+  if (error) throw error;
+
+  // Plumber Reset Phase 3 step 6 — the canonical approval now also
+  // lives on work_cards (report_status/report_snapshot). Every existing
+  // call site above is unchanged (same signature, same jobDocId) —
+  // this just also invalidates the new home, via one extra lookup,
+  // rather than requiring six call sites to be taught about work cards.
+  // An approval can never survive on the Job after job_docs itself
+  // reverted to "review".
+  const { data: jobDoc } = await service.from("job_docs").select("work_card_id").eq("id", jobDocId).maybeSingle();
+  if (jobDoc?.work_card_id) await invalidateWorkCardReportSnapshot(service, jobDoc.work_card_id);
+}
+
+export const WORK_CARD_REPORT_INVALIDATION_UPDATE = {
+  report_status: "draft",
+  report_approved_by: null,
+  report_approved_at: null,
+  report_snapshot: null,
+} as const;
+
+/** The work_cards-side counterpart to invalidateReportApproval — same
+ * atomic conditional UPDATE discipline (the WHERE clause is the only
+ * check, no read-then-write race). Exported directly for callers that
+ * already know the work_card_id and want to skip the extra lookup
+ * invalidateReportApproval does internally. */
+export async function invalidateWorkCardReportSnapshot(service: ServiceClient, workCardId: string): Promise<void> {
+  const { error } = await service
+    .from("work_cards")
+    .update(WORK_CARD_REPORT_INVALIDATION_UPDATE)
+    .eq("id", workCardId)
+    .eq("report_status", "approved");
+  if (error) throw error;
+}
+
+/**
+ * The one place an approved report's content is ever frozen. Called
+ * once, immediately after approveReport() succeeds — the ReportSource
+ * passed in must be exactly what the owner just approved (built via
+ * lib/job-docs/report-source.ts from the same fetch the approval route
+ * already made), never re-derived independently afterward.
+ */
+export async function freezeWorkCardReportSnapshot(
+  service: ServiceClient,
+  input: { workCardId: string; snapshot: ReportSource; approvedByUserId: string; approvedAt: string }
+): Promise<void> {
+  const { error } = await service
+    .from("work_cards")
+    .update({
+      report_status: APPROVED_STATUS,
+      report_approved_by: input.approvedByUserId,
+      report_approved_at: input.approvedAt,
+      report_snapshot: input.snapshot,
+    })
+    .eq("id", input.workCardId);
   if (error) throw error;
 }
 

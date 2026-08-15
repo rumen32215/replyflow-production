@@ -36,7 +36,7 @@ import { TEST_CONVERSATION_PHONE } from "@/lib/test-conversation";
 import { toConversationState } from "@/lib/reply-engine/understanding/state";
 import { computeJobReadiness } from "@/lib/work-card-state";
 
-export const metadata: Metadata = { title: "Front Desk — ReplyFlow" };
+export const metadata: Metadata = { title: "Home — ReplyFlow" };
 
 /**
  * Front Desk (Owner Experience 01 — "Mission Control (Front Desk)")

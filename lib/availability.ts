@@ -220,6 +220,105 @@ export function describeWeeklyHours(hours: Availability["hours"]): string[] {
 }
 
 /**
+ * Plumber Reset Phase 3 step 3 (booking engine) — real, time-slot-level
+ * availability, layered on top of standingForDate's existing day-level
+ * logic rather than replacing it. Still pure/deterministic: given the
+ * day's real open/close window, real booking rules, and the real
+ * existing bookings for that day (fetched by the caller — this file
+ * stays Supabase-free per its own header), it returns only genuinely
+ * open, conflict-free candidate windows. Never invents a slot; a slot
+ * that overlaps an existing booking, falls inside the lunch break,
+ * falls within the travel buffer around another job, or breaches
+ * minNoticeHours is simply not in the returned list.
+ */
+export interface BusyInterval {
+  start: Date;
+  end: Date;
+}
+
+export interface SlotCandidate {
+  start: Date;
+  end: Date;
+}
+
+const DEFAULT_SLOT_GRANULARITY_MINUTES = 30;
+
+function intervalsOverlap(aStart: Date, aEnd: Date, bStart: Date, bEnd: Date): boolean {
+  // Half-open on purpose: a booking ending at 11:00 and one starting at
+  // 11:00 are adjacent, not conflicting.
+  return aStart < bEnd && bStart < aEnd;
+}
+
+/** The one real conflict check — used identically by slot generation
+ * (excluding busy windows up front) and by booking creation/reschedule
+ * (re-validating a specific requested window server-side). */
+export function hasSchedulingConflict(start: Date, end: Date, busy: readonly BusyInterval[]): boolean {
+  return busy.some((b) => intervalsOverlap(start, end, b.start, b.end));
+}
+
+function dateAtTime(date: Date, hhmm: string): Date {
+  const [h, m] = hhmm.split(":").map((n) => Number(n));
+  const d = new Date(date);
+  d.setHours(h ?? 0, m ?? 0, 0, 0);
+  return d;
+}
+
+/**
+ * Every real, bookable start time on one specific day for a job of the
+ * given duration. `existingBookings` must already be scoped to this
+ * business and this day by the caller. `now` drives minNoticeHours —
+ * pass the real current time, never a guess.
+ */
+export function candidateSlotsForDay(
+  availability: Availability,
+  date: Date,
+  durationMinutes: number,
+  existingBookings: readonly BusyInterval[],
+  now: Date,
+  granularityMinutes: number = DEFAULT_SLOT_GRANULARITY_MINUTES
+): SlotCandidate[] {
+  const standing = standingForDate(availability, date);
+  if (standing.kind !== "open") return [];
+
+  const { rules } = availability;
+  // A day already at its booking cap offers nothing further, regardless
+  // of how much open time is technically left in the working window.
+  if (rules.maxJobsPerDay !== null && existingBookings.length >= rules.maxJobsPerDay) return [];
+
+  const dayStart = dateAtTime(date, standing.open);
+  const dayEnd = dateAtTime(date, standing.close);
+
+  const earliestStart = new Date(now);
+  earliestStart.setHours(earliestStart.getHours() + rules.minNoticeHours);
+
+  const busy: BusyInterval[] = existingBookings.map((b) =>
+    rules.travelBufferMinutes > 0
+      ? {
+          start: new Date(b.start.getTime() - rules.travelBufferMinutes * 60_000),
+          end: new Date(b.end.getTime() + rules.travelBufferMinutes * 60_000),
+        }
+      : b
+  );
+  if (rules.lunchBreak.enabled) {
+    busy.push({ start: dateAtTime(date, rules.lunchBreak.start), end: dateAtTime(date, rules.lunchBreak.end) });
+  }
+
+  const durationMs = durationMinutes * 60_000;
+  const stepMs = granularityMinutes * 60_000;
+  const slots: SlotCandidate[] = [];
+
+  for (let t = dayStart.getTime(); t + durationMs <= dayEnd.getTime(); t += stepMs) {
+    const slotStart = new Date(t);
+    const slotEnd = new Date(t + durationMs);
+    if (slotStart < earliestStart) continue;
+    if (hasSchedulingConflict(slotStart, slotEnd, busy)) continue;
+    slots.push({ start: slotStart, end: slotEnd });
+  }
+
+  return slots;
+}
+
+/**
  * The first real day she could offer, forward-searching up to two
  * weeks using the same rules standingForDate already applies (day
  * off, fully booked, closed, minimum notice) — deliberately scoped to

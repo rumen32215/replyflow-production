@@ -35,10 +35,42 @@ export interface JsonSchemaSpec {
   schema: Record<string, unknown>;
 }
 
+/** Plumber Reset Phase 3 step 4 — one real, typed action the model may
+ * request. `parameters` is a strict-mode JSON Schema (every property
+ * listed in `required`, `additionalProperties: false` — the same
+ * convention every existing `jsonSchema` in this codebase already
+ * follows) describing exactly what the model may supply; it never
+ * describes an entity id (customer/job/booking) — those are always
+ * resolved server-side from the conversation itself, never trusted
+ * from the model (lib/reply-engine/tools/execute.ts). */
+export interface ToolSpec {
+  name: string;
+  description: string;
+  parameters: Record<string, unknown>;
+}
+
+/** What the model actually asked for — arguments are deliberately
+ * `unknown`. Nothing in this file (or the provider adapter) validates
+ * or executes a tool call; that's lib/reply-engine/tools/validate.ts
+ * and execute.ts's job, strictly, before anything real happens. */
+export interface RequestedToolCall {
+  id: string;
+  name: string;
+  arguments: unknown;
+}
+
 export interface CompletionRequest {
   tier: ModelTier;
   messages: CompletionMessage[];
-  jsonSchema: JsonSchemaSpec;
+  /** Structured-output mode (Sprint 9 §5) — every call site before
+   * Phase 3 step 4. */
+  jsonSchema?: JsonSchemaSpec;
+  /** Tool-calling mode (Phase 3 step 4) — mutually exclusive with
+   * `jsonSchema` on a single request (see providers/openai.ts): a call
+   * either asks for structured prose/classification output, or offers
+   * the model a fixed set of real actions, never both at once. */
+  tools?: ToolSpec[];
+  toolChoice?: "auto" | "none";
   maxOutputTokens?: number;
   /** Master Execution Plan 0.1 — every call is attributed to the
    * business it was made for and the pipeline stage that made it, so
@@ -52,9 +84,13 @@ export interface CompletionRequest {
 }
 
 export interface CompletionResult {
-  /** Parsed JSON conforming to the requested schema. */
+  /** Parsed JSON conforming to the requested schema — always null in
+   * tool-calling mode, where the model's real answer is `toolCalls`. */
   data: unknown;
   raw: string;
   model: string;
   usage?: { inputTokens: number; outputTokens: number };
+  /** Present only when the request was tool-calling mode — every tool
+   * call the model actually requested this turn, zero or more. */
+  toolCalls?: RequestedToolCall[];
 }

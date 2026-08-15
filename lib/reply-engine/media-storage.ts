@@ -41,21 +41,4 @@ export async function storeCustomerMedia(
   return path;
 }
 
-/**
- * Re-reads an already-stored customer photo's bytes. Added for the
- * Work Card → Job Record link (0030): generating a report copies a
- * job's already-analysed WhatsApp photos into job-doc-media rather
- * than asking the owner to re-upload something ReplyFlow already has.
- * Mirrors lib/job-docs/photo-storage.ts's downloadJobDocPhoto exactly.
- */
-export async function downloadCustomerMedia(
-  supabase: ServiceClient,
-  storagePath: string
-): Promise<{ bytes: Uint8Array; mimeType: string }> {
-  const { data, error } = await supabase.storage.from(BUCKET).download(storagePath);
-  if (error || !data) throw new Error(`Failed to download customer media: ${error?.message ?? "no data returned"}`);
-  const arrayBuffer = await data.arrayBuffer();
-  return { bytes: new Uint8Array(arrayBuffer), mimeType: data.type || "image/jpeg" };
-}
-
 export { BUCKET as CUSTOMER_MEDIA_BUCKET };

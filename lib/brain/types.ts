@@ -30,7 +30,7 @@
  *      forbids building architecture with no current consumer.
  */
 
-import type { BrainInput, Brain, TopicDomain } from "./reasoning";
+import type { BrainInput, Brain } from "./reasoning";
 
 export type { TopicDomain as BrainDomain, Topic as BrainTopic, Observation as BrainObservation } from "./reasoning";
 
@@ -61,32 +61,4 @@ export interface BrainScope extends BrainInput {
  * plus `businessId` echoed back from the scope. */
 export interface BrainContext extends Brain {
   businessId: string;
-}
-
-/**
- * A correction the owner made — Learning Brain's future input.
- * Nothing produces this yet; no correction is captured anywhere in
- * the product today. Unchanged since Sprint 4B — Sprint 6 explicitly
- * does not implement Learning Brain, only keeps its agreed stub shape.
- */
-export interface BrainCorrection {
-  businessId: string;
-  domain: TopicDomain;
-  previousValue: unknown;
-  newValue: unknown;
-  reason?: string;
-  occurredAt: string; // ISO timestamp
-}
-
-/**
- * The result of an action ReplyFlow proposed or took — Learning
- * Brain's other future input (Feature 07 AI spec: "Learning
- * Coordination"). Unchanged since Sprint 4B.
- */
-export interface BrainOutcome {
-  businessId: string;
-  domain: TopicDomain;
-  description: string;
-  result: "accepted" | "rejected" | "edited";
-  occurredAt: string; // ISO timestamp
 }

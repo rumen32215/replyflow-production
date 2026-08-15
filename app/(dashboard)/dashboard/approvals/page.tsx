@@ -149,7 +149,7 @@ export default async function ApprovalsPage() {
       <div>
         <h1 className="text-xl font-bold tracking-tight">Approvals</h1>
         <p className="mt-1 text-[13.5px] text-muted-foreground">
-          Everything only you can unblock — waiting customers, draft Work Cards, and AI-drafted replies awaiting your OK.
+          Everything only you can unblock — waiting customers, draft Jobs, and AI-drafted replies awaiting your OK.
         </p>
       </div>
 

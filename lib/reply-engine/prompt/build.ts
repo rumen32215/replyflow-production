@@ -179,6 +179,17 @@ function buildSystemBlock(context: ReplyContext, facts: Fact[], options: { isFir
     );
   }
 
+  // Tool-result facts (Plumber Reset Phase 3 step 4) — only present
+  // when the application already took or checked a real action this
+  // turn (lib/reply-engine/tools/decide.ts). Same instruction shape as
+  // photo facts above: the citation mechanics are identical, this only
+  // tells the model how to *treat* them.
+  if (facts.some((f) => f.id.startsWith("tool."))) {
+    lines.push(
+      "Tool-result facts (tool.*): these describe real actions ReplyFlow's system just took or checked on your behalf — the definitive truth about what actually happened, more authoritative than anything you might otherwise assume. Never claim a booking exists, changed, or was checked unless a tool.* fact says so, and never offer a time that isn't listed in one of these facts."
+    );
+  }
+
   // Trade-specific intake guidance (Phase B — plumber-first). Silent
   // for every trade with no entry in lib/trades.ts's registry — this
   // is additive guidance, never a requirement the model can't meet.

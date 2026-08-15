@@ -18,13 +18,11 @@
  */
 
 import { buildBrain, selectTodaysPriority } from "./reasoning";
-import type { BrainContext, BrainCorrection, BrainOutcome, BrainScope } from "./types";
+import type { BrainContext, BrainScope } from "./types";
 
 export type {
   BrainScope,
   BrainContext,
-  BrainCorrection,
-  BrainOutcome,
   BrainDomain,
   BrainTopic,
   BrainObservation,
@@ -47,30 +45,4 @@ export type { OrganiseCandidate, OrganiseGap } from "./organise";
 export function getBrainContext(scope: BrainScope): BrainContext {
   const { businessId, ...input } = scope;
   return { businessId, ...buildBrain(input) };
-}
-
-/**
- * Records a correction the owner made, so future decisions in this
- * domain improve (Learning Brain). Nothing calls this yet — no
- * correction is captured anywhere in the product today. Sprint 6
- * explicitly does not implement Learning Brain; this stays a stub.
- */
-export function recordCorrection(correction: BrainCorrection): void {
-  void correction;
-  throw new Error(
-    "recordCorrection is a contract-only stub — Learning Brain is not implemented (out of scope through Sprint 6)."
-  );
-}
-
-/**
- * Records the outcome of an action ReplyFlow proposed or took, so the
- * Learning Brain can tell what worked (Feature 07 AI spec: "Learning
- * Coordination"). Nothing calls this yet — same stub status as
- * `recordCorrection`.
- */
-export function recordOutcome(outcome: BrainOutcome): void {
-  void outcome;
-  throw new Error(
-    "recordOutcome is a contract-only stub — Learning Brain is not implemented (out of scope through Sprint 6)."
-  );
 }

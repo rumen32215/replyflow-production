@@ -36,15 +36,25 @@
  *
  * No AI terminology anywhere in labels (Decision 001).
  */
+/**
+ * Plumber Reset — Phase 3 step 7 (UI transition). Four primary
+ * destinations, matching the plumber's own mental model exactly:
+ * Home, Conversations, Jobs, Customers. "Work Cards" and "Job
+ * Records" are no longer two separate concepts a plumber has to
+ * reason about — there is one Job, and everything about it (booking,
+ * evidence, status, report) lives in one workspace reached from here.
+ * "Approvals" is gone as a nav destination too — it was a genuine
+ * duplicate of Home's own attention queue (Phase 1 audit); the route
+ * still exists as an uncapped "see everything" escape hatch linked
+ * from Home, never promoted back to a primary or secondary nav item.
+ */
 export const DASHBOARD_NAV = [
-  { href: "/dashboard", label: "Front Desk", icon: "Home", primary: true },
+  { href: "/dashboard", label: "Home", icon: "Home", primary: true },
   { href: "/dashboard/conversations", label: "Conversations", icon: "MessagesSquare", primary: true },
-  { href: "/dashboard/work-cards", label: "Work Cards", icon: "ClipboardList", primary: true },
+  { href: "/dashboard/work-cards", label: "Jobs", icon: "ClipboardList", primary: true },
   { href: "/dashboard/customers", label: "Customers", icon: "Users", primary: true },
   { href: "/dashboard/receptionist", label: "Receptionist", icon: "Headset", primary: false },
   { href: "/dashboard/whatsapp", label: "WhatsApp", icon: "MessageCircle", primary: false },
-  { href: "/dashboard/approvals", label: "Approvals", icon: "ClipboardCheck", primary: false },
-  { href: "/dashboard/job-records", label: "Job Records", icon: "FileText", primary: false },
   { href: "/dashboard/availability", label: "Hours", icon: "CalendarDays", primary: false },
   { href: "/dashboard/settings", label: "Settings", icon: "Settings", primary: false },
 ] as const;

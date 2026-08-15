@@ -11,6 +11,11 @@ import { buildAttachmentAcknowledgmentDraft } from "./attachment-acknowledgment"
 import { handleCustomerPhoto } from "./media-intake";
 import type { PhotoAnalysisContext } from "./context/types";
 import { resolveEpisodeForMessage, closeEpisode, createEpisode, updateEpisodeState } from "./episode";
+import { decideAndExecuteTools } from "./tools/decide";
+import { findCurrentJob } from "./tools/execute";
+import { checkTier1Eligibility, decideAutonomy, buildPreparedAction } from "./autonomy/policy";
+import { applyTier1AutoConfirm, reflectConfirmedBooking } from "./autonomy/apply";
+import { recordProductEvent } from "@/lib/product-events";
 
 const STATE_HISTORY_WINDOW = 4;
 
@@ -73,7 +78,7 @@ export async function generateReplyForMessage(params: {
 
     const { data: conversation } = await supabase
       .from("conversations")
-      .select("customer_phone, customer_name, created_at")
+      .select("customer_phone, customer_name, created_at, customer_id")
       .eq("id", conversationId)
       .maybeSingle();
     if (!conversation) {
@@ -127,7 +132,7 @@ export async function generateReplyForMessage(params: {
 
     const { data: aiConfig } = await supabase
       .from("ai_configurations")
-      .select("system_prompt, business_rules, escalation_rules, auto_reply_general_enabled")
+      .select("system_prompt, business_rules, escalation_rules, auto_reply_general_enabled, auto_confirm_bookings_enabled")
       .eq("business_id", businessId)
       .maybeSingle();
 
@@ -331,22 +336,102 @@ export async function generateReplyForMessage(params: {
       return;
     }
 
+    // Plumber Reset Phase 3 step 4 — decide whether a real action is
+    // required, and if so, execute it deterministically, before
+    // generation ever runs. A no-op (empty executed[], no escalation)
+    // for any message that structurally can't need one (schema.ts's
+    // toolsForIntent) — no LLM call is even made in that case. Sending/
+    // autonomy decisions are untouched by this: every tool-created
+    // booking is "proposed," never auto-confirmed, and the drafted
+    // reply below still goes through the exact same pending-approval /
+    // auto-send logic as before (Phase 3 step 5's job, not this one).
+    const decision = await decideAndExecuteTools({
+      supabase,
+      businessId,
+      conversationId,
+      episodeId,
+      customerId: conversation.customer_id,
+      customerPhone: conversation.customer_phone,
+      customerName: conversation.customer_name,
+      understanding,
+      messageBody: effectiveMessageBody,
+    });
+
+    // Plumber Reset Phase 3 step 5 (autonomy tiers) — Tier 1 eligibility
+    // is checked, and if eligible, actually applied HERE, before
+    // generation runs. This is deliberate: if the auto-confirm
+    // genuinely succeeds, the reply must be grounded in "confirmed,"
+    // not "proposed" — waiting until after generation would mean the
+    // drafted text describes a booking that was, by then, already
+    // stale. The final tier classification (used for the auto-send
+    // decision and audit log) still happens after generation/safety,
+    // since the underlying ACTION and the SENTENCE describing it are
+    // never conflated — see autonomy/policy.ts's decideAutonomy.
+    const currentJob = await findCurrentJob(supabase, episodeId);
+    const tier1Check = checkTier1Eligibility({
+      understanding,
+      toolResults: decision.executed,
+      job: currentJob,
+      autoConfirmBookingsEnabled: Boolean(aiConfig?.auto_confirm_bookings_enabled),
+    });
+    let toolResultsForContext = decision.executed;
+    let tier1Apply: Awaited<ReturnType<typeof applyTier1AutoConfirm>> | null = null;
+    if (tier1Check.eligible) {
+      tier1Apply = await applyTier1AutoConfirm(supabase, episodeId);
+      if (tier1Apply.succeeded) toolResultsForContext = reflectConfirmedBooking(decision.executed);
+    }
+
     const needs = resolveContextNeeds(understanding);
     const context = await assembleContext({
       supabase,
       businessId,
       conversationId,
       episodeId,
+      customerId: conversation.customer_id,
       customerPhone: conversation.customer_phone,
       customerName: conversation.customer_name,
       conversationStartedAt: conversation.created_at,
       needs,
       messageBody: effectiveMessageBody,
       photoAnalysis,
+      toolResults: toolResultsForContext,
     });
 
     const { generation, facts } = await generateReplyDraft(businessId, context, understanding, { isFirstMessage });
-    const safety = evaluateSafety({ understanding, generation, facts });
+    // The existing deterministic safety gate (EMERGENCY/COMPLAINT
+    // always escalate) is untouched — this only ever ADDS an
+    // escalation the tool layer itself decided was needed (e.g. the
+    // model called escalate_to_owner on a genuinely ambiguous request
+    // that isn't EMERGENCY/COMPLAINT), never removes one.
+    const effectiveGeneration = decision.escalateRequested
+      ? { ...generation, requiresEscalation: true, escalationReason: generation.escalationReason ?? decision.escalateReason }
+      : generation;
+    const safety = evaluateSafety({ understanding, generation: effectiveGeneration, facts });
+
+    // The final autonomy tier — combines the deterministic safety gate
+    // (Tier 3, unmodified), the real Tier 1 apply outcome from above,
+    // and the existing Tier 0 general/auto-send eligibility. Logged
+    // unconditionally, on every message this pipeline reaches this far
+    // for, regardless of which branch below actually runs — "log why
+    // an action was auto-sent, prepared for approval, or escalated"
+    // applies even when nothing eventful happened this turn.
+    const autonomy = decideAutonomy({ safety, tier1Check, tier1Apply });
+    const preparedAction = buildPreparedAction({
+      toolResults: toolResultsForContext,
+      jobIssue: currentJob?.issue ?? null,
+      customerName: conversation.customer_name,
+      customerPhone: conversation.customer_phone,
+    });
+    await recordProductEvent({
+      eventType: "autonomy.decision",
+      businessId,
+      context: {
+        episodeId,
+        tier: autonomy.tier,
+        allowAutoSend: autonomy.allowAutoSend,
+        hasPreparedAction: preparedAction !== null,
+      },
+    });
 
     // Correct open_question with what the reply actually asks, now that
     // it's been written — the pre-generation guess in `understanding`
@@ -453,6 +538,10 @@ export async function generateReplyForMessage(params: {
           safety_reasons: [...safety.reasons, "Receptionist judged no reply was needed — silence was the correct response."],
           status: "no_reply_needed",
           resolved_at: new Date().toISOString(),
+          autonomy_tier: autonomy.tier,
+          action_type: preparedAction?.actionType ?? null,
+          action_summary: preparedAction?.summary ?? null,
+          action_payload: preparedAction?.payload ?? null,
         },
         { onConflict: "customer_message_id" }
       );
@@ -461,25 +550,23 @@ export async function generateReplyForMessage(params: {
 
     const draftText = generation.draftReply || "I'm not confident enough to draft this one — please reply yourself.";
 
-    // Auto-send — a narrow, deliberate, opt-in exception to "every
-    // reply requires approval" (Sprint 10A's own rule). Scoped to the
-    // single lowest-risk category the safety layer already recognises
-    // (plain greetings / business-information questions / status
-    // checks — never booking, pricing, cancellation, complaints, or
-    // emergencies, which always fail `safety.category === "general"`
-    // regardless of this toggle), and only when the owner has
-    // explicitly turned it on *and* every existing safety check
-    // (confidence gate, fact-grounding, escalation) already passed.
-    // Still writes a full reply_drafts row either way — auditable,
-    // reviewable after the fact, never silent. Photo-derived drafts
-    // (Phase B) are never eligible for auto-send, full stop, regardless
-    // of category or confidence — a "possible" cause read from a photo
-    // always needs a human to actually hit send, at least until this
-    // path has real evidence behind it, the same "earns its place"
-    // discipline every other widening of auto-send in this codebase
-    // already follows.
-    const canAutoSend =
+    // Auto-send — Tier 0 (a narrow, deliberate, opt-in exception to
+    // "every reply requires approval") OR Tier 1 (a booking that was
+    // just genuinely, server-side confirmed above, per the owner's own
+    // explicit "automatic booking confirmation" setting). Both paths
+    // still require every existing safety check (confidence gate,
+    // fact-grounding, no escalation) to have already passed — Tier 1
+    // never bypasses them, it only ever adds a second way to qualify,
+    // on top of, never instead of, the Tier 0 conditions. Photo-derived
+    // drafts are never eligible for the Tier 0 path (a "possible" cause
+    // read from a photo always needs a human to hit send) — this does
+    // not extend to Tier 1, whose own conditions (explicit acceptance,
+    // complete job info, owner opt-in, no grounding failure) are what
+    // actually gate it.
+    const tier0Eligible =
       !photoAnalysis && Boolean(aiConfig?.auto_reply_general_enabled) && safety.category === "general" && safety.wouldAutoSend;
+    const tier1Confirmed = autonomy.tier === "tier1_auto_action" && autonomy.allowAutoSend;
+    const canAutoSend = tier0Eligible || tier1Confirmed;
 
     if (canAutoSend) {
       const sendResult = await sendReplyToCustomer({ supabase, businessId, conversationId, text: draftText });
@@ -502,6 +589,10 @@ export async function generateReplyForMessage(params: {
           status: sendResult.ok ? "sent" : "failed",
           error_message: sendResult.ok ? null : sendResult.error,
           resolved_at: sendResult.ok ? new Date().toISOString() : null,
+          autonomy_tier: autonomy.tier,
+          action_type: preparedAction?.actionType ?? null,
+          action_summary: preparedAction?.summary ?? null,
+          action_payload: preparedAction?.payload ?? null,
         },
         { onConflict: "customer_message_id" }
       );
@@ -525,6 +616,10 @@ export async function generateReplyForMessage(params: {
         would_auto_send: safety.wouldAutoSend,
         safety_reasons: safety.reasons,
         status: "pending",
+        autonomy_tier: autonomy.tier,
+        action_type: preparedAction?.actionType ?? null,
+        action_summary: preparedAction?.summary ?? null,
+        action_payload: preparedAction?.payload ?? null,
       },
       { onConflict: "customer_message_id" }
     );

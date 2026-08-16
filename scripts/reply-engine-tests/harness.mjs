@@ -195,7 +195,14 @@ export async function runScenario(name, from, steps) {
     }
 
     if (step.expect) {
-      const checks = step.expect({ result, results, state: result.state });
+      // Awaited (Phase 9 addition, production test, 2026-08-16) — some
+      // checks need to verify real DB state (e.g. "was a job actually
+      // created"), not just the draft text/state already in `result`.
+      // supabase/BUSINESS_ID are passed through for exactly that; a
+      // plain synchronous expect() (every existing scenario) still
+      // works unchanged, since awaiting a non-Promise return value is a
+      // no-op.
+      const checks = await step.expect({ result, results, state: result.state, supabase, BUSINESS_ID });
       for (const check of checks) {
         if (check.pass) {
           console.log(`  PASS: ${check.description}`);
@@ -219,7 +226,12 @@ export async function cleanupTestData() {
   const ids = (convos ?? []).map((c) => c.id);
   if (ids.length === 0) return 0;
   await supabase.from("reply_drafts").delete().in("conversation_id", ids);
-  await supabase.from("jobs").delete().in("conversation_id", ids);
+  // Was "jobs" — renamed to "work_cards" in migration 0013, long before
+  // this suite was written; the stale name meant every run's setup data
+  // in work_cards (e.g. the "reschedule overclaim" scenario's booked
+  // job) was silently never cleaned up (found while wiring this suite
+  // into Phase 9, production test, 2026-08-16).
+  await supabase.from("work_cards").delete().in("conversation_id", ids);
   await supabase.from("messages").delete().in("conversation_id", ids);
   await supabase.from("conversations").delete().in("id", ids);
   return ids.length;

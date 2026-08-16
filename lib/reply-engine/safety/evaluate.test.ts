@@ -134,3 +134,65 @@ test("a legitimately cited call-out fee with no deposit mention passes", () => {
   assert.equal(result.groundingFailed, false);
   assert.equal(result.requiresEscalation, false);
 });
+
+/* -------- Uncited price figure (production test, 2026-08-16): the
+   zero-facts-cited gate alone was bypassable by citing any unrelated
+   fact while still inventing a figure -------- */
+
+test("an invented £ figure fails grounding even though an unrelated fact was cited", () => {
+  const result = evaluateSafety({
+    understanding: baseUnderstanding({ primaryIntent: "BOOKING_REQUEST" }),
+    generation: baseGeneration({
+      draftReply: "Sure — that'll be a £20 call-out fee.",
+      // Cites a real fact, but not one that actually supports £20 —
+      // this unrelated citation used to be enough to clear the old
+      // "any fact cited at all" gate.
+      factsUsed: ["conversation.stage"],
+    }),
+    facts: [
+      { id: "conversation.stage", text: "Stage: quote_or_book." },
+      {
+        id: "profile.callout_fee",
+        text: "Whether a call-out fee is charged has not been confirmed yet. Never tell the customer yes or no — if asked, say you'll need to check and bring the owner in.",
+      },
+    ],
+  });
+  assert.equal(result.groundingFailed, true);
+  assert.ok(result.reasons.some((r) => /price, guarantee, or commitment/i.test(r)));
+});
+
+test("a genuinely cited call-out fee figure still passes (regression guard)", () => {
+  const result = evaluateSafety({
+    understanding: baseUnderstanding({ primaryIntent: "BOOKING_REQUEST" }),
+    generation: baseGeneration({
+      draftReply: "Sure — that'll be a £20 call-out fee.",
+      factsUsed: ["profile.callout_fee"],
+    }),
+    facts: [{ id: "profile.callout_fee", text: "Charges a call-out fee of £20." }],
+  });
+  assert.equal(result.groundingFailed, false);
+});
+
+test("£20.00 in the draft matches a cited fact stated as £20 — numeric, not string, comparison", () => {
+  const result = evaluateSafety({
+    understanding: baseUnderstanding({ primaryIntent: "BOOKING_REQUEST" }),
+    generation: baseGeneration({
+      draftReply: "Sure — that'll be a £20.00 call-out fee.",
+      factsUsed: ["profile.callout_fee"],
+    }),
+    facts: [{ id: "profile.callout_fee", text: "Charges a call-out fee of £20." }],
+  });
+  assert.equal(result.groundingFailed, false);
+});
+
+test("a cited fact with a different figure than the one stated still fails — not just 'was anything cited'", () => {
+  const result = evaluateSafety({
+    understanding: baseUnderstanding({ primaryIntent: "BOOKING_REQUEST" }),
+    generation: baseGeneration({
+      draftReply: "Sure — that'll be a £30 call-out fee.",
+      factsUsed: ["profile.callout_fee"],
+    }),
+    facts: [{ id: "profile.callout_fee", text: "Charges a call-out fee of £20." }],
+  });
+  assert.equal(result.groundingFailed, true);
+});

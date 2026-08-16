@@ -104,6 +104,10 @@ test("a WhatsApp-analysed photo flows in from conversation_photos with no manual
   assert.equal(photos.length, 1);
   assert.equal(photos[0]!.visible_summary, "Water pooling under the sink");
   assert.ok(photos[0]!.analyzed_at, "a conversation_photos row's mere existence means it's already analysed");
+  // Production test, 2026-08-16 — a WhatsApp photo is, by construction,
+  // always received before any job/work exists, so this defaults to
+  // "before" rather than the old, unexplained "other".
+  assert.equal(photos[0]!.phase, "before");
 });
 
 test("a WhatsApp photo the owner has excluded from the report carries included_in_report: false through, not deleted or hidden here", async () => {
@@ -178,6 +182,7 @@ test("an image message still awaiting/without analysis is represented honestly a
   assert.equal(photos.length, 1);
   assert.equal(photos[0]!.analyzed_at, null);
   assert.equal(photos[0]!.visible_summary, "");
+  assert.equal(photos[0]!.phase, "before", "a pending WhatsApp photo also defaults to before, same reasoning as an analysed one");
 });
 
 test("an image message that already has a matching conversation_photos row is not duplicated as pending", async () => {

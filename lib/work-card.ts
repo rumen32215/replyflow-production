@@ -1,4 +1,5 @@
 import type { ConversationState } from "@/lib/reply-engine/understanding/state";
+import { formatDateTime } from "@/lib/work-card-format";
 
 /**
  * The Work Card pipeline (Track B, DOCS/SPECS/Work-Card-Object.md §2) —
@@ -41,20 +42,51 @@ export interface WorkCardDraftFields {
   preferredTimeResolved: string | null;
 }
 
+/** Capitalizes only the first character — a plain string transform, not
+ * a rewrite, so it never risks changing meaning (a customer's own
+ * wording, proper nouns, etc. are left exactly as stated). */
+function sentenceCase(text: string): string {
+  if (!text) return text;
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+/** Drops any collected commitment that's already redundant with the
+ * location slot (case-insensitive substring containment) — a customer
+ * who volunteers "it's NW1 1AA" mid-conversation shouldn't have that
+ * postcode appear a second time once it's also captured as `location`. */
+function dedupeAgainstLocation(collected: string[], location: string | null): string[] {
+  const loc = location?.trim().toLowerCase();
+  if (!loc) return collected;
+  return collected.filter((c) => !c.toLowerCase().includes(loc));
+}
+
 export function buildWorkCardDraft(state: ConversationState): WorkCardDraftFields {
-  const collected = state.commitments
-    .filter((c) => c.kind === "customer_fact" && c.status === "resolved")
-    .map((c) => c.text.trim())
-    .filter(Boolean);
+  const collected = dedupeAgainstLocation(
+    state.commitments
+      .filter((c) => c.kind === "customer_fact" && c.status === "resolved")
+      .map((c) => c.text.trim())
+      .filter(Boolean),
+    state.slots.location
+  );
+
+  // Prefer the resolved, absolute appointment time over the customer's
+  // own relative wording ("next Monday") whenever it's known — the raw
+  // wording is kept only as a fallback for when nothing could be
+  // resolved yet.
+  const resolvedTimeLabel = formatDateTime(state.slots.preferredTimeResolved);
 
   const summaryLines: string[] = [];
-  if (state.slots.issue) summaryLines.push(state.slots.issue);
-  if (state.slots.preferredTime) summaryLines.push(`Preferred time: ${state.slots.preferredTime}.`);
+  if (state.slots.issue) summaryLines.push(sentenceCase(state.slots.issue.trim()));
+  if (resolvedTimeLabel) {
+    summaryLines.push(`Preferred time: ${resolvedTimeLabel}.`);
+  } else if (state.slots.preferredTime) {
+    summaryLines.push(`Preferred time: ${state.slots.preferredTime}.`);
+  }
   if (state.slots.location) summaryLines.push(`Location: ${state.slots.location}.`);
   for (const fact of collected) summaryLines.push(fact);
 
   return {
-    issue: state.slots.issue?.trim() ?? "",
+    issue: sentenceCase(state.slots.issue?.trim() ?? ""),
     address: state.slots.location?.trim() || null,
     collectedDetails: collected.length > 0 ? collected.join("\n") : null,
     conversationSummary: summaryLines.length > 0 ? summaryLines.join(" ") : null,

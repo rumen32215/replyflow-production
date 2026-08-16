@@ -97,11 +97,24 @@ const RESPONSE_SCHEMA = {
  * "never trust the model alone for a safety-relevant fact" discipline
  * this codebase already applies to photo analysis and message safety.
  */
-function buildSystemPrompt(isJobCompleted: boolean): string {
+function buildSystemPrompt(isJobCompleted: boolean, issueReported: string | null): string {
   const statusLine = isJobCompleted
     ? "This job's real status, from the business's own job record, is COMPLETED — the work described in the notes has genuinely finished."
     : "This job's real status, from the business's own job record, is NOT YET COMPLETED (still in progress, booked, or otherwise open) — " +
       "regardless of what the notes describe doing, the job itself is not finished from the business's own records.";
+  // Structural fix (production test, 2026-08-16) — the report no longer
+  // shows the raw, ungenerated issue as its own section above Job
+  // Summary (that used to restate the same problem twice, in two
+  // voices — the single largest driver of the report reading like an
+  // AI Q&A form). job_summary is now the ONLY place the customer sees
+  // their reported problem stated back to them, so it must actually
+  // say what the problem was, not just describe the visit in the
+  // abstract.
+  const issueLine = issueReported
+    ? `The customer's own reported issue, straight from the business's job record, is: "${issueReported}". This is the only place the ` +
+      "customer will see their reported problem restated — job_summary must open by clearly stating what the problem was (in professional " +
+      "language, not copied verbatim) before anything else, as if no other section already told them."
+    : "No reported issue is on record for this job — describe only what the notes themselves establish, do not guess at an original problem.";
   const workPerformedRule = isJobCompleted
     ? "- work_performed: a clear, factual account of what was actually done, in the notes' own terms — never add a step, part, or action " +
       "that wasn't mentioned."
@@ -113,9 +126,12 @@ function buildSystemPrompt(isJobCompleted: boolean): string {
     "You are drafting a professional job report for a UK trade/service business, from the tradesperson's own raw " +
     "notes about a job, and (when provided) already-analysed context from photos they took. " +
     statusLine +
+    " " +
+    issueLine +
     " Produce exactly these things:\n" +
-    "- job_summary: one or two plain sentences describing what the job was, in professional language. Never state " +
-    "or imply the job is finished unless it genuinely is.\n" +
+    "- job_summary: one or two plain sentences opening with what the reported problem was, then briefly what the job " +
+    "involved, in professional language — a complete, standalone statement, not a continuation of something said " +
+    "elsewhere. Never state or imply the job is finished unless it genuinely is.\n" +
     workPerformedRule +
     "\n" +
     "- next_steps: what's still outstanding or happens next, grounded strictly in the notes — e.g. a follow-up " +
@@ -171,6 +187,13 @@ export async function generateJobReportDraft(input: {
    * stored copy. Defaults to false (never claim completion without
    * explicit confirmation) when there's no linked Work Card at all. */
   isJobCompleted?: boolean;
+  /** Structural fix (production test, 2026-08-16) — the customer's own
+   * reported issue (work_cards.issue), straight from the Work Card,
+   * never AI-touched. Needed here because job_summary is now the only
+   * customer-facing statement of the problem (see buildSystemPrompt) —
+   * without it, the model has no way to know what to state. Null only
+   * when there's no linked Work Card to read it from. */
+  issueReported?: string | null;
 }): Promise<JobReportDraft | null> {
   try {
     const result = await getCompletion({
@@ -180,7 +203,7 @@ export async function generateJobReportDraft(input: {
       maxOutputTokens: 800,
       jsonSchema: { name: "job_report_draft", schema: RESPONSE_SCHEMA },
       messages: [
-        { role: "system", content: buildSystemPrompt(Boolean(input.isJobCompleted)) },
+        { role: "system", content: buildSystemPrompt(Boolean(input.isJobCompleted), input.issueReported ?? null) },
         {
           role: "user",
           content:

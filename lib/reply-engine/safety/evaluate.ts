@@ -24,6 +24,23 @@ export interface SafetyEvaluation {
   reasons: string[];
 }
 
+/** Every £ amount stated in `text`, as numbers ("£20.00" and "£20" both
+ * become `20`) so a drafted figure can be compared against a fact's
+ * figure by value, not by exact substring. */
+function poundAmounts(text: string): number[] {
+  const matches = text.match(/£\s?\d+(?:\.\d{1,2})?/g) ?? [];
+  return matches.map((m) => parseFloat(m.replace(/£\s?/, "")));
+}
+
+/** Every £ amount present across only the facts the draft actually
+ * cited (`factsUsed`) — a fact that exists but was never cited
+ * contributes nothing, same discipline as the fact-grounding check
+ * above. */
+function citedPoundAmounts(facts: Fact[], factsUsed: string[]): Set<number> {
+  const cited = facts.filter((f) => factsUsed.includes(f.id));
+  return new Set(cited.flatMap((f) => poundAmounts(f.text)));
+}
+
 export function evaluateSafety(input: {
   understanding: UnderstandingResult;
   generation: GenerationResult;
@@ -67,8 +84,22 @@ export function evaluateSafety(input: {
   // brief asked for: "she should either know it or say she doesn't" —
   // any specific instruction with no citation behind it fails grounding,
   // not just prices.
-  const hasUncitedPriceClaim =
-    Boolean(generation.draftReply) && /£\s?\d|\bfree\b|\bguarantee/i.test(generation.draftReply) && generation.factsUsed.length === 0;
+  //
+  // Hardened again (production test, 2026-08-16): the zero-facts-cited
+  // gate above is bypassable — a draft that cites any fact at all, even
+  // one wholly unrelated to price, cleared this check while still
+  // stating an invented figure (the real bug: a £20 call-out fee was
+  // invented while the business's own callout_fee fact was null/
+  // unconfirmed, but the draft happened to also cite an unrelated fact
+  // like conversation.stage). Every £ figure the draft actually states
+  // must now match a £ figure present in the text of a fact that was
+  // genuinely cited — not just "was something cited."
+  const hasUncitedPriceFigure = poundAmounts(generation.draftReply).some(
+    (amount) => !citedPoundAmounts(facts, generation.factsUsed).has(amount)
+  );
+  const hasUncitedFreeOrGuaranteeClaim =
+    Boolean(generation.draftReply) && /\bfree\b|\bguarantee/i.test(generation.draftReply) && generation.factsUsed.length === 0;
+  const hasUncitedPriceClaim = hasUncitedPriceFigure || hasUncitedFreeOrGuaranteeClaim;
   const hasUncitedInstruction =
     Boolean(generation.draftReply) &&
     /\b(please ensure|make sure|kindly ensure|please have|you'll need to have|you will need to have|please arrange for|please clear|clear access)\b/i.test(

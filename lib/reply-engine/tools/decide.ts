@@ -100,15 +100,29 @@ export async function decideAndExecuteTools(input: DecideAndExecuteInput): Promi
   const availableTools = toolsForIntent(input.understanding.primaryIntent);
   if (availableTools.length === 0) return EMPTY_RESULT;
 
+  // The job lookup is its own try/catch, separate from the LLM call
+  // below: a DB hiccup here means we genuinely don't know whether a job
+  // exists, so the deterministic backstop couldn't safely run either —
+  // degrade exactly like before (no action attempted this turn,
+  // generation still runs), never abort the whole message the way an
+  // uncaught throw from this function would.
+  let job: Awaited<ReturnType<typeof findCurrentJob>>;
+  try {
+    job = await findCurrentJob(input.supabase, input.episodeId);
+  } catch (err) {
+    await recordErrorEvent({
+      severity: "warning",
+      source: "reply-engine.decide_tools_failed",
+      businessId: input.businessId,
+      message: "Looking up the current job failed — no action was attempted for this message.",
+      error: err,
+      context: { episodeId: input.episodeId },
+    });
+    return EMPTY_RESULT;
+  }
+
   let toolCalls: { id: string; name: string; arguments: unknown }[] = [];
   try {
-    // The job lookup lives inside this same try/catch, deliberately —
-    // a DB hiccup here must degrade exactly like a failed LLM call
-    // (no action attempted, generation still runs), never abort the
-    // whole message the way an uncaught throw from this function would
-    // (it would otherwise propagate to generate-reply.ts's own
-    // top-level catch and lose the entire turn, not just this step).
-    const job = await findCurrentJob(input.supabase, input.episodeId);
     const result = await getCompletion({
       tier: "small",
       messages: [
@@ -124,10 +138,13 @@ export async function decideAndExecuteTools(input: DecideAndExecuteInput): Promi
     toolCalls = result.toolCalls ?? [];
   } catch (err) {
     // A failed decision call must never block the reply pipeline — it
-    // simply means no action is attempted this turn; generation still
-    // runs and can answer honestly from whatever context already
+    // simply means the MODEL couldn't be asked this turn; generation
+    // still runs and can answer honestly from whatever context already
     // exists (the same degrade-gracefully discipline classify.ts and
-    // generate.ts already both follow on their own LLM calls).
+    // generate.ts already both follow on their own LLM calls). Unlike
+    // before, this no longer returns immediately — the deterministic
+    // backstop just below can still fire on a real, already-known job
+    // lookup even though the model itself couldn't be reached.
     await recordErrorEvent({
       severity: "warning",
       source: "reply-engine.decide_tools_failed",
@@ -136,7 +153,35 @@ export async function decideAndExecuteTools(input: DecideAndExecuteInput): Promi
       error: err,
       context: { episodeId: input.episodeId },
     });
-    return EMPTY_RESULT;
+  }
+
+  // Deterministic backstop (production test, 2026-08-16): job capture
+  // was previously entirely at the model's discretion, with no fallback
+  // when it declined or the call itself failed. `executeCreateOrUpdateJob`
+  // already re-verifies `findCurrentJob` itself immediately before
+  // writing and merges rather than duplicates if a job now exists — that
+  // built-in safety net is what makes firing this deterministically,
+  // without waiting on the model, safe. Only fires when nothing already
+  // requested the same tool, no job exists yet, and enough is genuinely
+  // known (an issue, plus either a location or a resolved time) that
+  // creating a draft job is clearly warranted rather than guessed at.
+  const slots = input.understanding.conversationState.slots;
+  const alreadyRequestingJob = toolCalls.some((c) => c.name === "create_or_update_job");
+  if (
+    availableTools.includes("create_or_update_job") &&
+    !job &&
+    !alreadyRequestingJob &&
+    slots.issue &&
+    (slots.location || slots.preferredTimeResolved)
+  ) {
+    toolCalls = [
+      ...toolCalls,
+      {
+        id: "backstop-create-or-update-job",
+        name: "create_or_update_job",
+        arguments: { issue: slots.issue, address: slots.location ?? null, notes: null },
+      },
+    ];
   }
 
   if (toolCalls.length === 0) return EMPTY_RESULT;

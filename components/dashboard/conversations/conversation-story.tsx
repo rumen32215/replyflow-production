@@ -201,7 +201,13 @@ export function ConversationStory({
   const [jobTitle, setJobTitle] = useState(
     workCardDraft?.issue || `Enquiry from ${customerName || customerPhone}`
   );
-  const [notes, setNotes] = useState(latestCustomerMessage ?? "");
+  // Prefer the clean, synthesized summary buildWorkCardDraft() already
+  // produces (issue + resolved time + location + collected facts) over
+  // the raw body of whatever the customer's last message happened to
+  // be — that raw fallback used to be the only source here, which is
+  // why an uncaptioned photo's placeholder body ("[image message]")
+  // could end up as the job's Notes verbatim.
+  const [notes, setNotes] = useState(workCardDraft?.conversationSummary ?? latestCustomerMessage ?? "");
   // The customer's own requested time (already resolved to a real
   // timestamp by the Understanding Engine) always wins over the diary's
   // generic suggestion — a Work Card must never silently lose "tomorrow
@@ -598,7 +604,7 @@ export function ConversationStory({
               // form back to sensible defaults rather than reopening
               // whatever was last typed into the rejected draft.
               setJobTitle(workCardDraft?.issue || `Enquiry from ${customerName || customerPhone}`);
-              setNotes(latestCustomerMessage ?? "");
+              setNotes(workCardDraft?.conversationSummary ?? latestCustomerMessage ?? "");
               setScheduledDate(defaultScheduledValue);
               setEditingDraft(false);
               setShowJobForm((v) => !v);

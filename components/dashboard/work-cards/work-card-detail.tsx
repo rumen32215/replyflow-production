@@ -626,9 +626,18 @@ export function WorkCardDetail({
                         {card.address} <Navigation className="h-3 w-3 shrink-0" />
                       </a>
                       {!card.addressConfirmed && (
+                        // Reframed from an amber "unconfirmed" warning to a
+                        // neutral provenance tag (DOCS/SPECS/Work-Card-
+                        // Object.md §5: confirmation is a soft nudge, never
+                        // a hard blocker) — this is exactly what the
+                        // customer told the receptionist, not a sign
+                        // something's wrong. Same pill treatment
+                        // provenance-label.tsx already uses for "sourced,
+                        // real data." The Confirm action itself is
+                        // unchanged.
                         <div className="mt-1.5 flex items-center gap-2">
-                          <span className="flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-700">
-                            <AlertTriangle className="h-2.5 w-2.5" /> Address unconfirmed
+                          <span className="inline-flex items-center rounded-full bg-accent px-2 py-0.5 text-[11px] font-semibold text-primary">
+                            Customer-provided
                           </span>
                           <button
                             onClick={confirmAddress}
@@ -689,7 +698,7 @@ export function WorkCardDetail({
                     className="w-full rounded-lg border border-border bg-background px-3 py-2 text-[13.5px] outline-none focus:border-primary"
                   />
                 </Field>
-                <Field label="Conversation summary">
+                <Field label="Enquiry notes">
                   <textarea
                     value={conversationSummary}
                     onChange={(e) => setConversationSummary(e.target.value)}
@@ -697,7 +706,7 @@ export function WorkCardDetail({
                     className="w-full rounded-lg border border-border bg-background px-3 py-2 text-[13.5px] outline-none focus:border-primary"
                   />
                 </Field>
-                <Field label="Collected details (parking, access, anything volunteered)">
+                <Field label="Other collected details (parking, access, anything volunteered — not shown separately once approved)">
                   <textarea
                     value={collectedDetails}
                     onChange={(e) => setCollectedDetails(e.target.value)}
@@ -753,9 +762,16 @@ export function WorkCardDetail({
             ) : (
               <div className="space-y-3.5 text-[13.5px]">
                 <Row label="Issue" value={card.issue} />
-                <Row label="Conversation summary" value={card.conversationSummary} placeholder="Nothing recorded yet." />
-                <Row label="Collected details" value={card.collectedDetails} placeholder="Nothing volunteered yet." />
                 <Row label="Appointment" value={formatDateTime(card.scheduledFor)} placeholder="No time set." />
+                {/* "Enquiry notes" (buildWorkCardDraft's conversationSummary)
+                 * is now the one place a synthesized recap of what the
+                 * customer said appears — it already folds in any
+                 * collected commitments (Phase 2's dedupe), so a separate
+                 * "Collected details" row would just restate the same
+                 * information a second time under internal-extraction
+                 * language the owner never needs to see. The underlying
+                 * field is untouched and still editable above. */}
+                <Row label="Enquiry notes" value={card.conversationSummary} placeholder="Nothing recorded yet." />
                 <Row label="Estimated value" value={card.estimatedValue != null ? `£${card.estimatedValue.toFixed(2)}` : null} placeholder="Not set." />
                 <Row label="Notes" value={card.notes} placeholder="Nothing added yet — what you did on site helps write a better report." />
               </div>

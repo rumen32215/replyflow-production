@@ -65,9 +65,10 @@ export function ReportPreview({ model }: { model: ReportDocumentModel }) {
  */
 export function ResponsiveReportPreview({ model }: { model: ReportDocumentModel }) {
   const jobDate = formatDate(model.jobDetails.jobDate);
-  const hasTextContent = Boolean(
-    model.jobSummary || model.workPerformed || model.nextSteps || model.observations.length > 0 || model.issueReported || model.charges
-  );
+  // issueReported deliberately does not count toward hasTextContent —
+  // it's no longer rendered as its own section (see below), matching
+  // ReportDocument's identical change.
+  const hasTextContent = Boolean(model.jobSummary || model.workPerformed || model.nextSteps || model.observations.length > 0 || model.charges);
   const allPhotos = model.photoPages.flat();
 
   return (
@@ -111,12 +112,10 @@ export function ResponsiveReportPreview({ model }: { model: ReportDocumentModel 
         </div>
       </dl>
 
-      {model.issueReported && (
-        <section>
-          <h3 className="text-[11px] font-bold uppercase tracking-wide text-primary">Issue Reported</h3>
-          <p className="mt-1.5 whitespace-pre-wrap text-[13.5px] leading-relaxed">{model.issueReported}</p>
-        </section>
-      )}
+      {/* "Issue Reported" is deliberately not its own section here
+       * anymore — see ReportDocument's identical change for the reason
+       * (it duplicated Job Summary, stated in a second voice). The field
+       * stays in the model untouched; only this render site changed. */}
 
       {model.jobSummary && (
         <section>
@@ -155,10 +154,24 @@ export function ResponsiveReportPreview({ model }: { model: ReportDocumentModel 
         </section>
       )}
 
+      {/* Visual hierarchy (production test, 2026-08-16) — matches
+       * ReportDocument's identical divider: Charges and Photos are
+       * supporting material, not a continuation of the narrative flow
+       * above, shown once only when there's actually something to show. */}
+      {(model.charges || allPhotos.length > 0) && (
+        <div className="border-t border-border pt-4">
+          <p className="mb-3.5 text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Supporting information</p>
+        </div>
+      )}
+
       {model.charges && (
         <section>
           <h3 className="text-[11px] font-bold uppercase tracking-wide text-primary">Charges</h3>
-          <div className="mt-1.5 divide-y divide-border rounded-lg border border-border text-[13.5px]">
+          {/* 7d visual polish (production test, 2026-08-16) — a heavier
+           * border and a tinted total row, matching the PDF's identical
+           * treatment, so this reads as a real invoice-style table
+           * rather than plain list rows. */}
+          <div className="mt-1.5 divide-y divide-border overflow-hidden rounded-lg border-[1.5px] border-border text-[13.5px]">
             {model.charges.labour != null && (
               <div className="flex justify-between px-3 py-2">
                 <span>Labour / Work</span>
@@ -171,7 +184,7 @@ export function ResponsiveReportPreview({ model }: { model: ReportDocumentModel 
                 <span className="tabular-nums">£{model.charges.materials.toFixed(2)}</span>
               </div>
             )}
-            <div className="flex justify-between px-3 py-2 font-bold">
+            <div className="flex justify-between bg-accent px-3 py-2.5 font-bold">
               <span>Total</span>
               <span className="tabular-nums">£{model.charges.total!.toFixed(2)}</span>
             </div>

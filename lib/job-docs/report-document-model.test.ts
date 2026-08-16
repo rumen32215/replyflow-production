@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { buildReportDocumentModel, paginatePhotos, PHOTOS_PER_PAGE } from "./report-document-model";
+import { buildReportDocumentModel, paginatePhotos, pickPhotoLayout, PHOTOS_PER_PAGE } from "./report-document-model";
 import type { JobReportContent, ReportContentPhoto } from "./report-content";
 
 function emptyContent(overrides: Partial<JobReportContent> = {}): JobReportContent {
@@ -194,4 +194,41 @@ test("charges is null on the model when the job has none, not an empty object", 
     photoUrls: NO_PHOTO_URLS,
   });
   assert.equal(model.charges, null);
+});
+
+/* -------- pickPhotoLayout (PDF reflow, production test, 2026-08-16) -------- */
+
+test("pickPhotoLayout: 0 photos falls back to the same single-column treatment as 1 (never rendered, but must not throw or misbehave)", () => {
+  assert.deepEqual(pickPhotoLayout(0), { columns: 1, widthPercent: "100%", heightPt: 320 });
+});
+
+test("pickPhotoLayout: 1 photo gets a large, single-column treatment", () => {
+  assert.deepEqual(pickPhotoLayout(1), { columns: 1, widthPercent: "100%", heightPt: 320 });
+});
+
+test("pickPhotoLayout: 2 photos share two columns", () => {
+  const layout = pickPhotoLayout(2);
+  assert.equal(layout.columns, 2);
+});
+
+test("pickPhotoLayout: 4 photos still uses two columns (a 2x2 grid), not three", () => {
+  const layout = pickPhotoLayout(4);
+  assert.equal(layout.columns, 2);
+});
+
+test("pickPhotoLayout: 5 photos switches to three, denser columns", () => {
+  const layout = pickPhotoLayout(5);
+  assert.equal(layout.columns, 3);
+});
+
+test("pickPhotoLayout: a lone photo is sized larger (taller) than a dense multi-photo grid", () => {
+  const solo = pickPhotoLayout(1);
+  const dense = pickPhotoLayout(6);
+  assert.ok(solo.heightPt > dense.heightPt, "a single photo should get more visual space than one of many");
+});
+
+test("pickPhotoLayout: widthPercent values are valid CSS percentages for every bucket", () => {
+  for (const count of [0, 1, 2, 3, 4, 5, 6, 10]) {
+    assert.match(pickPhotoLayout(count).widthPercent, /^\d+(\.\d+)?%$/);
+  }
 });

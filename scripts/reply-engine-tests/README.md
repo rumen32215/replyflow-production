@@ -25,5 +25,15 @@ a run (phone numbers in the Ofcom fictional range, `07700 900xxx`).
 Every real bug found through adversarial testing gets added to
 `scenarios.mjs` permanently, not just fixed and forgotten — that's the
 point of this suite existing as a checked-in file rather than another
-throwaway script. Three of the current scenarios are named `REGRESSION —`
+throwaway script. Several of the current scenarios are named `REGRESSION —`
 for exactly this reason.
+
+## Asserting on real DB state, not just the draft
+
+`step.expect` may be `async` and destructure `supabase`/`BUSINESS_ID`
+alongside the usual `result`/`results`/`state` — useful for a check that
+needs to verify something actually happened (a `work_cards` row was
+created, a booking's status changed), not just what the drafted reply
+says. See the "Job capture" scenario for an example. Existing synchronous,
+`result`-only `expect` functions need no changes — the extra fields are
+simply unused.

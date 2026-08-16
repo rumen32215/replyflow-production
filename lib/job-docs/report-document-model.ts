@@ -89,6 +89,13 @@ export const PHOTOS_PER_PAGE = 6;
  * unit-tested directly, rather than trusting unmeasured render-time
  * layout. Preserves the given order exactly (Stage 4's own phase-then-
  * chronological ordering) — this never reorders, only groups.
+ *
+ * Still used for ordering (the natural phase-bucketed grouping) and by
+ * ResponsiveReportPreview's own `.flat()` — the PDF's own photo layout
+ * (report-document.tsx) no longer pages off this directly (see
+ * pickPhotoLayout below): it flattens the same ordered list and lets
+ * react-pdf's `wrap` overflow onto additional pages by actual content
+ * volume instead of a fixed 6-per-page chunk.
  */
 export function paginatePhotos<T>(photos: T[], perPage: number = PHOTOS_PER_PAGE): T[][] {
   if (photos.length === 0) return [];
@@ -97,6 +104,33 @@ export function paginatePhotos<T>(photos: T[], perPage: number = PHOTOS_PER_PAGE
     pages.push(photos.slice(i, i + perPage));
   }
   return pages;
+}
+
+export interface PhotoLayout {
+  /** How many photos share a row — informational for callers; the
+   * actual wrapping is driven by widthPercent inside a flex-wrap
+   * container, not this count directly. */
+  columns: number;
+  widthPercent: string;
+  heightPt: number;
+}
+
+/**
+ * PDF photo reflow (production test, 2026-08-16) — replaces a fixed
+ * 47%-width/150pt-height footprint used for every photo regardless of
+ * count, which reserved the same visual space for a single photo as it
+ * would for a six-photo page. Sized by how many photos there actually
+ * are: a lone photo gets a large, single-column treatment; a handful
+ * share two columns; a genuinely large set gets three, denser columns
+ * — "use the space intelligently," not "force everything onto one
+ * page." Pure and count-only, so it's directly unit-testable without a
+ * PDF renderer.
+ */
+export function pickPhotoLayout(count: number): PhotoLayout {
+  if (count <= 1) return { columns: 1, widthPercent: "100%", heightPt: 320 };
+  if (count === 2) return { columns: 2, widthPercent: "48%", heightPt: 220 };
+  if (count <= 4) return { columns: 2, widthPercent: "48%", heightPt: 170 };
+  return { columns: 3, widthPercent: "31.33%", heightPt: 130 };
 }
 
 export function buildReportDocumentModel(input: {

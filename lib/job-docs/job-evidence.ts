@@ -85,7 +85,12 @@ function fromConversationPhoto(row: ConversationPhotoRow): JobEvidencePhoto {
     id: row.id,
     storage_path: row.storage_path,
     caption: null,
-    phase: "other",
+    // A WhatsApp photo is, by construction, always received before any
+    // job/work exists — a logically guaranteed timeline fact (phase is
+    // a job-timeline concept, not a content/subject tag), not a guess
+    // about what it depicts. Still fully owner-editable via the
+    // existing tap-to-cycle chip; this only changes the starting point.
+    phase: "before",
     sort_order: 0,
     visible_summary: row.visible_summary,
     possible_summary: row.possible_summary,
@@ -112,7 +117,9 @@ function fromPendingMessage(row: PendingImageMessageRow): JobEvidencePhoto {
     id: `pending-${row.id}`,
     storage_path: row.storage_path ?? "",
     caption: null,
-    phase: "other",
+    // Same reasoning as fromConversationPhoto above — still awaiting
+    // analysis, but already known to have arrived before any job work.
+    phase: "before",
     sort_order: 0,
     visible_summary: "",
     possible_summary: "",

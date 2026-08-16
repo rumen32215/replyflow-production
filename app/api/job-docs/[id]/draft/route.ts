@@ -91,7 +91,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
   // to honest nulls/false — absence of confirmation is never treated
   // as confirmation.
   const { data: workCard } = jobDoc.work_card_id
-    ? await service.from("work_cards").select("customer_name, address, status, episode_id").eq("id", jobDoc.work_card_id).maybeSingle()
+    ? await service.from("work_cards").select("customer_name, address, status, episode_id, issue").eq("id", jobDoc.work_card_id).maybeSingle()
     : { data: null };
   const isJobCompleted = workCard?.status === "completed";
 
@@ -146,6 +146,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       jobAddress: workCard?.address ?? null,
       rawNotes,
       isJobCompleted,
+      issueReported: workCard?.issue ?? null,
       photos: settledPhotos
         .filter((p) => p.visible_summary || p.possible_summary || p.unknown_note)
         .map((p) => ({

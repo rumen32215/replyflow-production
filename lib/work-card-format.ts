@@ -22,12 +22,27 @@
 const TIME_ZONE = "Europe/London";
 
 /** For a `datetime-local` input's value, which needs local time with
- * no timezone suffix. */
+ * no timezone suffix. Pinned to Europe/London via Intl, matching
+ * formatDateTime/formatDate below — the previous version used `Date`'s
+ * unpinned local getters (getHours/getFullYear/etc.), which read
+ * whichever timezone the *running process* happens to be in, not
+ * necessarily London. Harmless on a dev machine already set to Europe/
+ * London, but wrong on a UTC production server for roughly half the
+ * year (BST) — the same class of bug already fixed once in
+ * lib/datetime.ts for exactly this reason. */
 export function toDateTimeLocalValue(iso: string | null): string {
   if (!iso) return "";
-  const d = new Date(iso);
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(new Date(iso));
+  const part = (type: string) => parts.find((p) => p.type === type)?.value ?? "";
+  return `${part("year")}-${part("month")}-${part("day")}T${part("hour")}:${part("minute")}`;
 }
 
 /** A Google Maps search URL — no API key needed, works universally.

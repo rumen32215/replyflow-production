@@ -493,3 +493,119 @@ test("multiple requested tools always execute in the fixed, safe order regardles
     ["get_customer_context", "create_or_update_job"]
   );
 });
+
+// ---------------------------------------------------------------------
+// Deterministic job-creation backstop (production test, 2026-08-16):
+// job capture used to be entirely at the model's discretion, with no
+// fallback when it declined or the decision call itself failed.
+
+function withSlots(overrides: Partial<Record<"issue" | "location" | "preferredTime" | "preferredTimeResolved" | "customerName", string | null>>) {
+  return {
+    ...EMPTY_CONVERSATION_STATE,
+    slots: { ...EMPTY_CONVERSATION_STATE.slots, ...overrides },
+  };
+}
+
+test("backstop: no tool call returned but issue+location are known — a job is still created", async () => {
+  const supabase = new FakeSupabase();
+  nextToolCalls = [];
+
+  const result = await decideAndExecuteTools(
+    baseInput(supabase, {
+      understanding: { ...baseInput(supabase).understanding, conversationState: withSlots({ issue: "Leaking radiator", location: "NW1 1AA" }) },
+    }) as any
+  );
+  assert.equal(result.executed.length, 1);
+  assert.equal(result.executed[0]!.name, "create_or_update_job");
+  assert.equal(supabase.tables.work_cards.length, 1);
+  assert.equal(supabase.tables.work_cards[0]!.issue, "Leaking radiator");
+  assert.equal(supabase.tables.work_cards[0]!.address, "NW1 1AA");
+});
+
+test("backstop: issue + a resolved preferred time (no location) is also enough to fire", async () => {
+  const supabase = new FakeSupabase();
+  nextToolCalls = [];
+
+  const result = await decideAndExecuteTools(
+    baseInput(supabase, {
+      understanding: {
+        ...baseInput(supabase).understanding,
+        conversationState: withSlots({ issue: "Leaking radiator", preferredTimeResolved: "2026-08-17T14:00:00.000Z" }),
+      },
+    }) as any
+  );
+  assert.equal(result.executed.length, 1);
+  assert.equal(result.executed[0]!.name, "create_or_update_job");
+});
+
+test("backstop: the model already called create_or_update_job itself — no duplicate call is queued", async () => {
+  const supabase = new FakeSupabase();
+  nextToolCalls = [{ id: "call-1", name: "create_or_update_job", arguments: { issue: "Leaking radiator", address: "NW1 1AA", notes: null } }];
+
+  const result = await decideAndExecuteTools(
+    baseInput(supabase, {
+      understanding: { ...baseInput(supabase).understanding, conversationState: withSlots({ issue: "Leaking radiator", location: "NW1 1AA" }) },
+    }) as any
+  );
+  assert.equal(result.executed.filter((e) => e.name === "create_or_update_job").length, 1);
+  assert.equal(supabase.tables.work_cards.length, 1);
+});
+
+test("backstop: only issue known, no location or resolved time — correctly declines", async () => {
+  const supabase = new FakeSupabase();
+  nextToolCalls = [];
+
+  const result = await decideAndExecuteTools(
+    baseInput(supabase, {
+      understanding: { ...baseInput(supabase).understanding, conversationState: withSlots({ issue: "Leaking radiator" }) },
+    }) as any
+  );
+  assert.deepEqual(result.executed, []);
+  assert.equal(supabase.tables.work_cards.length, 0);
+});
+
+test("backstop: a job already exists for this episode — backstop does not fire (avoids duplicating executeCreateOrUpdateJob's own merge)", async () => {
+  const supabase = new FakeSupabase();
+  seedJob(supabase);
+  nextToolCalls = [];
+
+  const result = await decideAndExecuteTools(
+    baseInput(supabase, {
+      understanding: { ...baseInput(supabase).understanding, conversationState: withSlots({ issue: "Leaking radiator", location: "NW1 1AA" }) },
+    }) as any
+  );
+  assert.deepEqual(result.executed, []);
+  assert.equal(supabase.tables.work_cards.length, 1, "no second job was inserted");
+});
+
+test("backstop: fires even when the tool-decision LLM call itself failed, as long as the job lookup succeeded", async () => {
+  const supabase = new FakeSupabase();
+  completionError = new Error("model unavailable");
+
+  const result = await decideAndExecuteTools(
+    baseInput(supabase, {
+      understanding: { ...baseInput(supabase).understanding, conversationState: withSlots({ issue: "Leaking radiator", location: "NW1 1AA" }) },
+    }) as any
+  );
+  assert.equal(result.executed.length, 1);
+  assert.equal(result.executed[0]!.name, "create_or_update_job");
+  assert.equal(supabase.tables.work_cards.length, 1);
+  assert.equal(recordedErrorEvents.length, 1, "the LLM failure is still logged even though the backstop recovered the turn");
+});
+
+test("backstop: does not fire for an intent that doesn't offer create_or_update_job at all", async () => {
+  const supabase = new FakeSupabase();
+  seedBusiness(supabase);
+  nextToolCalls = [];
+
+  const result = await decideAndExecuteTools(
+    baseInput(supabase, {
+      understanding: {
+        ...baseInput(supabase).understanding,
+        primaryIntent: "BOOKING_CHANGE",
+        conversationState: withSlots({ issue: "Leaking radiator", location: "NW1 1AA" }),
+      },
+    }) as any
+  );
+  assert.deepEqual(result.executed, []);
+});

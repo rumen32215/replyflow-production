@@ -246,7 +246,24 @@ export default async function JobReportPreviewPage({ params }: { params: { id: s
 
   const model = buildReportDocumentModel({
     jobDocId: jobDoc.id,
-    business: { businessName: source.header.businessName, phone: source.header.businessPhone, logoUrl: source.header.logoUrl, trade: source.header.trade },
+    business: {
+      businessName: source.header.businessName,
+      phone: source.header.businessPhone,
+      // Business identity, not a personal photo (production test,
+      // 2026-08-16) — businesses.logo_url is genuinely scoped as a
+      // business logo, but renders everywhere as a circular avatar with
+      // an initial-letter fallback, the idiom for a personal photo, so
+      // a solo tradesperson predictably uploads a selfie into it. The
+      // customer-facing report represents the business by name/trade/
+      // phone instead — deliberately null here, not a new field. This
+      // one call site feeds the PDF, the PDF download, and the mobile
+      // preview at once (and covers the frozen/approved-snapshot path
+      // automatically, since `source` already resolves either way
+      // above) — nowhere else (the dashboard topbar/greeting card)
+      // changes.
+      logoUrl: null,
+      trade: source.header.trade,
+    },
     jobDoc: source.jobDetails,
     content: source.content,
     photoUrls,
@@ -270,14 +287,23 @@ export default async function JobReportPreviewPage({ params }: { params: { id: s
         </p>
       </div>
 
-      <ReportApproval
-        jobDocId={jobDoc.id}
-        status={jobDoc.status}
-        approvedAt={jobDoc.approved_at}
-        summary={approvalSummary}
-        model={model}
-        fileName={`${jobDoc.title.replace(/[^a-z0-9]+/gi, "-").replace(/^-+|-+$/g, "") || "job-report"}.pdf`}
-      />
+      {/* Sticky approval navigation (production test, 2026-08-16) — the
+       * dashboard shell's scroll container is `main` (app/(dashboard)/
+       * layout.tsx), which this page's content scrolls inside; a plain
+       * CSS `sticky` here (no new dependency, no JS) keeps the
+       * approve action / approved-state Download PDF reachable
+       * regardless of how far down a long preview the owner has
+       * scrolled, rather than only living at the very top of the page. */}
+      <div className="sticky top-0 z-10 -mx-4 bg-background px-4 pb-1 pt-1 md:-mx-8 md:px-8">
+        <ReportApproval
+          jobDocId={jobDoc.id}
+          status={jobDoc.status}
+          approvedAt={jobDoc.approved_at}
+          summary={approvalSummary}
+          model={model}
+          fileName={`${jobDoc.title.replace(/[^a-z0-9]+/gi, "-").replace(/^-+|-+$/g, "") || "job-report"}.pdf`}
+        />
+      </div>
 
       {/* Production hardening (2026-08-15) — a real production test
        * found the embedded, fixed-A4 PDF preview genuinely uncomfortable

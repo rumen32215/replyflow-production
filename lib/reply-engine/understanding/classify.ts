@@ -332,7 +332,14 @@ export async function classifyMessage(
       patternEntities,
       meaningEntities: { urgency: "none", impliedJobType: null, sentiment: "neutral" },
       safetyTag: null,
-      conversationState: withPostcodeBackstop(priorState, patternEntities),
+      // Still attempts date resolution on the carried-forward state
+      // (production hardening, 2026-08-16) — a classification failure
+      // used to skip resolvePreferredTime entirely, so a customer's
+      // already-stated preferred time could be carried forward with
+      // preferredTimeResolved never (re)computed for this turn's
+      // reference instant. Deterministic and idempotent — safe to
+      // re-run even when nothing changed.
+      conversationState: resolvePreferredTime(withPostcodeBackstop(priorState, patternEntities), referenceNow),
       episodeContinuity: "same_job",
       bookingAcceptance: "none",
     };

@@ -18,6 +18,26 @@ test("toDateTimeLocalValue: round-trips through the datetime-local input format"
   assert.match(value, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/);
 });
 
+// Hardening (production test, 2026-08-16): the previous implementation
+// used Date's unpinned local getters (getHours/getFullYear/etc.), which
+// read whichever timezone the running process happens to be in — right
+// on a dev machine already set to Europe/London, wrong on a UTC
+// production server for roughly half the year (BST). Asserted with a
+// fixed UTC instant and an exact expected string, the same discipline
+// formatDateTime/formatDate below already use, so this can't pass by
+// coincidence on any one machine's local timezone.
+test("toDateTimeLocalValue: pinned to Europe/London — a BST instant shows the London wall-clock time, not the raw UTC one", () => {
+  // 2026-06-15T10:00:00Z is 11:00 in Europe/London (BST, +1) — if this
+  // ever silently reverted to reading the UTC instant's own getters
+  // (or the running process's local timezone) directly, this would only
+  // coincidentally show 11:00 on a machine already in Europe/London.
+  assert.equal(toDateTimeLocalValue("2026-06-15T10:00:00.000Z"), "2026-06-15T11:00");
+});
+
+test("toDateTimeLocalValue: a GMT (winter) instant has no offset applied", () => {
+  assert.equal(toDateTimeLocalValue("2026-01-05T03:07:00.000Z"), "2026-01-05T03:07");
+});
+
 test("mapsHref: encodes spaces and punctuation so the link never breaks", () => {
   const href = mapsHref("12 High St, Flat 2B, London");
   assert.ok(href.startsWith("https://www.google.com/maps/search/?api=1&query="));

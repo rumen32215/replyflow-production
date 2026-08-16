@@ -1,6 +1,6 @@
 import { Document, Page, View, Text, Image, StyleSheet } from "@react-pdf/renderer";
 import { formatDate } from "@/lib/work-card-format";
-import type { ReportDocumentModel } from "./report-document-model";
+import { pickPhotoLayout, type ReportDocumentModel } from "./report-document-model";
 
 /**
  * ReplyFlow 2.0, Phase 2D — the presentation layer for the customer-
@@ -179,10 +179,16 @@ const styles = StyleSheet.create({
     lineHeight: 1.5,
     color: COLORS.dark,
   },
+  // 7d visual polish (production test, 2026-08-16) — a heavier border
+  // and a tinted total row read as a real invoice-style table rather
+  // than plain list rows, the standard, professional shape for this
+  // kind of block. Presentation only; selectCharges's own logic (owner-
+  // entered only, computed total) is unchanged.
   chargesTable: {
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: COLORS.border,
     borderRadius: 6,
+    overflow: "hidden",
   },
   chargeRow: {
     flexDirection: "row",
@@ -195,8 +201,9 @@ const styles = StyleSheet.create({
   chargeRowTotal: {
     flexDirection: "row",
     justifyContent: "space-between",
-    paddingVertical: 8,
+    paddingVertical: 9,
     paddingHorizontal: 10,
+    backgroundColor: "#EFF6FF",
   },
   chargeLabel: {
     fontSize: 10.5,
@@ -222,12 +229,10 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   photoItem: {
-    width: "47%",
     marginBottom: 14,
   },
   photoImage: {
     width: "100%",
-    height: 150,
     objectFit: "cover",
     borderRadius: 6,
     borderWidth: 1,
@@ -237,6 +242,26 @@ const styles = StyleSheet.create({
     fontSize: 8.5,
     color: COLORS.grey,
     marginTop: 4,
+  },
+  // Visual hierarchy (production test, 2026-08-16) — Charges and Photos
+  // are supporting material, not a continuation of the Job Summary ->
+  // Findings -> Work Completed -> Outcome narrative flow above. A
+  // slightly heavier rule (vs. the thin section dividers implied by
+  // spacing alone) marks that shift without introducing a new color or
+  // a second design language.
+  supportingDivider: {
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
+    marginTop: 4,
+    marginBottom: 18,
+  },
+  supportingLabel: {
+    fontSize: 8,
+    fontWeight: 700,
+    color: COLORS.grey,
+    textTransform: "uppercase",
+    letterSpacing: 1,
+    marginBottom: 14,
   },
 });
 
@@ -262,9 +287,11 @@ function Footer() {
 export function ReportDocument({ model }: { model: ReportDocumentModel }) {
   const { header, jobDetails } = model;
   const jobDate = formatDate(jobDetails.jobDate);
-  const hasTextContent = Boolean(
-    model.jobSummary || model.workPerformed || model.nextSteps || model.observations.length > 0 || model.issueReported || model.charges
-  );
+  // issueReported deliberately does not count toward hasTextContent —
+  // it's no longer rendered as its own section (see below), so counting
+  // it here would wrongly suppress the "no content yet" placeholder for
+  // a report that has nothing else.
+  const hasTextContent = Boolean(model.jobSummary || model.workPerformed || model.nextSteps || model.observations.length > 0 || model.charges);
 
   return (
     <Document title={`Job Report — ${jobDetails.title}`}>
@@ -316,12 +343,16 @@ export function ReportDocument({ model }: { model: ReportDocumentModel }) {
           </View>
         </View>
 
-        {model.issueReported && (
-          <View style={styles.section}>
-            <Text style={styles.sectionLabel}>Issue Reported</Text>
-            <Text style={styles.sectionText}>{model.issueReported}</Text>
-          </View>
-        )}
+        {/* "Issue Reported" (model.issueReported, the raw work_cards.issue)
+         * is deliberately not its own section here anymore — it used to
+         * sit directly above Job Summary restating the same problem in a
+         * second voice, which was the single largest driver of the report
+         * reading like an AI Q&A form rather than one coherent document
+         * (structural fix, production test 2026-08-16). The field itself
+         * is untouched in the data model — generate-draft.ts still reads
+         * it as grounding input — only this render site changed;
+         * job_summary is now told it's the sole customer-facing statement
+         * of the problem (see generate-draft.ts's system prompt). */}
 
         {model.jobSummary && (
           <View style={styles.section}>
@@ -364,6 +395,17 @@ export function ReportDocument({ model }: { model: ReportDocumentModel }) {
           </View>
         )}
 
+        {/* Visual hierarchy (production test, 2026-08-16) — Charges and
+         * Photos are supporting material behind the narrative flow
+         * above, not a continuation of it; a divider marks the shift
+         * once, only when there's actually something supporting to show. */}
+        {(model.charges || model.hasPhotos) && (
+          <>
+            <View style={styles.supportingDivider} />
+            <Text style={styles.supportingLabel}>Supporting information</Text>
+          </>
+        )}
+
         {/* 0038 — always the owner's own entered figures, never AI. Omitted
          * entirely (not a "£0.00" row) whenever neither amount was entered —
          * see selectCharges in lib/job-docs/report-content.ts. */}
@@ -391,6 +433,36 @@ export function ReportDocument({ model }: { model: ReportDocumentModel }) {
           </View>
         )}
 
+        {/* PDF photo reflow (production test, 2026-08-16) — photos now
+         * render inline, inside this same wrapping Page, instead of
+         * always starting a fresh Page regardless of how much room was
+         * left. react-pdf's own `wrap` overflow (already relied on for
+         * this same Page, and for RunningHeader/Footer's `fixed` prop)
+         * pushes any overflow onto additional pages by actual content
+         * volume; `wrap={false}` on each item only stops a single
+         * image+caption being split mid-page. pickPhotoLayout sizes each
+         * photo by how many there are — a lone photo reads large, a big
+         * set reads as a denser grid — rather than every photo reserving
+         * the same fixed footprint regardless of count. */}
+        {model.hasPhotos && (
+          <View style={styles.section}>
+            <Text style={styles.sectionLabel}>Photos</Text>
+            <View style={styles.photoGrid}>
+              {(() => {
+                const allPhotos = model.photoPages.flat();
+                const layout = pickPhotoLayout(allPhotos.length);
+                return allPhotos.map((photo) => (
+                  <View key={photo.id} wrap={false} style={[styles.photoItem, { width: layout.widthPercent }]}>
+                    {/* eslint-disable-next-line jsx-a11y/alt-text -- @react-pdf/renderer's Image is a PDF primitive, not an HTML img; it has no alt prop */}
+                    {photo.url && <Image src={photo.url} style={[styles.photoImage, { height: layout.heightPt }]} />}
+                    {photo.caption && <Text style={styles.photoCaption}>{photo.caption}</Text>}
+                  </View>
+                ));
+              })()}
+            </View>
+          </View>
+        )}
+
         {!hasTextContent && !model.hasPhotos && (
           <View style={styles.section}>
             <Text style={styles.sectionText}>This job report doesn&apos;t have any content ready yet.</Text>
@@ -399,25 +471,6 @@ export function ReportDocument({ model }: { model: ReportDocumentModel }) {
 
         <Footer />
       </Page>
-
-      {model.photoPages.map((pagePhotos, pageIndex) => (
-        <Page key={pageIndex} size="A4" style={styles.page} wrap>
-          <RunningHeader businessName={header.businessName} jobTitle={jobDetails.title} />
-          {pageIndex === 0 && (
-            <Text style={styles.sectionLabel}>Photos</Text>
-          )}
-          <View style={styles.photoGrid}>
-            {pagePhotos.map((photo) => (
-              <View key={photo.id} style={styles.photoItem}>
-                {/* eslint-disable-next-line jsx-a11y/alt-text -- @react-pdf/renderer's Image is a PDF primitive, not an HTML img; it has no alt prop */}
-                {photo.url && <Image src={photo.url} style={styles.photoImage} />}
-                {photo.caption && <Text style={styles.photoCaption}>{photo.caption}</Text>}
-              </View>
-            ))}
-          </View>
-          <Footer />
-        </Page>
-      ))}
     </Document>
   );
 }

@@ -274,17 +274,39 @@ export const scenarios = [
       { label: "1. book", text: "Hi, I've got a leaking pipe under the kitchen sink, SW1A 1AA" },
       { label: "2. time", text: "Tomorrow morning would be great" },
       {
+        // Bug found while wiring this suite into Phase 9 (production
+        // test, 2026-08-16): this used to insert into a table called
+        // "jobs" with a "job_title" column — both renamed to
+        // "work_cards"/"issue" back in migration 0013, long before this
+        // suite was written. The insert was silently failing (its
+        // result was never checked), so this scenario's "booked job"
+        // never actually existed — the reschedule-overclaim check below
+        // was passing by coincidence (no booking claim was ever
+        // grounded against a real booking), not because the deterministic
+        // backstop was genuinely exercised. Also needed episode_id (not
+        // just conversation_id) — lib/reply-engine/context/assemble.ts's
+        // currentBooking lookup is scoped to episode_id, not
+        // conversation_id.
         label: "3. setup: create booked job",
         setupOnly: true,
         setup: async ({ supabase, conversationId }) => {
-          await supabase.from("jobs").insert({
+          const { data: latestMessage } = await supabase
+            .from("messages")
+            .select("episode_id")
+            .eq("conversation_id", conversationId)
+            .order("created_at", { ascending: false })
+            .limit(1)
+            .maybeSingle();
+          const { error } = await supabase.from("work_cards").insert({
             business_id: BUSINESS_ID,
             conversation_id: conversationId,
+            episode_id: latestMessage?.episode_id ?? null,
             customer_name: "QA Suite",
-            job_title: "Leaking pipe under sink",
+            issue: "Leaking pipe under sink",
             status: "booked",
             scheduled_for: new Date(Date.now() + 20 * 3600 * 1000).toISOString(),
           });
+          if (error) throw new Error(`setup insert into work_cards failed: ${error.message}`);
         },
       },
       {
@@ -375,6 +397,74 @@ export const scenarios = [
             result.draft?.draft_text
           ),
         ],
+      },
+    ],
+  },
+
+  {
+    // REGRESSION — the exact bug that kicked off the 2026-08-16
+    // end-to-end QA audit: a live test found the receptionist inventing
+    // a specific £20 call-out fee for a business that had never
+    // configured one at all (chargesCalloutFee genuinely null on this
+    // QA business). Traced to lib/reply-engine/safety/evaluate.ts's
+    // price-claim grounding check only firing when ZERO facts were
+    // cited total — citing any unrelated fact (e.g. conversation stage)
+    // was enough to bypass it. Fixed by verifying every £ figure the
+    // draft states actually matches a figure present in a fact that was
+    // genuinely cited (see evaluate.ts's poundAmounts/citedPoundAmounts).
+    name: "REGRESSION — invented call-out fee (£ figure with no matching configured fact)",
+    steps: [
+      {
+        label: "1. asks about call-out fee (not configured for this QA business)",
+        text: "Hi, my radiator's leaking, could you come out on Monday afternoon? What's your call-out fee?",
+        expect: ({ result }) => [
+          check(
+            !/£\s?\d/.test(result.draft?.draft_text ?? ""),
+            "Never states a specific £ figure for a call-out fee that isn't actually configured for this business",
+            result.draft?.draft_text
+          ),
+          check(
+            Boolean(result.draft?.requires_escalation) || Boolean(result.draft?.draft_text),
+            "Either escalates or gives an honest 'not confirmed, I'll check' answer rather than staying silent",
+            JSON.stringify(result.draft)
+          ),
+        ],
+      },
+    ],
+  },
+
+  {
+    // Phase 1's deterministic job-creation backstop — verifies a real
+    // work_cards row now exists for this conversation once issue +
+    // location are both known, even though nothing here inspects or
+    // controls whether the model itself chose to call
+    // create_or_update_job. This is the actual end-to-end guarantee
+    // (real DB row, not a mocked tool call) the unit tests in
+    // lib/reply-engine/tools/decide.test.ts already cover at the
+    // function level.
+    name: "Job capture — a real work_cards row exists once issue and location are both known",
+    steps: [
+      {
+        label: "1. issue + location in one message",
+        text: "Hi, my radiator's leaking in the kitchen, I'm at NW1 1AA",
+        expect: async ({ result, supabase, BUSINESS_ID }) => {
+          const { data: job } = await supabase
+            .from("work_cards")
+            .select("id, issue, address")
+            .eq("business_id", BUSINESS_ID)
+            .eq("conversation_id", result.conversationId)
+            .order("created_at", { ascending: false })
+            .limit(1)
+            .maybeSingle();
+          return [
+            check(Boolean(job), "A work_cards row was created for this conversation (model tool call or the deterministic backstop)", JSON.stringify(job)),
+            check(
+              Boolean(job?.address?.toUpperCase().includes("NW1")),
+              "The created job carries the real postcode the customer gave",
+              JSON.stringify(job)
+            ),
+          ];
+        },
       },
     ],
   },

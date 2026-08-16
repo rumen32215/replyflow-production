@@ -1,9 +1,20 @@
+"use client";
+
+import { useState } from "react";
 import Link from "next/link";
 import { Briefcase, Calendar, MapPin, Clock3, PoundSterling } from "lucide-react";
 import { SettleCard } from "@/components/shared/motion";
 import { CommunicationPreference } from "@/components/dashboard/customers/communication-preference";
 import { isActiveWorkCardStatus } from "@/lib/work-card-state";
 import type { CustomerJob } from "@/lib/customer-memory-signals";
+
+/** QA2 Phase 7 (2026-08-16) — an unbounded Service History or Notes
+ * list was the actual problem a long-time customer's page had: not
+ * wrong data, just no hierarchy. Capped to the most recent few with an
+ * explicit "View all N" rather than a second page or a new query —
+ * same `jobs` array, just not all of it rendered at once by default. */
+const SERVICE_HISTORY_CAP = 3;
+const NOTES_CAP = 3;
 
 /**
  * Centre panel, top — the natural-language summary (Feature 12 UI:
@@ -32,9 +43,21 @@ export function RelationshipOverview({
   conversationId: string;
   communicationPreference: string | null;
 }) {
-  const notes = jobs.filter((j) => j.notes?.trim()).map((j) => ({ jobTitle: j.jobTitle, notes: j.notes as string }));
+  const notesAll = jobs.filter((j) => j.notes?.trim()).map((j) => ({ jobTitle: j.jobTitle, notes: j.notes as string }));
   const outstanding = jobs.filter((j) => isActiveWorkCardStatus(j.status));
   const quotations = jobs.filter((j) => j.estimatedValue != null);
+  // Most-recent-first — `jobs` itself is ordered oldest-first (the
+  // page's own created_at-ascending query), which reads backwards for
+  // a "recent service" card.
+  const completedJobsAll = jobs
+    .filter((j) => j.status === "completed" && j.completedAt)
+    .slice()
+    .sort((a, b) => new Date(b.completedAt as string).getTime() - new Date(a.completedAt as string).getTime());
+
+  const [showAllHistory, setShowAllHistory] = useState(false);
+  const [showAllNotes, setShowAllNotes] = useState(false);
+  const completedJobs = showAllHistory ? completedJobsAll : completedJobsAll.slice(0, SERVICE_HISTORY_CAP);
+  const notes = showAllNotes ? notesAll : notesAll.slice(0, NOTES_CAP);
 
   return (
     <div className="space-y-4">
@@ -72,24 +95,32 @@ export function RelationshipOverview({
             <Briefcase className="h-4 w-4 text-muted-foreground" />
             <h2 className="text-[13px] font-bold">Service history</h2>
           </div>
-          <div className="space-y-2.5">
-            {jobs
-              .filter((j) => j.status === "completed")
-              .map((j) => (
-                <Link
-                  key={j.id}
-                  href={`/dashboard/work-cards/${j.id}`}
-                  className="flex items-center justify-between gap-3 text-[13.5px] hover:text-primary"
-                >
-                  <span className="min-w-0 truncate">{j.jobTitle}</span>
-                  <span className="shrink-0 flex items-center gap-1 text-[12px] text-muted-foreground">
-                    <Calendar className="h-3 w-3" />
-                    {j.completedAt &&
-                      new Date(j.completedAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
+          <div className="space-y-3">
+            {completedJobs.map((j) => (
+              <Link key={j.id} href={`/dashboard/work-cards/${j.id}`} className="block text-[13.5px] hover:text-primary">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="min-w-0 truncate font-medium">{j.jobTitle}</span>
+                  <span className="shrink-0 flex items-center gap-2 text-[12px] text-muted-foreground">
+                    {j.estimatedValue != null && <span className="font-semibold text-foreground">£{j.estimatedValue.toFixed(2)}</span>}
+                    <span className="flex items-center gap-1">
+                      <Calendar className="h-3 w-3" />
+                      {j.completedAt &&
+                        new Date(j.completedAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
+                    </span>
                   </span>
-                </Link>
-              ))}
+                </div>
+                {j.notes?.trim() && <p className="mt-0.5 truncate text-[12px] text-muted-foreground">{j.notes}</p>}
+              </Link>
+            ))}
           </div>
+          {completedJobsAll.length > SERVICE_HISTORY_CAP && (
+            <button
+              onClick={() => setShowAllHistory((v) => !v)}
+              className="mt-3 text-[12.5px] font-semibold text-primary hover:underline"
+            >
+              {showAllHistory ? "Show less" : `View all ${completedJobsAll.length}`}
+            </button>
+          )}
         </SettleCard>
       )}
 
@@ -114,7 +145,7 @@ export function RelationshipOverview({
         </SettleCard>
       )}
 
-      {notes.length > 0 && (
+      {notesAll.length > 0 && (
         <SettleCard delay={0.09} className="rounded-2xl border border-border bg-card p-6 shadow-sm">
           <div className="mb-3 flex items-center gap-2">
             <MapPin className="h-4 w-4 text-muted-foreground" />
@@ -128,6 +159,11 @@ export function RelationshipOverview({
               </div>
             ))}
           </div>
+          {notesAll.length > NOTES_CAP && (
+            <button onClick={() => setShowAllNotes((v) => !v)} className="mt-3 text-[12.5px] font-semibold text-primary hover:underline">
+              {showAllNotes ? "Show less" : `View all ${notesAll.length}`}
+            </button>
+          )}
         </SettleCard>
       )}
     </div>

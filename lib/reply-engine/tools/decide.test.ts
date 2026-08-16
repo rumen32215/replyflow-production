@@ -19,7 +19,7 @@ import { EMPTY_CONVERSATION_STATE } from "../understanding/state";
  */
 
 type Row = Record<string, unknown>;
-type Op = "eq" | "neq" | "in" | "lt" | "gt";
+type Op = "eq" | "neq" | "in" | "lt" | "gt" | "is";
 interface Filter {
   col: string;
   op: Op;
@@ -59,6 +59,10 @@ class FakeQuery implements PromiseLike<{ data: unknown; error: unknown }> {
     this.filters.push({ col, op: "gt", val });
     return this;
   }
+  is(col: string, val: unknown) {
+    this.filters.push({ col, op: "is", val });
+    return this;
+  }
   order(col: string, opts?: { ascending?: boolean }) {
     this.orderCol = col;
     this.orderAsc = opts?.ascending ?? true;
@@ -93,6 +97,8 @@ class FakeQuery implements PromiseLike<{ data: unknown; error: unknown }> {
           return String(rowVal) < String(f.val);
         case "gt":
           return String(rowVal) > String(f.val);
+        case "is":
+          return f.val === null ? rowVal === null || rowVal === undefined : rowVal === f.val;
       }
     });
   }
@@ -608,4 +614,97 @@ test("backstop: does not fire for an intent that doesn't offer create_or_update_
     }) as any
   );
   assert.deepEqual(result.executed, []);
+});
+
+// ---------------------------------------------------------------------
+// Deterministic schedule-preference step (production test, 2026-08-16
+// round 2): the AI job-creation path could never populate scheduled_for
+// at all, structurally. applySchedulePreferenceIfMissing closes that
+// gap as a separate deterministic step, never exposed to the model's
+// own tool schema.
+
+test("a newly backstop-created job's scheduled_for is set to the resolved preferred time (the window start)", async () => {
+  const supabase = new FakeSupabase();
+  nextToolCalls = [];
+
+  await decideAndExecuteTools(
+    baseInput(supabase, {
+      understanding: {
+        ...baseInput(supabase).understanding,
+        conversationState: withSlots({ issue: "Cracked tiles", location: "W12 1NE", preferredTimeResolved: "2026-08-27T12:00:00.000Z" }),
+      },
+    }) as any
+  );
+  assert.equal(supabase.tables.work_cards.length, 1);
+  assert.equal(supabase.tables.work_cards[0]!.scheduled_for, "2026-08-27T12:00:00.000Z");
+});
+
+test("a resolved preferred time on a later turn fills in an existing draft job's still-empty scheduled_for, even with no other tool call this turn", async () => {
+  const supabase = new FakeSupabase();
+  seedJob(supabase, { issue: "Cracked tiles", address: "W12 1NE" }); // scheduled_for intentionally absent (null)
+  nextToolCalls = [];
+
+  const result = await decideAndExecuteTools(
+    baseInput(supabase, {
+      understanding: {
+        ...baseInput(supabase).understanding,
+        conversationState: withSlots({ issue: "Cracked tiles", location: "W12 1NE", preferredTimeResolved: "2026-08-27T12:00:00.000Z" }),
+      },
+    }) as any
+  );
+  // No tool call was needed (the job already exists) — the deterministic
+  // schedule step still runs as a side effect, independent of `executed`.
+  assert.deepEqual(result.executed, []);
+  assert.equal(supabase.tables.work_cards[0]!.scheduled_for, "2026-08-27T12:00:00.000Z");
+});
+
+test("never overwrites a scheduled_for the owner (or an earlier turn) already set", async () => {
+  const supabase = new FakeSupabase();
+  seedJob(supabase, { issue: "Cracked tiles", address: "W12 1NE", scheduled_for: "2026-08-20T09:00:00.000Z" });
+  nextToolCalls = [];
+
+  await decideAndExecuteTools(
+    baseInput(supabase, {
+      understanding: {
+        ...baseInput(supabase).understanding,
+        conversationState: withSlots({ issue: "Cracked tiles", location: "W12 1NE", preferredTimeResolved: "2026-08-27T12:00:00.000Z" }),
+      },
+    }) as any
+  );
+  assert.equal(supabase.tables.work_cards[0]!.scheduled_for, "2026-08-20T09:00:00.000Z", "an already-set time must never be silently replaced");
+});
+
+test("never touches scheduled_for on a job that's no longer draft (already booked)", async () => {
+  const supabase = new FakeSupabase();
+  seedJob(supabase, { issue: "Cracked tiles", address: "W12 1NE", status: "booked" });
+  nextToolCalls = [];
+
+  await decideAndExecuteTools(
+    baseInput(supabase, {
+      understanding: {
+        ...baseInput(supabase).understanding,
+        conversationState: withSlots({ issue: "Cracked tiles", location: "W12 1NE", preferredTimeResolved: "2026-08-27T12:00:00.000Z" }),
+      },
+    }) as any
+  );
+  assert.equal(supabase.tables.work_cards[0]!.scheduled_for, undefined, "a confirmed/booked job's time must never be touched by a later customer preference");
+});
+
+test("the backstop's notes now come from real collected facts (buildWorkCardDraft), not always null", async () => {
+  const supabase = new FakeSupabase();
+  nextToolCalls = [];
+
+  await decideAndExecuteTools(
+    baseInput(supabase, {
+      understanding: {
+        ...baseInput(supabase).understanding,
+        conversationState: {
+          ...withSlots({ issue: "cracked tiles", location: "W12 1NE" }),
+          commitments: [{ text: "Ten photos already sent", kind: "customer_fact", status: "resolved" }],
+        },
+      },
+    }) as any
+  );
+  assert.equal(supabase.tables.work_cards[0]!.issue, "Cracked tiles", "issue is sentence-cased via buildWorkCardDraft, same as the manual form");
+  assert.equal(supabase.tables.work_cards[0]!.notes, "Ten photos already sent");
 });

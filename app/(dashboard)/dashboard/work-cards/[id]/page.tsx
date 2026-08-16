@@ -200,6 +200,13 @@ export default async function WorkCardDetailPage({ params }: { params: { id: str
       linkedJobDocStatus={linkedJobDoc?.status ?? null}
       booking={booking}
       reportStatus={workCard.report_status}
+      // Production test (2026-08-16 round 2) — the end of the
+      // customer's stated time WINDOW, when one exists. No new column:
+      // this reads the same conversationState (episode.ai_state) this
+      // page already fetches above for isEmergency/readiness; the
+      // window end just lives inside its slots now (lib/reply-engine/
+      // understanding/state.ts's preferredTimeWindowEnd).
+      requestedWindowEnd={conversationState?.slots.preferredTimeWindowEnd ?? null}
     />
   );
 }

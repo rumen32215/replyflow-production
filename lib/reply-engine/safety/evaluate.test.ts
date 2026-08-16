@@ -196,3 +196,60 @@ test("a cited fact with a different figure than the one stated still fails — n
   });
   assert.equal(result.groundingFailed, true);
 });
+
+/* -------- Round 2 (production test, 2026-08-16): an uncited price
+   claim must force requiresEscalation, not just groundingFailed —
+   the exact gap that let an invented "£150 to £200" reach the owner
+   with no visible warning banner, despite the check correctly
+   identifying it as ungrounded. -------- */
+
+test("an invented job-cost estimate (no configured price at all) forces requiresEscalation, not just groundingFailed", () => {
+  const result = evaluateSafety({
+    understanding: baseUnderstanding({ primaryIntent: "PRICING_INQUIRY" as Intent }),
+    generation: baseGeneration({
+      draftReply: "For a job like that, it'd probably be around £150 to £200.",
+      factsUsed: [],
+    }),
+    facts: [],
+  });
+  assert.equal(result.groundingFailed, true);
+  assert.equal(result.requiresEscalation, true, "the owner must see a visible warning, not a normal-looking suggested reply");
+  assert.ok(result.reasons.some((r) => /price, guarantee, or commitment/i.test(r)));
+});
+
+test("an invented price still forces escalation even when an unrelated fact was cited alongside it", () => {
+  const result = evaluateSafety({
+    understanding: baseUnderstanding({ primaryIntent: "PRICING_INQUIRY" as Intent }),
+    generation: baseGeneration({
+      draftReply: "For a job like that, it'd probably be around £150 to £200.",
+      factsUsed: ["profile.name"],
+    }),
+    facts: [{ id: "profile.name", text: "The business is called Rumen Plumber." }],
+  });
+  assert.equal(result.requiresEscalation, true);
+});
+
+test("an uncited operational instruction also forces requiresEscalation, matching the price backstop's severity", () => {
+  const result = evaluateSafety({
+    understanding: baseUnderstanding({ primaryIntent: "BOOKING_REQUEST" }),
+    generation: baseGeneration({
+      draftReply: "Great, please ensure the stopcock is accessible before we arrive.",
+      factsUsed: [],
+    }),
+    facts: [],
+  });
+  assert.equal(result.groundingFailed, true);
+  assert.equal(result.requiresEscalation, true);
+});
+
+test("a genuinely grounded price does not force escalation on its own (only a real backstop/category rule would)", () => {
+  const result = evaluateSafety({
+    understanding: baseUnderstanding({ primaryIntent: "BOOKING_REQUEST" }),
+    generation: baseGeneration({
+      draftReply: "Sure — that'll be a £20 call-out fee.",
+      factsUsed: ["profile.callout_fee"],
+    }),
+    facts: [{ id: "profile.callout_fee", text: "Charges a call-out fee of £20." }],
+  });
+  assert.equal(result.requiresEscalation, false);
+});

@@ -61,6 +61,30 @@ export async function findCurrentJob(supabase: ServiceClient, episodeId: string)
   return { id: data.id, issue: data.issue, address: data.address, status: data.status, nextBookingId: data.next_booking_id };
 }
 
+/**
+ * Deterministic schedule-preference step (production test, 2026-08-16
+ * round 2) — the AI job-creation tool (create_or_update_job, below) has
+ * no time/date field in its schema at all, by design: the model never
+ * sets a time, only this deterministic pipeline does, exactly like
+ * every other date value in this codebase. This is the one place a
+ * resolved customer preference actually reaches
+ * `work_cards.scheduled_for`. `preferredTimeResolved` is always the
+ * WINDOW START when the customer stated a range (never a midpoint —
+ * see lib/datetime.ts's resolvePreferredTimeWindow) or the single
+ * resolved instant otherwise, so a booking later created at exactly
+ * this default naturally starts inside whatever the customer actually
+ * asked for.
+ *
+ * A single atomic conditional UPDATE, not a read-then-write — only
+ * ever touches a job that's still `draft` with `scheduled_for` still
+ * null, so a customer's stated preference can never silently overwrite
+ * an owner-confirmed appointment or a value the owner already edited
+ * in by hand.
+ */
+export async function applySchedulePreferenceIfMissing(supabase: ServiceClient, jobId: string, preferredTimeResolved: string): Promise<void> {
+  await supabase.from("work_cards").update({ scheduled_for: preferredTimeResolved }).eq("id", jobId).eq("status", "draft").is("scheduled_for", null);
+}
+
 async function fetchAlternatives(supabase: ServiceClient, businessId: string): Promise<{ start: string; end: string }[]> {
   const result = await checkAvailability(supabase, { businessId, durationMinutes: 60 });
   return result.slots.slice(0, 3).map((s) => ({ start: s.start.toISOString(), end: s.end.toISOString() }));

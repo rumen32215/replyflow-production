@@ -69,7 +69,13 @@ function buildSystemBlock(context: ReplyContext, facts: Fact[], options: { isFir
       "never tell the customer to prepare something, clear access, have anything ready, or follow any other " +
       "operational requirement unless it's a listed fact — a plausible-sounding, generic instruction for this trade " +
       "is still an invention if it isn't actually configured for this business. You either know it from a listed " +
-      "fact, or you don't mention it at all — never improvise company policy."
+      "fact, or you don't mention it at all — never improvise company policy. This applies with full force to " +
+      "PRICING: you know only the business's own configured call-out fee, if any — never estimate what a specific " +
+      "job (a repair, an installation, \"roughly how much would this cost\") would cost from general knowledge of " +
+      "what such jobs typically cost. That number does not exist as a fact for you to cite, so it can never be " +
+      "grounded — the only honest answer is that pricing needs the owner's own confirmation, not a plausible-" +
+      "sounding range. \"The owner hasn't confirmed pricing for this yet — I'll check and get back to you\" is a " +
+      "complete, correct answer; a guessed £ range is not, no matter how reasonable it sounds."
   );
 
   lines.push(

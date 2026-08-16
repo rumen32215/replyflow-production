@@ -180,3 +180,102 @@ export function resolvePreferredDateTime(text: string, messageTimestamp: Date): 
   const pad = (n: number) => String(n).padStart(2, "0");
   return londonWallClockToUtcIso(`${year}-${pad(month)}-${pad(day)}T${pad(hour)}:${pad(minute)}:${pad(second)}`);
 }
+
+const WINDOW_RANGE_RE = /\b(?:between\s+)?(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\s*(?:and|&|to|-)\s*(\d{1,2})(?::(\d{2}))?\s*(am|pm)?/i;
+const DAYPART_RE = /\b(morning|afternoon|evening|night)\b/i;
+
+/** Afternoon/evening/night push a bare 1-11 into 24h PM; morning is
+ * left as stated (a customer saying "9 in the morning" already means
+ * 09:00, never 21:00). Deliberately not applied to an explicit am/pm
+ * marker — that's already unambiguous. */
+const DAYPART_HOUR_ADJUST: Record<string, (hour: number) => number> = {
+  morning: (hour) => hour,
+  afternoon: (hour) => (hour < 12 ? hour + 12 : hour),
+  evening: (hour) => (hour < 12 ? hour + 12 : hour),
+  night: (hour) => (hour < 12 ? hour + 12 : hour),
+};
+
+/** Resolves one bare hour (e.g. "1" from "between 1 and 2") into a real
+ * 24h hour, using whichever disambiguator is actually available —
+ * never guessed. Returns null (never a default) when neither an
+ * explicit am/pm marker nor a daypart word is present anywhere in the
+ * message: an hour with no way to tell morning from afternoon is
+ * genuinely ambiguous, and this codebase never assumes. */
+function resolveWindowHour(hour: number, explicitAmPm: string | null, daypart: string | null): number | null {
+  if (explicitAmPm) {
+    const isPm = explicitAmPm.toLowerCase() === "pm";
+    if (hour === 12) return isPm ? 12 : 0;
+    return isPm ? hour + 12 : hour;
+  }
+  if (daypart) {
+    const adjust = DAYPART_HOUR_ADJUST[daypart.toLowerCase()];
+    if (adjust) return adjust(hour);
+  }
+  return null;
+}
+
+/**
+ * Deterministically resolves a customer's stated TIME WINDOW ("between
+ * 1&2 afternoon on 27th August") into a real start/end pair — a window,
+ * never collapsed into one instant. Additive alongside
+ * resolvePreferredDateTime above (left entirely unchanged): callers try
+ * this first and fall back to the single-instant resolver when no range
+ * pattern is present.
+ *
+ * Production test (2026-08-16 round 2) — this exact phrasing broke
+ * resolvePreferredDateTime for two independent reasons: chrono-node
+ * couldn't mark an hour "certain" from an ambiguous range ("between 1
+ * and 2"), and separately failed to resolve the date at all once the
+ * time clause sat between the daypart word and "on <date>" (word-order
+ * sensitivity — verified directly). The fix here sidesteps both:
+ * extract the two hours and the daypart deterministically via regex
+ * (never guessing which is AM/PM — resolveWindowHour returns null
+ * rather than assume when there's truly no disambiguator), then strip
+ * the whole time/daypart clause out and hand chrono ONLY the remaining
+ * text to resolve the date — exactly the kind of isolated single-date
+ * parse chrono is already reliable at.
+ */
+export function resolvePreferredTimeWindow(text: string, messageTimestamp: Date): { start: string; end: string } | null {
+  const rangeMatch = WINDOW_RANGE_RE.exec(text);
+  if (!rangeMatch) return null;
+  const [fullMatch, h1Str, m1Str, explicit1, h2Str, m2Str, explicit2] = rangeMatch;
+  const daypart = DAYPART_RE.exec(text)?.[1] ?? null;
+
+  // Either number's own explicit am/pm marker wins; missing on one side
+  // borrows the other's (a range like "1 to 2pm" means both PM) before
+  // falling back to the daypart word.
+  const hour1 = resolveWindowHour(Number(h1Str), explicit1 ?? explicit2 ?? null, daypart);
+  const hour2 = resolveWindowHour(Number(h2Str), explicit2 ?? explicit1 ?? null, daypart);
+  if (hour1 == null || hour2 == null) return null;
+  const minute1 = m1Str ? Number(m1Str) : 0;
+  const minute2 = m2Str ? Number(m2Str) : 0;
+
+  const withoutRangeClause = text.replace(fullMatch, " ").replace(DAYPART_RE, " ");
+  const referenceAsLondonCalendar = londonWallClockPartsAsUtcDate(messageTimestamp);
+  const dateResults = chrono.parse(withoutRangeClause, referenceAsLondonCalendar, { forwardDate: true });
+  const dateComponent = dateResults[0]?.start;
+  if (!dateComponent || !dateComponent.isCertain("day") || !dateComponent.isCertain("month")) return null;
+
+  const year = dateComponent.get("year");
+  const month = dateComponent.get("month");
+  const day = dateComponent.get("day");
+  if (year == null || month == null || day == null) return null;
+
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const start = londonWallClockToUtcIso(`${year}-${pad(month)}-${pad(day)}T${pad(hour1)}:${pad(minute1)}:00`);
+  const end = londonWallClockToUtcIso(`${year}-${pad(month)}-${pad(day)}T${pad(hour2)}:${pad(minute2)}:00`);
+  if (!start || !end) return null;
+  if (new Date(end).getTime() <= new Date(start).getTime()) return null;
+  return { start, end };
+}
+
+/** Pure arithmetic, no I/O: does an appointment of `durationMinutes`,
+ * starting at the window's own start, fit entirely inside the window
+ * the customer actually stated? Used to decide whether a standard-
+ * length appointment can be offered inside a narrower-than-usual
+ * requested window without ever silently spilling past what was asked
+ * for (see work-card-detail.tsx / approve/route.ts). */
+export function windowCanFitDuration(windowStart: string, windowEnd: string, durationMinutes: number): boolean {
+  const bookingEndMs = new Date(windowStart).getTime() + durationMinutes * 60_000;
+  return bookingEndMs <= new Date(windowEnd).getTime();
+}

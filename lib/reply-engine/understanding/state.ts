@@ -45,6 +45,17 @@ export interface CollectedSlots {
    * Never auto-books anything; only ever pre-fills a Work Card's
    * scheduled_for, which the owner still reviews. */
   preferredTimeResolved: string | null;
+  /** Production test (2026-08-16 round 2) — set only when the customer
+   * stated an actual WINDOW ("between 1 and 2pm"), never for a single
+   * point-in-time preference. `preferredTimeResolved` is the window's
+   * start in that case (never a midpoint), and this is the end — both
+   * real ISO 8601 timestamps from lib/datetime.ts's
+   * resolvePreferredTimeWindow, never invented. Null whenever only a
+   * single instant was ever stated. This is a customer PREFERENCE, not
+   * a confirmed booking — see DOCS/SPECS/Work-Card-Object.md and the
+   * `work_cards.status` draft/booked distinction for where "confirmed"
+   * actually lives. */
+  preferredTimeWindowEnd: string | null;
 }
 
 /** What the customer is fundamentally trying to achieve — distinct from
@@ -126,7 +137,7 @@ export interface ConversationState {
 
 export const EMPTY_CONVERSATION_STATE: ConversationState = {
   stage: "understand",
-  slots: { issue: null, location: null, preferredTime: null, customerName: null, preferredTimeResolved: null },
+  slots: { issue: null, location: null, preferredTime: null, customerName: null, preferredTimeResolved: null, preferredTimeWindowEnd: null },
   openQuestion: null,
   greetingGiven: false,
   lastTopic: null,
@@ -245,6 +256,7 @@ export function toConversationState(raw: unknown): ConversationState {
       preferredTime: str(slots.preferredTime ?? slots.preferred_time),
       customerName: str(slots.customerName ?? slots.customer_name),
       preferredTimeResolved: isoTimestamp(slots.preferredTimeResolved ?? slots.preferred_time_resolved),
+      preferredTimeWindowEnd: isoTimestamp(slots.preferredTimeWindowEnd ?? slots.preferred_time_window_end),
     },
     openQuestion: str(r.openQuestion ?? r.open_question),
     greetingGiven: Boolean(r.greetingGiven ?? r.greeting_given),

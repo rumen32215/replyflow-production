@@ -182,6 +182,18 @@ export function evaluateSafety(input: {
   // Check 2 — escalation category: the Understanding Engine's safety
   // tag or category-level "always escalate" rule (e.g. Emergency,
   // Complaint) or the generation model's own judgment.
+  //
+  // Round 2 (production test, 2026-08-16) — hasUncitedPriceClaim and
+  // hasUncitedInstruction used to only set groundingFailed (blocking
+  // auto-send) without ever forcing requiresEscalation, unlike every
+  // other backstop in this file. That meant a draft with an invented
+  // price could be written to reply_drafts looking like a completely
+  // ordinary "Suggested reply" — no amber warning banner, nothing
+  // telling the owner anything was wrong — even though the system had
+  // already, internally, correctly identified it as ungrounded. The
+  // detection was never the gap; the owner never seeing it was. Added
+  // here so this class of claim gets the exact same visible-warning
+  // treatment the reschedule/payment/deposit backstops already do.
   const requiresEscalation = Boolean(
     generation.requiresEscalation ||
       decision.alwaysEscalate ||
@@ -189,7 +201,9 @@ export function evaluateSafety(input: {
       understanding.safetyTag !== null ||
       hasUnconfirmedRescheduleClaim ||
       hasUncitedPaymentAnswer ||
-      hasUncitedDepositClaim
+      hasUncitedDepositClaim ||
+      hasUncitedPriceClaim ||
+      hasUncitedInstruction
   );
   if (decision.alwaysEscalate) reasons.push(`"${decision.category}" always requires the owner's review.`);
   if (anySecondaryAlwaysEscalate) {

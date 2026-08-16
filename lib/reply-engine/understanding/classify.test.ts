@@ -78,3 +78,26 @@ test("a completion failure carries forward every other slot value unchanged", as
   assert.equal(result.conversationState.slots.issue, "Leaking radiator");
   assert.equal(result.conversationState.slots.location, "NW1 1AA");
 });
+
+test("a carried-forward TIME WINDOW ('between 1 and 2pm') resolves both the start and the window end, never collapsed to one instant (production test, 2026-08-16 round 2)", async () => {
+  const priorState = {
+    ...EMPTY_CONVERSATION_STATE,
+    slots: {
+      ...EMPTY_CONVERSATION_STATE.slots,
+      issue: "Cracked kitchen tiles",
+      preferredTime: "between 1&2 afternoon on 27th August",
+      preferredTimeResolved: null,
+      preferredTimeWindowEnd: null,
+    },
+  };
+
+  const result = await classifyMessage("biz-1", "any message", priorState);
+
+  assert.ok(result.conversationState.slots.preferredTimeResolved, "window start should resolve");
+  assert.ok(result.conversationState.slots.preferredTimeWindowEnd, "window end should also resolve, not be dropped");
+  assert.ok(
+    new Date(result.conversationState.slots.preferredTimeWindowEnd!).getTime() >
+      new Date(result.conversationState.slots.preferredTimeResolved!).getTime(),
+    "the window end must be genuinely after the start"
+  );
+});

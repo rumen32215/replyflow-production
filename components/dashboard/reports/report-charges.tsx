@@ -2,10 +2,12 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Loader2 } from "lucide-react";
+import Link from "next/link";
+import { Loader2, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { toast } from "@/hooks/use-toast";
+import { Acknowledgement, useAcknowledgement } from "@/components/shared/acknowledgement";
 
 /**
  * Production hardening (2026-08-15) — optional, owner-entered charges
@@ -35,6 +37,8 @@ export function ReportCharges({
   const [labour, setLabour] = useState(initialLabour != null ? String(initialLabour) : "");
   const [materials, setMaterials] = useState(initialMaterials != null ? String(initialMaterials) : "");
   const [saving, setSaving] = useState(false);
+  const { message, isError, acknowledge, softError } = useAcknowledgement();
+  const [savedOnce, setSavedOnce] = useState(false);
 
   const labourNumber = labour.trim() === "" ? null : Number(labour);
   const materialsNumber = materials.trim() === "" ? null : Number(materials);
@@ -52,9 +56,11 @@ export function ReportCharges({
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || "Something went wrong.");
-      toast({ variant: "success", title: "Saved" });
+      acknowledge("Saved.");
+      setSavedOnce(true);
       router.refresh();
     } catch (err) {
+      softError();
       toast({ variant: "destructive", title: "Couldn't save that", description: err instanceof Error ? err.message : undefined });
     } finally {
       setSaving(false);
@@ -96,10 +102,21 @@ export function ReportCharges({
         </div>
       </div>
       {hasAnyAmount && <p className="text-[13px] text-muted-foreground">Total on the report: <span className="font-semibold text-foreground">£{total.toFixed(2)}</span></p>}
-      <Button variant="outline" onClick={save} disabled={saving} className="w-auto">
-        {saving && <Loader2 className="h-4 w-4 animate-spin" />}
-        Save charges
-      </Button>
+      <div className="flex flex-wrap items-center gap-3">
+        <Button variant="outline" onClick={save} disabled={saving} className="w-auto">
+          {saving && <Loader2 className="h-4 w-4 animate-spin" />}
+          Save charges
+        </Button>
+        {savedOnce && (
+          <Link
+            href={`/dashboard/reports/${jobDocId}/preview`}
+            className="flex items-center gap-1 text-[13px] font-semibold text-primary hover:underline"
+          >
+            Preview report <ArrowRight className="h-3.5 w-3.5" />
+          </Link>
+        )}
+      </div>
+      <Acknowledgement message={message} isError={isError} />
     </div>
   );
 }

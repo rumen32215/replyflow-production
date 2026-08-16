@@ -395,11 +395,13 @@ export function ReportDocument({ model }: { model: ReportDocumentModel }) {
           </View>
         )}
 
-        {/* Visual hierarchy (production test, 2026-08-16) — Charges and
-         * Photos are supporting material behind the narrative flow
-         * above, not a continuation of it; a divider marks the shift
-         * once, only when there's actually something supporting to show. */}
-        {(model.charges || model.hasPhotos) && (
+        {/* Visual hierarchy (production test, 2026-08-16) — Charges is
+         * supporting material behind the narrative flow above, not a
+         * continuation of it; a divider marks the shift once, only when
+         * there's actually a charges table to show. Photos moved to
+         * their own dedicated page below (QA2 Phase 9) — Page 1 is now
+         * the report, full stop, never a mix of prose and a photo grid. */}
+        {model.charges && (
           <>
             <View style={styles.supportingDivider} />
             <Text style={styles.supportingLabel}>Supporting information</Text>
@@ -433,36 +435,6 @@ export function ReportDocument({ model }: { model: ReportDocumentModel }) {
           </View>
         )}
 
-        {/* PDF photo reflow (production test, 2026-08-16) — photos now
-         * render inline, inside this same wrapping Page, instead of
-         * always starting a fresh Page regardless of how much room was
-         * left. react-pdf's own `wrap` overflow (already relied on for
-         * this same Page, and for RunningHeader/Footer's `fixed` prop)
-         * pushes any overflow onto additional pages by actual content
-         * volume; `wrap={false}` on each item only stops a single
-         * image+caption being split mid-page. pickPhotoLayout sizes each
-         * photo by how many there are — a lone photo reads large, a big
-         * set reads as a denser grid — rather than every photo reserving
-         * the same fixed footprint regardless of count. */}
-        {model.hasPhotos && (
-          <View style={styles.section}>
-            <Text style={styles.sectionLabel}>Photos</Text>
-            <View style={styles.photoGrid}>
-              {(() => {
-                const allPhotos = model.photoPages.flat();
-                const layout = pickPhotoLayout(allPhotos.length);
-                return allPhotos.map((photo) => (
-                  <View key={photo.id} wrap={false} style={[styles.photoItem, { width: layout.widthPercent }]}>
-                    {/* eslint-disable-next-line jsx-a11y/alt-text -- @react-pdf/renderer's Image is a PDF primitive, not an HTML img; it has no alt prop */}
-                    {photo.url && <Image src={photo.url} style={[styles.photoImage, { height: layout.heightPt }]} />}
-                    {photo.caption && <Text style={styles.photoCaption}>{photo.caption}</Text>}
-                  </View>
-                ));
-              })()}
-            </View>
-          </View>
-        )}
-
         {!hasTextContent && !model.hasPhotos && (
           <View style={styles.section}>
             <Text style={styles.sectionText}>This job report doesn&apos;t have any content ready yet.</Text>
@@ -471,6 +443,39 @@ export function ReportDocument({ model }: { model: ReportDocumentModel }) {
 
         <Footer />
       </Page>
+
+      {/* QA2 Phase 9 (2026-08-16) — a dedicated photo page, not photos
+       * mixed into the report's own prose. Page 1 reads as "Job Summary
+       * -> Findings -> Work Completed -> Outcome -> Charges," a clean
+       * professional document; the evidence photos are real and
+       * important, but they're a different kind of content and read
+       * better as their own page. react-pdf's `wrap` still overflows
+       * onto further pages by actual content volume if there are many
+       * photos — this is "start on a fresh page," not "exactly one
+       * page no matter how many photos." pickPhotoLayout is unchanged:
+       * a lone photo still reads large, a big set still reads as a
+       * denser grid, by count alone. */}
+      {model.hasPhotos && (
+        <Page size="A4" style={styles.page} wrap>
+          <RunningHeader businessName={header.businessName} jobTitle={jobDetails.title} />
+          <Text style={styles.title}>PHOTOS</Text>
+          <View style={styles.titleRule} />
+          <View style={styles.photoGrid}>
+            {(() => {
+              const allPhotos = model.photoPages.flat();
+              const layout = pickPhotoLayout(allPhotos.length);
+              return allPhotos.map((photo) => (
+                <View key={photo.id} wrap={false} style={[styles.photoItem, { width: layout.widthPercent }]}>
+                  {/* eslint-disable-next-line jsx-a11y/alt-text -- @react-pdf/renderer's Image is a PDF primitive, not an HTML img; it has no alt prop */}
+                  {photo.url && <Image src={photo.url} style={[styles.photoImage, { height: layout.heightPt }]} />}
+                  {photo.caption && <Text style={styles.photoCaption}>{photo.caption}</Text>}
+                </View>
+              ));
+            })()}
+          </View>
+          <Footer />
+        </Page>
+      )}
     </Document>
   );
 }

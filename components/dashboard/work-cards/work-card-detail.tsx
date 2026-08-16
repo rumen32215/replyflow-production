@@ -29,9 +29,17 @@ import {
   type SimplifiedWorkCardStatus,
 } from "@/lib/work-card-state";
 import { toDateTimeLocalValue, mapsHref, formatDateTime, formatDate } from "@/lib/work-card-format";
+import { windowCanFitDuration } from "@/lib/datetime";
 import type { ConversationGroup } from "@/lib/conversations";
 import { cn } from "@/lib/utils";
 import { revalidateWorkCards } from "@/app/(dashboard)/dashboard/work-cards/actions";
+
+/** Mirrors approve/route.ts's own DEFAULT_BOOKING_DURATION_MINUTES — no
+ * per-business duration data exists yet (Phase 2 Architecture §9), so
+ * this is the same fixed assumption used wherever a standard
+ * appointment length is needed, kept in sync deliberately rather than
+ * imported (that file isn't a shared module, this is a UI-only read). */
+const STANDARD_APPOINTMENT_DURATION_MINUTES = 60;
 
 export interface WorkCardDetailData {
   id: string;
@@ -120,6 +128,7 @@ export function WorkCardDetail({
   linkedJobDocStatus,
   booking,
   reportStatus,
+  requestedWindowEnd = null,
 }: {
   workCard: WorkCardDetailData;
   conversationGroup: ConversationGroup | null;
@@ -161,6 +170,14 @@ export function WorkCardDetail({
    * a report does not complete the job, and completing the job does
    * not approve the report. */
   reportStatus?: string | null;
+  /** Production test (2026-08-16 round 2) — the end of the customer's
+   * stated TIME WINDOW ("between 1 and 2pm"), read from this job's own
+   * `conversation_episodes.ai_state.slots.preferredTimeWindowEnd` (no
+   * new column — see the implementation plan's "reuse existing data
+   * structures" decision). Null whenever only a single instant was
+   * ever stated, or there's no linked episode at all. `workCard.scheduledFor`
+   * is always the window START in that case, never a midpoint. */
+  requestedWindowEnd?: string | null;
 }) {
   const router = useRouter();
   const supabase = createClient();
@@ -197,6 +214,15 @@ export function WorkCardDetail({
 
   const isDraft = card.status === "draft";
   const isTerminal = card.status === "completed" || card.status === "cancelled";
+
+  // Round 2 (production test, 2026-08-16), Phase 6 — computed once,
+  // reused by both the pre-approval summary and the Booking section
+  // below so the two never disagree about whether the window fits.
+  const windowTooNarrow = Boolean(
+    card.scheduledFor &&
+      requestedWindowEnd &&
+      !windowCanFitDuration(card.scheduledFor, requestedWindowEnd, STANDARD_APPOINTMENT_DURATION_MINUTES)
+  );
 
   function startEdit() {
     setIssue(card.issue);
@@ -435,6 +461,44 @@ export function WorkCardDetail({
         {!isTerminal && (
           <SettleCard delay={0} className="rounded-2xl border border-border bg-card p-5 shadow-sm">
             <h2 className={SECTION_HEADING}>Actions</h2>
+
+            {/* Round 2 (production test, 2026-08-16) — a single-glance
+             * pre-approval summary, directly above Approve/Reject, so
+             * the owner doesn't have to reconstruct the conversation by
+             * scrolling through separate Booking/Customer/Job cards
+             * first. Every line here reads from data already real and
+             * already displayed elsewhere on this page — this is a
+             * presentation summary, never a second source of truth. */}
+            {isDraft && (
+              <div className="mb-3.5 space-y-1.5 rounded-xl bg-muted/40 p-3.5 text-[13px]">
+                <SummaryLine label="Customer" value={card.customerName} />
+                <SummaryLine label="Job" value={card.issue} />
+                <SummaryLine label="Address" value={card.address ?? "Not given yet"} />
+                {card.scheduledFor && (
+                  <SummaryLine
+                    label="Requested"
+                    value={
+                      requestedWindowEnd
+                        ? formatBookingWindow(card.scheduledFor, requestedWindowEnd)
+                        : (formatDateTime(card.scheduledFor) ?? "Not given yet")
+                    }
+                  />
+                )}
+                {windowTooNarrow && (
+                  <p className="flex items-start gap-1.5 rounded-lg bg-amber-50 px-2.5 py-2 text-[11.5px] leading-relaxed text-amber-900">
+                    <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                    <span>Requested window is shorter than a standard {STANDARD_APPOINTMENT_DURATION_MINUTES}-minute visit — check the time before approving.</span>
+                  </p>
+                )}
+                {photos.length > 0 && <SummaryLine label="Photos" value={`${photos.length} received`} />}
+                <SummaryLine
+                  label="Pricing"
+                  value={card.estimatedValue != null ? `£${card.estimatedValue.toFixed(2)}` : "Not set — owner to confirm"}
+                />
+                {card.notes?.trim() && <SummaryLine label="Notes" value={card.notes} />}
+              </div>
+            )}
+
             <div className="flex flex-wrap gap-2">
               {isDraft && (
                 <>
@@ -509,7 +573,18 @@ export function WorkCardDetail({
          * missing entirely. No booking yet falls back to the plain
          * scheduledFor timestamp (pre-booking-engine jobs, or one still
          * being worked out in conversation) rather than showing
-         * nothing at all. */}
+         * nothing at all.
+         *
+         * Round 2 (production test, 2026-08-16) — the pre-booking case
+         * used to show a bare date/time with no indication it was only
+         * ever a customer preference, never confirmed by anyone. Now
+         * shows the full requested WINDOW when one was actually stated
+         * (never collapsed to a single guessed point), a "Customer
+         * requested" pill matching the address section's provenance
+         * language, and — if the window is genuinely narrower than a
+         * standard appointment — a clear warning so the owner reviews
+         * the time before approving rather than getting a booking that
+         * silently spills past what the customer actually asked for. */}
         {!isTerminal && (booking || card.scheduledFor) && (
           <Reveal index={0}>
             <div className="rounded-2xl border border-border bg-card p-5 shadow-sm">
@@ -525,10 +600,26 @@ export function WorkCardDetail({
                   </div>
                 </div>
               ) : (
-                <p className="flex items-center gap-2.5 text-[13.5px] text-muted-foreground">
-                  <CalendarClock className="h-4 w-4 shrink-0" />
-                  {formatDateTime(card.scheduledFor)}
-                </p>
+                <div className="flex items-start gap-2.5">
+                  <CalendarClock className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+                  <div className="min-w-0">
+                    <p className="text-[13.5px] font-semibold">
+                      {card.scheduledFor && requestedWindowEnd ? formatBookingWindow(card.scheduledFor, requestedWindowEnd) : formatDateTime(card.scheduledFor)}
+                    </p>
+                    <span className="mt-1 inline-flex items-center rounded-full bg-accent px-2 py-0.5 text-[11px] font-semibold text-primary">
+                      Customer requested
+                    </span>
+                    {windowTooNarrow && (
+                      <p className="mt-1.5 flex items-start gap-1.5 rounded-lg bg-amber-50 px-2.5 py-2 text-[11.5px] leading-relaxed text-amber-900">
+                        <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                        <span>
+                          This requested window is shorter than a standard {STANDARD_APPOINTMENT_DURATION_MINUTES}-minute visit — check the time
+                          before approving.
+                        </span>
+                      </p>
+                    )}
+                  </div>
+                </div>
               )}
             </div>
           </Reveal>
@@ -850,6 +941,20 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
       <span className="mb-1 block text-[11.5px] font-semibold text-muted-foreground">{label}</span>
       {children}
     </label>
+  );
+}
+
+/** One line in the pre-approval single-glance summary (Actions card,
+ * round 2) — a compact label/value pair, notes excerpt aside (which
+ * wraps onto its own line since it's the one value that can genuinely
+ * run long). */
+function SummaryLine({ label, value }: { label: string; value: string }) {
+  const isLong = value.length > 40;
+  return (
+    <div className={cn("flex gap-2", isLong ? "flex-col" : "items-center justify-between")}>
+      <span className="shrink-0 text-muted-foreground">{label}</span>
+      <span className={cn("font-semibold", isLong ? "leading-relaxed" : "truncate text-right")}>{value}</span>
+    </div>
   );
 }
 

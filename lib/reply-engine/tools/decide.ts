@@ -4,9 +4,10 @@ import type { createServiceClient } from "@/lib/supabase/service";
 import type { UnderstandingResult } from "../understanding/types";
 import { toolsForIntent } from "./schema";
 import { TOOL_SCHEMAS } from "./schema";
-import { executeTool, findCurrentJob, type ToolExecutionContext } from "./execute";
+import { executeTool, findCurrentJob, applySchedulePreferenceIfMissing, type ToolExecutionContext } from "./execute";
 import { isToolName, type ExecutedTool, type ToolName } from "./types";
 import { recordErrorEvent } from "@/lib/error-events";
+import { buildWorkCardDraft } from "@/lib/work-card";
 
 type ServiceClient = ReturnType<typeof createServiceClient>;
 
@@ -165,6 +166,14 @@ export async function decideAndExecuteTools(input: DecideAndExecuteInput): Promi
   // requested the same tool, no job exists yet, and enough is genuinely
   // known (an issue, plus either a location or a resolved time) that
   // creating a draft job is clearly warranted rather than guessed at.
+  //
+  // Round 2 (2026-08-16) — builds its arguments the same way the
+  // manual "Create a job" form already does (buildWorkCardDraft,
+  // lib/work-card.ts): sentence-cased issue, deduped collected facts as
+  // notes, instead of a thinner inline object that always left notes
+  // null even when real facts had been collected. Never passes a
+  // time/date — see applySchedulePreferenceIfMissing below, the one
+  // deterministic place that's allowed to touch scheduled_for.
   const slots = input.understanding.conversationState.slots;
   const alreadyRequestingJob = toolCalls.some((c) => c.name === "create_or_update_job");
   if (
@@ -174,17 +183,16 @@ export async function decideAndExecuteTools(input: DecideAndExecuteInput): Promi
     slots.issue &&
     (slots.location || slots.preferredTimeResolved)
   ) {
+    const draft = buildWorkCardDraft(input.understanding.conversationState);
     toolCalls = [
       ...toolCalls,
       {
         id: "backstop-create-or-update-job",
         name: "create_or_update_job",
-        arguments: { issue: slots.issue, address: slots.location ?? null, notes: null },
+        arguments: { issue: draft.issue, address: draft.address, notes: draft.collectedDetails },
       },
     ];
   }
-
-  if (toolCalls.length === 0) return EMPTY_RESULT;
 
   const ctx: ToolExecutionContext = {
     supabase: input.supabase,
@@ -196,25 +204,47 @@ export async function decideAndExecuteTools(input: DecideAndExecuteInput): Promi
     customerName: input.customerName,
   };
 
-  // Defense in depth: only ever execute a call for a tool this intent
-  // was actually offered, even though the provider should never return
-  // one outside the `tools` array it was sent — never trust that alone.
-  const ordered = toolCalls
-    .filter((call) => isToolName(call.name) && availableTools.includes(call.name))
-    .sort((a, b) => EXECUTION_ORDER.indexOf(a.name as ToolName) - EXECUTION_ORDER.indexOf(b.name as ToolName));
-
   const executed: ExecutedTool[] = [];
   let escalateRequested = false;
   let escalateReason: string | null = null;
 
-  for (const call of ordered) {
-    const outcome = await executeTool(ctx, call.name as ToolName, call.arguments);
-    executed.push(outcome);
-    if (outcome.name === "escalate_to_owner" && outcome.result.ok) {
-      escalateRequested = true;
-      escalateReason = (outcome.result.data as { reason: string }).reason;
+  if (toolCalls.length > 0) {
+    // Defense in depth: only ever execute a call for a tool this intent
+    // was actually offered, even though the provider should never
+    // return one outside the `tools` array it was sent — never trust
+    // that alone.
+    const ordered = toolCalls
+      .filter((call) => isToolName(call.name) && availableTools.includes(call.name))
+      .sort((a, b) => EXECUTION_ORDER.indexOf(a.name as ToolName) - EXECUTION_ORDER.indexOf(b.name as ToolName));
+
+    for (const call of ordered) {
+      const outcome = await executeTool(ctx, call.name as ToolName, call.arguments);
+      executed.push(outcome);
+      if (outcome.name === "escalate_to_owner" && outcome.result.ok) {
+        escalateRequested = true;
+        escalateReason = (outcome.result.data as { reason: string }).reason;
+      }
     }
   }
 
+  // Deterministic schedule-preference step (production test, 2026-08-16
+  // round 2) — runs regardless of whether any other tool call happened
+  // this turn, as long as a job exists (either already, or just
+  // created above) and a resolved preferred time is known. This closes
+  // the structural gap where the AI job-creation path could never
+  // populate scheduled_for at all: create_or_update_job's own schema
+  // has no time field, by design (the model never sets a time).
+  if (availableTools.includes("create_or_update_job")) {
+    const createJobOutcome = executed.find((e) => e.name === "create_or_update_job");
+    let currentJobId: string | null = job?.id ?? null;
+    if (createJobOutcome && createJobOutcome.result.ok) {
+      currentJobId = (createJobOutcome.result.data as { jobId: string }).jobId;
+    }
+    if (currentJobId && slots.preferredTimeResolved) {
+      await applySchedulePreferenceIfMissing(input.supabase, currentJobId, slots.preferredTimeResolved);
+    }
+  }
+
+  if (executed.length === 0 && !escalateRequested) return EMPTY_RESULT;
   return { executed, escalateRequested, escalateReason };
 }

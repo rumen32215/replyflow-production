@@ -101,20 +101,28 @@ export function buildRelationshipTimeline(input: {
   ];
 
   for (const job of input.jobs) {
-    events.push({
-      id: `job-created:${job.id}`,
-      label: job.status === "cancelled" ? `Enquired about ${job.jobTitle}` : `Booked in for ${job.jobTitle}`,
-      occurredAt: job.createdAt,
-      kind: job.status === "cancelled" ? "cancelled" : "scheduled",
-    });
-    if (job.completedAt) {
-      events.push({
-        id: `job-completed:${job.id}`,
-        label: `Completed — ${job.jobTitle}`,
-        occurredAt: job.completedAt,
-        kind: "completed",
-      });
+    if (job.status === "cancelled") {
+      events.push({ id: `job-created:${job.id}`, label: `Enquired about ${job.jobTitle}`, occurredAt: job.createdAt, kind: "cancelled" });
+      continue;
     }
+    // Round 2 (QA2 Phase 7) — a "draft" Work Card is a customer
+    // preference ReplyFlow hasn't acted on yet, never a confirmed
+    // booking (Implementation Contract: never promote an
+    // interpretation into a confirmed fact). "Booked in for" would be
+    // a false claim until the owner actually approves it.
+    if (job.status === "draft") {
+      events.push({ id: `job-created:${job.id}`, label: `Requested ${job.jobTitle}`, occurredAt: job.createdAt, kind: "scheduled" });
+      continue;
+    }
+    // A completed job's own milestone already implies it was booked —
+    // showing both a "Booked in for X" and a "Completed — X" row for
+    // the same job was two near-duplicate entries. Collapsed to the
+    // one that matters most: it's finished.
+    if (job.completedAt) {
+      events.push({ id: `job-completed:${job.id}`, label: `Completed — ${job.jobTitle}`, occurredAt: job.completedAt, kind: "completed" });
+      continue;
+    }
+    events.push({ id: `job-created:${job.id}`, label: `Booked in for ${job.jobTitle}`, occurredAt: job.createdAt, kind: "scheduled" });
   }
 
   events.sort((a, b) => new Date(a.occurredAt).getTime() - new Date(b.occurredAt).getTime());

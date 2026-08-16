@@ -2,12 +2,14 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Loader2, Sparkles, RefreshCw, AlertTriangle } from "lucide-react";
+import Link from "next/link";
+import { Loader2, Sparkles, RefreshCw, AlertTriangle, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { toast } from "@/hooks/use-toast";
+import { Acknowledgement, useAcknowledgement } from "@/components/shared/acknowledgement";
 import type { Provenance } from "@/lib/job-docs/fields";
 import { waitForJobDocPhotosSettled } from "@/hooks/use-job-doc-photos";
 
@@ -87,6 +89,13 @@ export function JobReportDraft({
   const [generating, setGenerating] = useState(false);
   const [waitingForPhotos, setWaitingForPhotos] = useState(false);
   const [saving, setSaving] = useState(false);
+  const { message, isError, acknowledge, softError } = useAcknowledgement();
+  // QA2 Phase 8 — once a save genuinely succeeds, the obvious next step
+  // (Preview) is offered right where Save was, rather than the owner
+  // needing to scroll back up to the header link to find it. Persists
+  // past the fading acknowledgement message — it's a real next action,
+  // not a transient confirmation.
+  const [savedOnce, setSavedOnce] = useState(false);
   const [summaryText, setSummaryText] = useState(jobSummary?.value ?? "");
   const [workText, setWorkText] = useState(workPerformed?.value ?? "");
   const [nextStepsText, setNextStepsText] = useState(nextSteps?.value ?? "");
@@ -179,9 +188,11 @@ export function JobReportDraft({
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || "Something went wrong.");
-      toast({ variant: "success", title: "Saved" });
+      acknowledge("Saved.");
+      setSavedOnce(true);
       router.refresh();
     } catch (err) {
+      softError();
       toast({ variant: "destructive", title: "Couldn't save your edits", description: err instanceof Error ? err.message : undefined });
     } finally {
       setSaving(false);
@@ -223,7 +234,14 @@ export function JobReportDraft({
           <Label htmlFor="jobSummary">Job Summary</Label>
           {jobSummary && <ProvenanceTag provenance={jobSummary.provenance} />}
         </div>
-        <Textarea id="jobSummary" value={summaryText} onChange={(e) => setSummaryText(e.target.value)} disabled={saving} rows={2} />
+        <Textarea
+          id="jobSummary"
+          value={summaryText}
+          onChange={(e) => setSummaryText(e.target.value)}
+          disabled={saving}
+          rows={2}
+          placeholder="A one- or two-line description of what the customer needed."
+        />
       </div>
 
       {observations.length > 0 && (
@@ -243,6 +261,7 @@ export function JobReportDraft({
                 }}
                 disabled={saving}
                 rows={2}
+                placeholder="What you found on site — one specific detail works best."
               />
             </div>
           ))}
@@ -266,7 +285,14 @@ export function JobReportDraft({
             here. Mark the Work Card completed, then regenerate, to describe what was done.
           </p>
         ) : (
-          <Textarea id="workPerformed" value={workText} onChange={(e) => setWorkText(e.target.value)} disabled={saving} rows={4} />
+          <Textarea
+            id="workPerformed"
+            value={workText}
+            onChange={(e) => setWorkText(e.target.value)}
+            disabled={saving}
+            rows={4}
+            placeholder="What you actually did — e.g. replaced the valve, cleared the blockage, tested for leaks. This is the customer-facing record of the work."
+          />
         )}
       </div>
 
@@ -276,19 +302,37 @@ export function JobReportDraft({
             <Label htmlFor="nextSteps">Outcome / Next Steps</Label>
             <ProvenanceTag provenance={nextSteps.provenance} />
           </div>
-          <Textarea id="nextSteps" value={nextStepsText} onChange={(e) => setNextStepsText(e.target.value)} disabled={saving} rows={2} />
+          <Textarea
+            id="nextSteps"
+            value={nextStepsText}
+            onChange={(e) => setNextStepsText(e.target.value)}
+            disabled={saving}
+            rows={2}
+            placeholder="A follow-up visit, a part on order, or a warranty note — leave blank if there's nothing outstanding."
+          />
         </div>
       )}
 
-      <div className="flex flex-wrap gap-2 pt-1">
-        <Button variant="primary" onClick={save} disabled={saving} className="w-auto">
-          {saving && <Loader2 className="h-4 w-4 animate-spin" />}
-          Save
-        </Button>
-        <Button variant="outline" onClick={generate} disabled={generating || saving} className="w-auto">
-          {generating ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-          {waitingForPhotos ? "Waiting for photo analysis..." : "Regenerate draft"}
-        </Button>
+      <div className="space-y-2 pt-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <Button variant="primary" onClick={save} disabled={saving} className="w-auto">
+            {saving && <Loader2 className="h-4 w-4 animate-spin" />}
+            Save
+          </Button>
+          <Button variant="outline" onClick={generate} disabled={generating || saving} className="w-auto">
+            {generating ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+            {waitingForPhotos ? "Waiting for photo analysis..." : "Regenerate draft"}
+          </Button>
+          {savedOnce && (
+            <Link
+              href={`/dashboard/reports/${jobDocId}/preview`}
+              className="flex items-center gap-1 text-[13px] font-semibold text-primary hover:underline"
+            >
+              Preview report <ArrowRight className="h-3.5 w-3.5" />
+            </Link>
+          )}
+        </div>
+        <Acknowledgement message={message} isError={isError} />
       </div>
     </div>
   );

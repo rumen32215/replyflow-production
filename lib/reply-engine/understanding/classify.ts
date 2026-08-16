@@ -1,6 +1,6 @@
 import "server-only";
 import { getCompletion } from "../llm/client";
-import { formatNowLondon, resolvePreferredDateTime } from "@/lib/datetime";
+import { formatNowLondon, resolvePreferredDateTime, resolvePreferredTimeWindow } from "@/lib/datetime";
 import { extractPatternEntities, withPostcodeBackstop } from "./entities";
 import {
   INTENTS,
@@ -202,11 +202,31 @@ function isIntent(value: unknown): value is Intent {
  * classified — the same "CURRENT DATE/TIME" instant already given to
  * the model in the prompt above, so "tomorrow" means the same day to
  * both.
+ *
+ * Production test (2026-08-16 round 2) — tries the WINDOW resolver
+ * first ("between 1 and 2pm" -> a real start/end pair), only falling
+ * back to the single-instant resolver when no range pattern is present.
+ * `preferredTimeResolved` always means "the window start, or the single
+ * resolved instant when there's no window" either way, so every
+ * existing reader of that one field keeps working unchanged;
+ * `preferredTimeWindowEnd` is the new, purely additive piece a window
+ * carries alongside it. Never collapses a stated window into a single
+ * guessed point — see resolvePreferredTimeWindow's own doc comment for
+ * why that matters (an appointment must never silently fall outside
+ * what the customer actually asked for).
  */
 function resolvePreferredTime(state: ConversationState, referenceNow: Date): ConversationState {
-  const resolved = state.slots.preferredTime ? resolvePreferredDateTime(state.slots.preferredTime, referenceNow) : null;
-  if (resolved === state.slots.preferredTimeResolved) return state;
-  return { ...state, slots: { ...state.slots, preferredTimeResolved: resolved } };
+  if (!state.slots.preferredTime) {
+    if (state.slots.preferredTimeResolved === null && state.slots.preferredTimeWindowEnd === null) return state;
+    return { ...state, slots: { ...state.slots, preferredTimeResolved: null, preferredTimeWindowEnd: null } };
+  }
+
+  const window = resolvePreferredTimeWindow(state.slots.preferredTime, referenceNow);
+  const resolved = window ? window.start : resolvePreferredDateTime(state.slots.preferredTime, referenceNow);
+  const windowEnd = window ? window.end : null;
+
+  if (resolved === state.slots.preferredTimeResolved && windowEnd === state.slots.preferredTimeWindowEnd) return state;
+  return { ...state, slots: { ...state.slots, preferredTimeResolved: resolved, preferredTimeWindowEnd: windowEnd } };
 }
 
 /** Defensive parsing — the model's output is never trusted blindly.

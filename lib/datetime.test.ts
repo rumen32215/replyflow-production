@@ -1,6 +1,13 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { formatNowLondon, todayLondonDateString, londonWallClockToUtcIso, resolvePreferredDateTime } from "./datetime";
+import {
+  formatNowLondon,
+  todayLondonDateString,
+  londonWallClockToUtcIso,
+  resolvePreferredDateTime,
+  resolvePreferredTimeWindow,
+  windowCanFitDuration,
+} from "./datetime";
 
 test("formatNowLondon renders a real weekday, date, and time", () => {
   // 11 Aug 2026, 14:32 UTC — a fixed, known instant.
@@ -132,4 +139,83 @@ test("a time with no date at all ('around 4pm') resolves to today's date", () =>
   const messageTimestamp = new Date("2026-08-12T10:00:00.000Z");
   const result = resolvePreferredDateTime("around 4pm", messageTimestamp);
   assert.equal(result, "2026-08-12T15:00:00.000Z");
+});
+
+/* -------- resolvePreferredTimeWindow (production test, 2026-08-16
+   round 2) — the exact real customer wording that broke
+   resolvePreferredDateTime for two independent reasons: an ambiguous
+   hour range, and a word-order date loss. This is the window, never
+   collapsed into one instant. -------- */
+
+test("the exact failing phrase resolves to a real 13:00-14:00 London window, not null and not a single collapsed instant", () => {
+  const messageTimestamp = new Date("2026-08-16T10:00:00.000Z");
+  const result = resolvePreferredTimeWindow("between 1&2 afternoon on 27th August", messageTimestamp);
+  assert.deepEqual(result, { start: "2026-08-27T12:00:00.000Z", end: "2026-08-27T13:00:00.000Z" });
+  // Round-trip: this is genuinely 13:00-14:00 London time (BST, +1).
+  const fmt = (iso: string) =>
+    new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/London", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(new Date(iso));
+  assert.equal(fmt(result!.start), "13:00");
+  assert.equal(fmt(result!.end), "14:00");
+});
+
+test("the word 'and' instead of '&' resolves identically", () => {
+  const messageTimestamp = new Date("2026-08-16T10:00:00.000Z");
+  const result = resolvePreferredTimeWindow("between 1 and 2 afternoon on 27th August", messageTimestamp);
+  assert.deepEqual(result, { start: "2026-08-27T12:00:00.000Z", end: "2026-08-27T13:00:00.000Z" });
+});
+
+test("date-first word order ('27th August, afternoon, between 1 and 2') resolves identically — this codebase never depends on phrase order", () => {
+  const messageTimestamp = new Date("2026-08-16T10:00:00.000Z");
+  const result = resolvePreferredTimeWindow("27th August, afternoon, between 1 and 2", messageTimestamp);
+  assert.deepEqual(result, { start: "2026-08-27T12:00:00.000Z", end: "2026-08-27T13:00:00.000Z" });
+});
+
+test("a clean explicit range with am/pm on both numbers, no 'between', no daypart word needed", () => {
+  const messageTimestamp = new Date("2026-08-16T10:00:00.000Z");
+  const result = resolvePreferredTimeWindow("1pm to 2pm on 27 August", messageTimestamp);
+  assert.deepEqual(result, { start: "2026-08-27T12:00:00.000Z", end: "2026-08-27T13:00:00.000Z" });
+});
+
+test("am/pm stated on only one number is shared across the whole range", () => {
+  const messageTimestamp = new Date("2026-08-16T10:00:00.000Z");
+  const result = resolvePreferredTimeWindow("between 1 and 2pm on 27 August", messageTimestamp);
+  assert.deepEqual(result, { start: "2026-08-27T12:00:00.000Z", end: "2026-08-27T13:00:00.000Z" });
+});
+
+test("a narrower-than-standard window (30 minutes) is preserved accurately, not rounded up", () => {
+  const messageTimestamp = new Date("2026-08-16T10:00:00.000Z");
+  const result = resolvePreferredTimeWindow("between 1 and 1:30 afternoon on 27th August", messageTimestamp);
+  assert.deepEqual(result, { start: "2026-08-27T12:00:00.000Z", end: "2026-08-27T12:30:00.000Z" });
+});
+
+test("a bare hour range with no am/pm marker and no daypart word returns null rather than guessing morning or afternoon", () => {
+  const messageTimestamp = new Date("2026-08-16T10:00:00.000Z");
+  assert.equal(resolvePreferredTimeWindow("between 1 and 2 on 27th August", messageTimestamp), null);
+});
+
+test("no range pattern at all (a plain single time) returns null — callers fall back to resolvePreferredDateTime", () => {
+  const messageTimestamp = new Date("2026-08-16T10:00:00.000Z");
+  assert.equal(resolvePreferredTimeWindow("tomorrow at 10am", messageTimestamp), null);
+  assert.equal(resolvePreferredTimeWindow("next Monday at 2pm", messageTimestamp), null);
+  assert.equal(resolvePreferredTimeWindow("around 4pm", messageTimestamp), null);
+});
+
+test("unrelated dash-separated digits (e.g. a postcode or phone fragment) never false-positive as a time range", () => {
+  const messageTimestamp = new Date("2026-08-16T10:00:00.000Z");
+  assert.equal(resolvePreferredTimeWindow("W12 1NE", messageTimestamp), null);
+  assert.equal(resolvePreferredTimeWindow("07700-900123", messageTimestamp), null);
+});
+
+/* -------- windowCanFitDuration -------- */
+
+test("a standard 60-minute appointment fits exactly inside a 60-minute window (boundary-equal case)", () => {
+  assert.equal(windowCanFitDuration("2026-08-27T12:00:00.000Z", "2026-08-27T13:00:00.000Z", 60), true);
+});
+
+test("a 60-minute appointment does not fit inside a narrower 30-minute window", () => {
+  assert.equal(windowCanFitDuration("2026-08-27T12:00:00.000Z", "2026-08-27T12:30:00.000Z", 60), false);
+});
+
+test("a short appointment fits comfortably inside a wider window", () => {
+  assert.equal(windowCanFitDuration("2026-08-27T12:00:00.000Z", "2026-08-27T14:00:00.000Z", 30), true);
 });
